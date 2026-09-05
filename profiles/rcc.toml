@@ -303,7 +303,6 @@ models = [
     "nemotron-3-ultra-free",
     "hy3-free",
     "laguna-s-2.1-free",
-    "x-preview-f-free",
 ]
 # Zen serves paid models from the same endpoint as the free ones — the discovery call
 # came back with the whole Claude and GPT lineup, none of which this deployment has a
@@ -339,12 +338,7 @@ models = [
 # preference order, this list is what is offered, and a model that comes back should come
 # back at the rank it had. `lineup_check.py` takes a name off here the moment a probe
 # answers.
-deny = [
-    "deepseek-v4-flash-free",
-    "muse-spark-1.2-contributor-free",
-    "nemotron-3.5-lightning-free",
-    "nemotron-3-ultra-free",
-]
+deny = ["deepseek-v4-flash-free", "muse-spark-1.2-contributor-free"]
 deny_env = "SAGE_ZEN_DENY"
 free_marks = ["-free", "big-pickle"]
 free_marks_env = "SAGE_ZEN_FREE_MARKS"
