@@ -87,6 +87,12 @@ SESSION_DEFAULTS: tuple[tuple[str, object], ...] = (
     # Ids are handed out and never reused, so a button key can never name two
     # different chats across one session.
     ("next_chat_id", 1),
+    # Which chat's ✕ has been pressed once, if any. Deleting a conversation cannot be
+    # undone — it exists in this session's memory and nowhere else — so the ✕ arms the
+    # row and a second click on it goes through. Held in state rather than done on the
+    # first click because there is no third place to put a confirmation: a modal is not
+    # something this app has, and a browser `confirm()` is not reachable from Python.
+    ("pending_delete", None),
 )
 
 #: How much of the first question becomes the chat's name in the sidebar. Long enough
@@ -198,6 +204,10 @@ def _leave_conversation() -> None:
     st.session_state.stop_requested = False
     st.session_state.editing = None
     st.session_state.edit_session += 1
+    # A ✕ pressed once and then left alone. It belongs to the panel as the reader last
+    # saw it, and a confirmation still armed after they have moved on is one stray
+    # click from deleting a conversation they never meant to name.
+    st.session_state.pending_delete = None
     st.session_state.attachments = []
     st.session_state.dropped_uploads = {}
     st.session_state.upload_refusals = {}
@@ -216,6 +226,54 @@ def _leave_conversation() -> None:
     # question sitting in the box over whatever replaced it, as if it were still
     # about to be sent. app.js empties it when this counter moves.
     st.session_state.clear_token += 1
+
+
+def arm_delete(chat_id: int | None) -> None:
+    """Point the confirmation at one chat's ✕, or at none.
+
+    And rerun, which is not optional. The rerun that delivered the click is the one
+    *already executing* this line: the panel above has been drawn for the run in
+    progress, so the row was rendered in its old state before this ran. Without asking
+    for another run, pressing ✕ set the flag and changed nothing on screen, and the
+    confirmation appeared only when something else happened to redraw the page.
+    """
+    st.session_state.pending_delete = chat_id
+    st.rerun()
+
+
+def delete_chat(chat_id: int) -> None:
+    """Remove a conversation, and open a neighbour if it was the one being read.
+
+    A session always has an open chat — `initialise` guarantees one and the sidebar
+    draws a row per record — so deleting the last one does not leave the app with
+    nothing selected: an empty chat takes its place, which is the same state the app
+    opens in.
+
+    `_leave_conversation` only runs when the open chat actually changed. Deleting one
+    the reader is not in must not throw away the answer they are looking at, the error
+    card under it, or the file they have just attached.
+    """
+    st.session_state.pending_delete = None
+    remaining = [
+        record for record in st.session_state.chats if record["id"] != chat_id
+    ]
+    if len(remaining) == len(st.session_state.chats):
+        return   # already gone; the rerun this returns into redraws without it
+    st.session_state.chats = remaining
+
+    if chat_id == st.session_state.chat_id:
+        if remaining:
+            # The newest survivor, which is the row that was directly above the one
+            # just removed — where the reader is already looking.
+            target = remaining[-1]
+        else:
+            target = {"id": st.session_state.next_chat_id, "messages": []}
+            st.session_state.next_chat_id += 1
+            st.session_state.chats = [target]
+        st.session_state.chat_id = target["id"]
+        st.session_state.messages = target["messages"]
+        _leave_conversation()
+    st.rerun()
 
 
 def new_chat() -> None:

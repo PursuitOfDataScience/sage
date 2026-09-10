@@ -929,25 +929,50 @@
         btn.setAttribute('aria-label', btn.title);
     }
 
-    // In the strip of controls under the input, at the left end of it, so the model
-    // picker stays in the corner it has always been in.
+    // Where the toggle goes, and this is the part of it with a history.
     //
-    // Re-parented rather than created once: Streamlit rebuilds this container's DOM on
-    // reruns, and a button that was only ever inserted when missing came back on the
-    // *next* rebuild in the wrong place — or not at all, having gone out of the
-    // document with the node it was inside. Which of the two elements
-    // `st.container(key=…)` produces is the host is a Streamlit detail, so the same
-    // both-shapes rule the stylesheet uses applies here.
+    // Top of the page, which in this app is Streamlit's own 60px header band — and
+    // putting anything there has gone wrong twice, in two different ways, both of them
+    // measured rather than reasoned about:
+    //
+    // * `[data-testid="stHeader"]` is transparent and sits at z-index 999990, so an
+    //   element merely placed in that band is painted over and takes no clicks. That is
+    //   the bug app.css records against the old `top: 8px` controls row: on screen,
+    //   completely dead. A `position: fixed` button appended to the header does not
+    //   escape it either — `stToolbar` carries that z-index explicitly and outranks a
+    //   child of the header at `z-index: auto`.
+    // * Appending INSIDE `stToolbar` does take clicks. It is still the wrong home:
+    //   Streamlit removes the whole toolbar from the document when the sidebar is
+    //   expanded, so the toggle disappeared every time the panel was opened. Measured
+    //   at 1280 and 768 — `stToolbar` is null in both once the panel is out.
+    //
+    // So the button hangs off <body>, which cannot be rebuilt out from under it, and
+    // is pinned by the stylesheet at a z-index that outranks the chrome — exactly what
+    // the strip of controls under the input already does at the other end of the page.
+    //
+    // Horizontally it stays out of the right-hand corner, and that is not aesthetic:
+    // `tools/render_check.py` models a 220px opaque host control cluster there at
+    // z-index 999991, which is what Community Cloud paints over an app's own header.
+    // A toggle in that corner would be under it on the deployment and above it only
+    // here. `--toggle-left` is measured instead — just past Streamlit's own sidebar
+    // arrow while that exists, and at the page edge once the panel is open and it does
+    // not.
+    function publishToggleLeft() {
+        var arrow = doc.querySelector('[data-testid="stExpandSidebarButton"]');
+        // No arrow to clear — Streamlit removes it while the panel is open, and takes
+        // the whole toolbar with it. The last measured offset is kept rather than
+        // recomputed: the alternative is a button that slides 40px sideways every time
+        // the panel is opened or closed, which is movement a reader notices and gains
+        // nothing. Until one has ever been measured, the stylesheet's own fallback
+        // stands.
+        if (!arrow) return;
+        var rect = arrow.getBoundingClientRect();
+        // Mid-rebuild, so there is nothing to measure yet. Same answer.
+        if (rect.width <= 0) return;
+        publish('--toggle-left', Math.round(rect.right + 10));
+    }
+
     function addThemeToggle() {
-        var strip = doc.querySelector('.st-key-composer-strip');
-        if (!strip) return;
-        var host = strip;
-        for (var i = 0; i < strip.children.length; i++) {
-            if (strip.children[i].getAttribute('data-testid') === 'stVerticalBlock') {
-                host = strip.children[i];
-                break;
-            }
-        }
         var btn = doc.getElementById('theme-toggle');
         if (!btn) {
             btn = injected('button');
@@ -964,10 +989,64 @@
                 paintToggle(btn, next);
             });
         }
-        if (btn.parentElement !== host || btn.previousElementSibling) {
-            host.insertBefore(btn, host.firstChild);
-        }
+        if (btn.parentElement !== doc.body) doc.body.appendChild(btn);
+        publishToggleLeft();
         paintToggle(btn, themeChoice());
+    }
+
+    /* --- the arrows that open and close the panel ------------------------ */
+
+    // Streamlit draws them and leaves them unlabelled — `aria-label=""` on the one in
+    // the header, nothing at all on the one in the panel — so the only thing saying
+    // what either does is a double-chevron pointing somewhere. Hovering told a reader
+    // nothing and a screen reader read out "button".
+    //
+    // Both are relabelled on every pass rather than once, because each exists only in
+    // one of the two states: the header's arrow is removed from the document when the
+    // panel opens and rebuilt when it closes.
+    var PANEL_LABELS = [
+        ['stExpandSidebarButton', 'Show sidebar'],
+        ['stSidebarCollapseButton', 'Hide sidebar']
+    ];
+
+    function label(btn, text) {
+        if (!btn || btn.title === text) return;
+        btn.title = text;
+        btn.setAttribute('aria-label', text);
+    }
+
+    function labelPanelToggles() {
+        PANEL_LABELS.forEach(function (pair) {
+            var host = doc.querySelector('[data-testid="' + pair[0] + '"]');
+            if (!host) return;
+            // One of the two IS the button; the other is a div wrapping one.
+            label(host.tagName === 'BUTTON' ? host : host.querySelector('button'),
+                  pair[1]);
+        });
+    }
+
+    // And the ✕ on each conversation in the panel, which is a glyph and nothing else.
+    //
+    // Done here rather than with Streamlit's `help=`, which was tried first: its
+    // tooltip is a black panel beside the cursor, and on a 240px row it covered the
+    // row above — the one thing a reader needs to see while deciding whether to delete
+    // this one. It also renders a second, zero-sized copy of the button inside the
+    // tooltip's wrapper. A `title` is a small native tooltip, and `aria-label` is the
+    // accessible name a lone ✕ has no other way of getting.
+    //
+    // Which of the two labels depends on whether the row's delete is armed, and that
+    // is read off the row's container key — the same thing the stylesheet reads.
+    function labelChatActions() {
+        doc.querySelectorAll('[class*="st-key-chat-act-"]').forEach(function (slot) {
+            var row = slot.closest('[class*="st-key-chat-row-"]');
+            var armed = !!row && row.className.indexOf('st-key-chat-row-arm-') !== -1;
+            slot.querySelectorAll('button').forEach(function (btn) {
+                // "chat", not "conversation": the button beside it says New chat and
+                // the confirmation says Delete this chat, and an action that changes
+                // its noun halfway through a flow is one a reader has to re-learn.
+                label(btn, armed ? 'Keep this chat' : 'Delete this chat');
+            });
+        });
     }
 
     /* --- injected controls ---------------------------------------------- */
@@ -2018,8 +2097,19 @@
     // question the reader can see and send themselves, rather than one that vanished.
     // A turn the limiter refuses ends up here, which is the right place for it: the
     // refusal is on screen and the question is in the box next to it.
-    var SEND_RETRY_MS = 400;
+    var SEND_RETRY_MS = 500;
     var SEND_GIVE_UP = 12;
+    // How long to wait for a turn that was accepted but never appeared. A question the
+    // rate limiter refuses appends no message, so the receipt below would never arrive
+    // and the rest of the queue would sit behind it for ever.
+    //
+    // Six seconds, not the ten it started at, because this is time the reader spends
+    // looking at an empty box wondering where their question went. A drain that is
+    // going to work puts a bubble on the page within a rerun — measured at one to two
+    // seconds against a local provider — so the only cost of being impatient is a
+    // question typed back into the box a moment before the turn it belongs to starts,
+    // which `restoreDraft` will not overwrite and the reader can simply delete.
+    var SEND_PATIENCE_MS = 6000;
 
     function flushQueue() {
         var area = doc.querySelector('textarea[data-testid="stChatInputTextArea"]');
@@ -2027,24 +2117,53 @@
         var sending = view.__sageSending;
 
         if (sending !== null && sending !== undefined) {
+            // The receipt: Python has appended a question to the transcript.
             if (questionCount() > (view.__sageSendSeen || 0)) {
                 view.__sageSending = null;
                 view.__sageSendTries = 0;
                 restoreDraft();
                 return;
             }
-            // A turn is running and its question has not been drawn yet: ours, one
-            // frame early. Nothing to do but wait for it.
+            // Two very different states look alike here, and telling them apart is the
+            // whole of this branch. Streamlit empties its chat input when it ACCEPTS a
+            // submit, so a box that no longer holds the text means the question is on
+            // its way and the only thing to do is wait for the receipt above. A box
+            // that still holds it means the click was made in a frame where React had
+            // the send button disabled, and nothing has been submitted at all.
+            //
+            // Conflating the two double-asked a question. The first version retried on
+            // a 400ms clock without checking the box, and `handToComposer` re-fills the
+            // box before clicking — so a server round trip slower than 400ms (which is
+            // what a panel full of chat rows made it) was read as a lost click, the
+            // text was typed back in, and the same question was submitted twice.
+            // Measured: "third question" answered twice, four answers for three
+            // questions.
+            if (area.value !== sending) {
+                if (Date.now() - (view.__sageSentAt || 0) > SEND_PATIENCE_MS) {
+                    // Submitted, and no question ever appeared. The turn was refused
+                    // rather than lost: `may_start_turn` puts the reason in the notice
+                    // strip and appends no message, which is exactly this shape. So the
+                    // question goes back into the box, next to the sentence explaining
+                    // why it did not go — measured on a session that ran past
+                    // `RATE_BURST`, where a queued question had until now vanished
+                    // without a word.
+                    view.__sageSending = null;
+                    view.__sageSendTries = 0;
+                    view.__sageDraftHold = null;
+                    if (!area.value) setFieldValue(area, sending);
+                }
+                return;
+            }
             if (isProcessing()) return;
-            var now = Date.now();
-            if (now - (view.__sageSentAt || 0) < SEND_RETRY_MS) return;
+            if (Date.now() - (view.__sageSentAt || 0) < SEND_RETRY_MS) return;
             var tries = (view.__sageSendTries || 0) + 1;
             view.__sageSendTries = tries;
             if (tries > SEND_GIVE_UP) {
+                // Give up and leave the text where the reader can see it and send it
+                // themselves, rather than losing the question.
                 view.__sageSending = null;
                 view.__sageSendTries = 0;
                 view.__sageDraftHold = null;
-                if (!area.value) setFieldValue(area, sending);
                 return;
             }
             handToComposer(area, sending);
@@ -2217,6 +2336,8 @@
         addQuestionCopyButtons();
         addSelectionAsk();
         addThemeToggle();
+        labelPanelToggles();
+        labelChatActions();
         enforceTheme();
         markGenerating();
         // After `markGenerating`, which is what decides whether a turn is in flight,
@@ -2279,7 +2400,21 @@
     safeSync();
     new MutationObserver(schedule).observe(doc.body, { childList: true, subtree: true });
     // Streaming appends text nodes that sometimes do not trigger the observer.
-    setInterval(function () { if (isProcessing()) schedule(); }, 250);
+    //
+    // And a queued question being handed to the composer needs the same poll, on a page
+    // that is otherwise completely still. `flushQueue` waits on a clock — for a click
+    // that did not land, or for a submit that was accepted and produced no turn — and
+    // gated on `isProcessing()` alone those clocks never advanced: once the answer
+    // finished and the page stopped mutating, nothing ran again. Measured with
+    // `SAGE_RATE_BURST=1`, where the limiter refuses the queued question and appends
+    // nothing: the reader was left with an empty box, a notice explaining the refusal,
+    // and their question gone.
+    setInterval(function () {
+        if (isProcessing() || view.__sageSending !== null
+                && view.__sageSending !== undefined) {
+            schedule();
+        }
+    }, 250);
 
     // A resize changes what the page has to reserve for the input bar — the
     // disclaimer under it rewraps — and mutates nothing, so the observer above

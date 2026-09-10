@@ -18,7 +18,7 @@ the code.
 | Section | What it decides |
 | --- | --- |
 | `[assistant]` | The name, the icon, the page title, the subject the prompt introduces, the address given when the docs cannot answer, and who to tell when a key is rejected |
-| `[copy]` | The welcome heading, the input placeholders, the sign-in screen, the sidebar's heading and its New chat button |
+| `[copy]` | The welcome heading, the input placeholders, the sign-in screen, and the sidebar: its heading, its New chat button, what an unasked conversation is called, and the delete confirmation |
 | `[[examples]]` | The starter cards: an icon, a short label, and the question actually sent |
 | `[prompt]` | `file = "…prompt.md"` beside the profile, or `system = """…"""` inline |
 | `[[sources]]` | Each tree of documents: where it is, what to read it with, and how its URLs are built |
