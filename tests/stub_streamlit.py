@@ -134,6 +134,19 @@ class StubStreamlit(ModuleType):
         self.events.append(("container", key))
         return _noop_context()
 
+    @property
+    def sidebar(self):
+        """`with st.sidebar:` — a region, recorded so a test can prove it was used.
+
+        Modelled as a context manager only. The real `st.sidebar` is also a
+        DeltaGenerator with every widget hanging off it, but `sage/ui/sidebar.py` uses
+        the `with` form so that the widgets inside it are ordinary `st.*` calls —
+        which is what lets the rest of this stub, and every assertion written against
+        it, go on working unchanged.
+        """
+        self.events.append(("sidebar", None))
+        return _noop_context()
+
     def chat_message(self, role, **_kwargs):
         self.events.append(("chat_message", role))
         return _noop_context()

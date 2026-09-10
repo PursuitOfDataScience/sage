@@ -155,7 +155,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-sage-theme="light"]) {
         /* A maroon gradient on a near-black page reads at 1.73:1. These lighter
          * tints keep the brand while staying legible. */
         --gradient-text-start: #f2b0b6;
@@ -203,9 +203,94 @@
     }
 }
 
+/* The same palette again, chosen rather than inherited — see the note above the
+ * toggle in `static/app.js`. A media query cannot be told to match on anything
+ * but the browser preference, so an explicit choice needs a selector of its own,
+ * and CSS gives no way to hand one declaration list to two conditions.
+ *
+ * So this is a copy, and `tests/test_palette.py::test_chosen_dark_matches_system_dark`
+ * holds the two identical property-for-property. That test is the whole reason the
+ * duplication is safe: the failure mode of a drifted copy is a reader who picks dark
+ * and gets *most* of it — one token still light, on a near-black page, found by
+ * nobody until it is a source link at 1.9:1.
+ *
+ * `light-dark()` and style queries would each collapse this to one list, and both
+ * are 2024-vintage CSS; the toggle has to work in whatever the reader already has
+ * open, so neither is used. An attribute selector works everywhere.
+ */
+:root[data-sage-theme="dark"] {
+    /* A maroon gradient on a near-black page reads at 1.73:1. These lighter
+     * tints keep the brand while staying legible. */
+    --gradient-text-start: #f2b0b6;
+    --gradient-text-end: #e08a94;
+    --brand-text: #f0a8ac;
+    --brand-line: #e08a94;
+
+    /* Inverted: on a near-black page the highlight is the bright end, and the
+     * dim end is the one that has to clear AA. */
+    --status-dim: #c9737d;
+    --status-lit: #ffd9dd;
+
+    --text-primary: #e5e7eb;
+    --text-secondary: #b6bcc7;
+    --text-muted: #9ca3af;      /* 7.44:1 on #0e1117 */
+    --icon: #b6bcc7;
+
+    --card-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%);
+    --card-bg-hover: linear-gradient(145deg, rgba(128, 0, 0, 0.32) 0%, rgba(165, 18, 42, 0.32) 100%);
+    --card-border: rgba(255, 255, 255, 0.12);
+    --card-border-hover: rgba(196, 90, 100, 0.7);
+
+    --chip-bg: rgba(255, 255, 255, 0.06);
+    --chip-border: rgba(255, 255, 255, 0.14);
+
+    --control-bg: rgba(255, 255, 255, 0.08);
+    --control-bg-hover: rgba(255, 255, 255, 0.16);
+    --control-border: rgba(255, 255, 255, 0.18);
+
+    --input-border: #374151;
+    /* Streamlit painted this one white on a near-black page. Matched to the input
+     * box's own surface so the panel reads as part of the composer it belongs to. */
+    --popover-bg: #1c1d24;
+    --popover-border: rgba(255, 255, 255, 0.16);
+    --code-inline-bg: rgba(240, 168, 172, 0.14);
+    --code-inline-fg: #f0a8ac;
+
+    --ok: #4ade80;
+    --ok-bg: rgba(34, 197, 94, 0.16);
+    --danger: #fca5a5;
+    --danger-bg: rgba(239, 68, 68, 0.14);
+    --danger-border: rgba(239, 68, 68, 0.3);
+
+    --shadow-md: 0 4px 15px rgba(0, 0, 0, 0.35);
+}
+
+/* Form controls, scrollbars and anything else the browser paints for us. The
+ * page above is ours; these are the UA's, and `color-scheme` is the only thing
+ * that moves them. Left at `light dark` on :root, so with no choice made the
+ * browser goes on deciding. */
+:root[data-sage-theme="light"] { color-scheme: light; }
+:root[data-sage-theme="dark"] { color-scheme: dark; }
+
 /* ===== BASE RESETS ===== */
 .stDeployButton, #MainMenu, footer { display: none !important; }
-[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] { display: none !important; }
+/* No rule hiding the sidebar. There was one — `display: none` on the panel and on the
+ * control that opens it — for as long as this file existed, and it was right at the
+ * time: there was nothing in the sidebar, so what it offered was an empty drawer and a
+ * button that opened it onto nothing. `sage/ui/sidebar.py` puts the session's
+ * conversations in there, so the rule is gone.
+ *
+ * The panel still starts collapsed (`app.py`, `initial_sidebar_state`), which is what
+ * keeps the page a reader already knows opening exactly as it did — Streamlit holds it
+ * off-screen with a transform and draws its own arrow to bring it back, and nothing
+ * here has an opinion about either. That is deliberate: half of the old rule was
+ * already dead, naming a test id (`stSidebarCollapsedControl`) that 1.54 does not
+ * render at all, and a stylesheet cannot tell a rule that no longer matches anything
+ * from one that never did.
+ *
+ * Streamlit paints the panel itself, with the theme it is running — which is the theme
+ * the toggle sets — so nothing here restates its background. Only the rows inside it
+ * are ours; see THE CHAT LIST below. */
 [data-testid="manage-app-button"] { display: none !important; }
 
 /* Top padding clears Streamlit's header strip, so nothing lands in the band it
@@ -302,6 +387,18 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     z-index: 999995;
     width: var(--input-max) !important;
     max-width: 100% !important;
+    /* Centred on the INPUT, not on the window, and those stopped being the same
+     * thing the day the sidebar could open: Streamlit moves its bottom bar to the
+     * right of an expanded panel, and this row — pinned to the viewport at `left:
+     * 50%` — stayed where it was. The controls under the input drifted half a
+     * sidebar to the left of the input they belong to.
+     *
+     * app.js measures the offset between the bar's centre and the window's and
+     * publishes it. With no sidebar open, and in `tools/render_check.py` where
+     * app.js does not run at all, it is 0 and this rule does nothing — which is why
+     * it is written as a margin on top of the existing centring rather than as a
+     * different way of centring. */
+    margin-left: var(--bar-shift, 0px);
 }
 
 /* One line: Clear, then the model name hard right — the corner every other assistant puts it in, and the corner the
@@ -467,6 +564,215 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     background: var(--control-bg-hover) !important;
     border-color: var(--brand-line) !important;
 }
+
+/* ===== THE CHAT LIST (sidebar) =====
+ *
+ * One row per conversation in this session, drawn by `sage/ui/sidebar.py`. The panel
+ * around them is Streamlit's and is left alone; these are the rows inside it.
+ *
+ * Left-aligned and truncated to one line, because a row's label is the first question
+ * asked in that chat: full-width buttons centre their text by default, so a list of
+ * them read as a stack of headings rather than as a list, and a long question wrapped
+ * to three lines and pushed the rest of the session off the panel. */
+.st-key-chat-list .chats-heading {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    /* 1.5rem for a 0.5rem gap. Streamlit wraps everything given to `st.markdown` in a
+     * `[data-testid="stMarkdownContainer"]` carrying `margin-bottom: -1rem`, which
+     * collapses with this one — see the note on `.user-message`, where the same
+     * compensation is written out at length. At the 0.5rem this asks for, the New chat
+     * button's top edge landed one pixel below the heading's baseline and sat on top of
+     * the word. */
+    margin: 0 0 1.5rem;
+}
+
+.st-key-chat-list button {
+    justify-content: flex-start !important;
+    text-align: left !important;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: var(--radius-sm) !important;
+    color: var(--text-secondary) !important;
+    padding: 5px 9px !important;
+    min-height: 32px !important;
+    transition: background var(--transition), border-color var(--transition);
+}
+
+.st-key-chat-list button p {
+    font-size: 0.82rem !important;
+    margin: 0 !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The wrappers Streamlit puts between a button and its label. They are
+ * `display: flex; justify-content: center; width: 100%`, which is what centres the
+ * text of a full-width button — so `justify-content` on the button alone does
+ * nothing, and the row above reads as a heading rather than as an entry in a list.
+ * (The model picker's panel has the same rule and the same non-effect; it is left
+ * alone, because how that control looks is not what was asked for here.)
+ *
+ * Addressed structurally rather than by the class they carry, which is an emotion
+ * build hash and would be a rule against a string that changes on a Streamlit
+ * upgrade. `min-width: 0` is what lets the label shrink far enough for the ellipsis
+ * above to fire instead of the question wrapping to a second line.
+ *
+ * If Streamlit ever changes this nesting, the rule stops matching and the labels go
+ * back to being centred: visible, and harmless. That is the right failure mode for a
+ * rule that cannot be written against a name worth trusting. */
+.st-key-chat-list button > div,
+.st-key-chat-list button > div > span {
+    display: flex !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+    min-width: 0 !important;
+}
+
+.st-key-chat-list button:not(:disabled):hover {
+    background: var(--control-bg-hover) !important;
+    border-color: var(--brand-line) !important;
+    color: var(--brand-text) !important;
+}
+
+/* A row that cannot be clicked reads as one, and every row cannot be clicked while an
+ * answer is arriving — see `sage/ui/sidebar.py` for why that has to be so. */
+.st-key-chat-list button:disabled,
+.st-key-chat-list button[disabled] {
+    color: var(--text-muted) !important;
+    opacity: 1 !important;
+}
+
+/* Which chat is open. Hung off a container key rather than off `:disabled`, and that
+ * distinction is the whole rule: the open row IS disabled — it is not a place to go —
+ * but so is every other row for the length of a turn, so emphasising the disabled one
+ * emphasised all of them. With two chats and an answer streaming, both rows came out
+ * looking current and the list stopped saying where the reader was.
+ *
+ * `[class*=…]` because the key carries the chat's id, which is the same shape as
+ * `st-key-answer-` and `st-key-edit-box-` elsewhere in this file. */
+.st-key-chat-list [class*="st-key-chat-current-"] button {
+    background: var(--control-bg) !important;
+    border-color: var(--control-border) !important;
+    color: var(--text-primary) !important;
+}
+
+/* New chat is the one row that is an action rather than a destination, so it keeps the
+ * brand mark: the list below it reads as history and this reads as a button. */
+.st-key-chat-list .st-key-new-chat button {
+    color: var(--brand-text) !important;
+    border-color: var(--control-border) !important;
+    background: var(--control-bg) !important;
+    margin-bottom: 0.6rem;
+}
+
+.st-key-chat-list .st-key-new-chat button:disabled,
+.st-key-chat-list .st-key-new-chat button[disabled] {
+    color: var(--text-muted) !important;
+    opacity: 0.6 !important;
+}
+
+/* ===== THE THEME TOGGLE =====
+ *
+ * Injected by app.js into the strip of controls under the input, so it is on screen on
+ * every screen — including the landing screen, and including while an answer streams,
+ * which a Streamlit button could not manage: a click on one of those is a rerun, and a
+ * rerun during a turn aborts it. This one never reaches the server at all.
+ *
+ * Sized and painted by `.st-key-composer-strip button` above, like the 🗑️ beside it.
+ * What is left here is that it holds an icon rather than a word. */
+#theme-toggle {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    padding: 5px !important;
+    cursor: pointer;
+    /* The three states differ only by the glyph inside, so the button must not
+     * resize as they change — that would reflow the row it shares with the picker. */
+    flex: 0 0 auto;
+}
+
+#theme-toggle svg { display: block; }
+
+/* ===== A QUESTION WAITING ITS TURN =====
+ *
+ * What the reader sent while an answer was still arriving. It is not a message yet —
+ * Python has never seen it — so it is deliberately not a `.user-bubble`: it sits where
+ * the next question will sit, in the same corner, drawn as an outline of one. app.js
+ * sends it the moment the current turn ends, and then Streamlit draws the real thing.
+ *
+ * Dashed and unfilled rather than the gradient, because the one thing this has to say
+ * is "not sent yet". A filled bubble would read as a question that had been asked and
+ * ignored, which is the exact misreading that makes a queue worse than no queue. */
+.queued-note {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    /* The top margin a question has, so nothing jumps when the real bubble takes this
+     * one's place. No bottom margin, and that is not an oversight: `.user-message` has
+     * one because an answer follows it, and nothing ever follows this — it is the last
+     * thing on the page by construction. A copied 4rem would be 4rem of scroll under
+     * the newest thing on screen, on top of the bar's own reservation.
+     *
+     * No -1rem compensation either, for the same reason: this is an injected div, not
+     * something handed to `st.markdown`, so there is no `stMarkdownContainer` wrapper
+     * to collapse with and the number written here is the gap that is drawn. */
+    margin: clamp(2.5rem, 5vw, 3.5rem) 0 0 0;
+    padding-right: clamp(0.25rem, 2vw, 1rem);
+}
+
+.queued-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    max-width: var(--user-bubble-max);
+}
+
+.queued-bubble {
+    background: var(--chip-bg);
+    border: 1px dashed var(--brand-line);
+    color: var(--text-secondary);
+    padding: 11px 17px;
+    border-radius: 18px 18px 4px 18px;
+    font-size: clamp(0.88rem, 2vw, 0.95rem);
+    line-height: 1.5;
+    overflow-wrap: break-word;
+    /* Whatever was typed, however long — but a paragraph queued behind a long answer
+     * should not push the answer it is waiting for off the screen. */
+    max-height: 7.5rem;
+    overflow: hidden;
+}
+
+.queued-label {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--brand-text);
+    margin-bottom: 4px;
+}
+
+/* The way out. A queue with no way to change your mind is a queue that sends the
+ * question you decided against. */
+.queued-drop {
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    color: var(--icon);
+    cursor: pointer;
+    padding: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--transition), color var(--transition);
+}
+
+.queued-drop:hover { background: var(--code-inline-bg); color: var(--icon-hover); }
 
 /* ===== WELCOME ===== */
 .welcome {
@@ -872,6 +1178,9 @@ body[data-sage-dropping] .stChatInput > div {
     bottom: calc(var(--bar-band) + 0.35rem) !important;
     left: 50% !important;
     transform: translateX(-50%) !important;
+    /* Same reason as the controls strip: centred on the input bar, which is not the
+     * middle of the window once the sidebar is open. */
+    margin-left: var(--bar-shift, 0px) !important;
     width: var(--input-max) !important;
     max-width: 100% !important;
     /* Above Streamlit's own chrome, for the same reason the controls strip below the
@@ -1651,6 +1960,8 @@ body[data-sage-dropping] .stChatInput > div {
 
 /* ===== FOCUS ===== */
 #paperclip-btn:focus-visible,
+#theme-toggle:focus-visible,
+.queued-drop:focus-visible,
 .rcc-copy-btn:focus-visible,
 .user-copy-btn:focus-visible,
 .user-edit-btn:focus-visible,

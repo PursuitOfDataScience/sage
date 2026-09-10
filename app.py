@@ -7,6 +7,7 @@ draws comes from `sage/` and `sage/ui/`. What is left here is the sequence, whic
 Streamlit makes load-bearing in a way that is worth being able to read in one screen:
 
     page config → assets → runtime → keys → login → state → model
+    → sidebar (the chats in this session)
     → body (landing screen | conversation)
     → uploader → input box → attachments → controls → stop hook
     → the turn
@@ -24,7 +25,17 @@ import logging
 import streamlit as st
 
 from sage import config, profile, providers, runtime
-from sage.ui import access, assets, composer, landing, state, transcript, turn, uploads
+from sage.ui import (
+    access,
+    assets,
+    composer,
+    landing,
+    sidebar,
+    state,
+    transcript,
+    turn,
+    uploads,
+)
 from sage.ui.view import View
 
 logging.basicConfig(
@@ -96,6 +107,16 @@ if st.session_state.stop_requested:
     state.finish_stopped_turn(MODEL.key, VIEW.public_names)
 
 has_messages = bool(st.session_state.messages)
+
+# --- the chats in this session ----------------------------------------------
+#
+# Before the body, because every control in it ends in `st.rerun()`: a switch drawn
+# after the conversation would redraw the conversation it is leaving first, and on the
+# run that opens an empty chat that is a whole transcript rendered to be thrown away.
+# Drawn on every screen, landing included, so the way back to a previous chat does not
+# disappear the moment one is cleared.
+
+sidebar.render(VIEW)
 
 # --- body ------------------------------------------------------------------
 
