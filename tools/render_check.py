@@ -430,10 +430,14 @@ def chips(wrapped: bool = True) -> str:
 
 
 def strip(clear: bool = True, wrapped: bool = True) -> str:
-    """The controls under the input: Clear, then the model picker.
+    """The model picker, in the bottom-right corner of the input box.
 
-    Rendered last in the block, where app.py renders it. `clear` is False on the
-    landing screen, where there is no conversation to throw away.
+    Rendered last in the block, where app.py renders it, and pinned into the box by
+    app.css from a position app.js measures off the send button.
+
+    `clear` is dead and kept only so the scenario table below need not be rewritten:
+    the 🗑️ that used to share this row is gone, because every chat in the panel has a
+    ✕ and New chat sits above them. Nothing renders for it either way.
 
     `wrapped` picks which of the two shapes `st.container(key=…)` produces: the
     `st-key-…` class on a wrapper *around* the vertical block, or on the vertical
@@ -443,12 +447,10 @@ def strip(clear: bool = True, wrapped: bool = True) -> str:
     170 renders here in a row. Both shapes are rendered now, so a rule that only
     reaches one of them fails the audit.
     """
-    trash = ('<div class="element-container"><div class="stButton">'
-             "<button><p>🗑️</p></button></div></div>") if clear else ""
-    # Clear, then the picker — app.py's order, and the order that puts the picker in
-    # the corner next to the button that sends. There was a caveat line on the left of
-    # this row too; it is gone, and with it the last thing under the input that was
-    # not a control.
+    trash = ""
+    # The picker alone. There was a 🗑️ to its left and a caveat line left of that; both
+    # are gone, and with them the whole idea of a row under the input — which is where
+    # the vertical space this change bought back came from.
     # The trigger holds the model's name AND the chevron Streamlit puts after it, in a
     # flex row with a gap. Modelled because the name is only part of what the button
     # has to be wide enough for: with the chevron missing, the replica read a 20px
@@ -1150,7 +1152,7 @@ function snapshot() {
                       // separately because a failure where the two disagree is a
                       // different bug from either of them being wrong.
                       band: root.getPropertyValue('--bar-band').trim(),
-                      strip: root.getPropertyValue('--strip-h').trim(),
+                      pickRight: root.getPropertyValue('--pick-right').trim(),
                       fill: root.getPropertyValue('--fill').trim()},
            els: {}};
   SELECTORS.forEach(function (s) { out.els[s] = box(s); });
@@ -2634,17 +2636,40 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
             f"the longest name has to fit"
         )
 
-    # The controls belong under the input, not on it. The strip is pinned inside a
-    # band the bar above reserves from a measurement, so this is the check that
-    # the two agree — at every width, in both themes, in every state.
-    band, entry = els.get(STRIP), els.get(INPUT)
-    if band and entry and band["top"] < entry["bottom"]:
+    # The picker belongs INSIDE the input box, in its bottom-right corner beside the
+    # send button. This bound used to say the opposite — that the controls must sit
+    # under the input and never on it — because they were a row below it that the bar
+    # padded a band for. That row is gone, and with it a little over 4rem of window
+    # given to one control, so the requirement is inverted: the picker is in the box.
+    #
+    # Checked as containment rather than as "it overlaps somewhere", because app.js
+    # places it from a measurement off the send button and a stale or absent
+    # measurement would leave it hanging off an edge. Its clickability is checked
+    # separately (`picker`, below) and matters more here than it did on the page: the
+    # textarea is now behind it.
+    box = els.get(INPUT_BOX)
+    if picker and box:
+        out = []
+        if picker["top"] < box["top"] - 1:
+            out.append(f"{round(box['top'] - picker['top'])}px above its top")
+        if picker["bottom"] > box["bottom"] + 1:
+            out.append(f"{round(picker['bottom'] - box['bottom'])}px below its bottom")
+        if picker["right"] > box["right"] + 1:
+            out.append(f"{round(picker['right'] - box['right'])}px past its right edge")
+        if picker["left"] < box["left"] - 1:
+            out.append(f"{round(box['left'] - picker['left'])}px past its left edge")
+        if out:
+            problems.append(
+                f"{where}: the model picker is outside the input box — "
+                + ", ".join(out)
+            )
+    # And it must not cover the send button it sits beside.
+    send_btn = els.get(SEND)
+    if picker and send_btn and picker["right"] > send_btn["left"] + 1:
         problems.append(
-            f"{where}: the controls strip overlaps the input by "
-            f"{entry['bottom'] - band['top']}px"
+            f"{where}: the model picker overlaps the send button by "
+            f"{round(picker['right'] - send_btn['left'])}px"
         )
-    if band and picker and picker["top"] < band["top"] - 1:
-        problems.append(f"{where}: the model picker is outside the strip pinned for it")
 
     # The chips belong to the composer, immediately above the box. They used to render
     # in the flow, which put them under the starter cards in the middle of the page —
@@ -3080,8 +3105,7 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
         # What the page reserved, versus what the bar actually takes. When these
         # disagree the gap checks below are measuring a stale reservation, which
         # is a different bug from a stylesheet that reserved the wrong amount.
-        room = (f"reserved --bar-h {reserved.get('bar', '?')} / --strip-h "
-                f"{reserved.get('strip', '?')}, bar is really "
+        room = (f"reserved --bar-h {reserved.get('bar', '?')}, bar is really "
                 f"{data['viewport']['h'] - bar['top']}px")
         # Scrolled to the very end, nothing may hide under the fixed input — and
         # on a page with nowhere to scroll, nothing may hide under it at all,

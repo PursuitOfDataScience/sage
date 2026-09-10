@@ -293,14 +293,34 @@
         return overlaid && !streamlitPins;
     }
 
+    // Where the model picker sits: inside the input box, immediately left of Streamlit's
+    // own send button. Measured from that button rather than written down, because it is
+    // the thing the picker has to stay beside and app.css places it in a corner of a box
+    // whose width tracks the viewport.
+    //
+    // The send button survives a turn — `markGenerating` leaves it in the DOM and paints
+    // the stop square over it — so this does not lurch mid-answer. Nothing is published
+    // when it cannot be found, which holds the last good position through the frames
+    // where Streamlit is rebuilding the composer instead of snapping the picker into the
+    // corner and back.
+    function publishPickerSpot() {
+        var send = sendButton();
+        if (!send) return;
+        var rect = send.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+        publish('--pick-right', Math.round(view.innerWidth - rect.left) + 8);
+        publish('--pick-bottom', Math.round(view.innerHeight - rect.bottom));
+    }
+
     function measureChrome() {
         var strip = doc.querySelector('.st-key-composer-strip');
         var bar = doc.querySelector('[data-testid="stBottomBlockContainer"]');
         var chips = doc.querySelector('.st-key-attachments');
-        // Strip first: the bar reserves room for it, so publishing it is what
-        // gives the bar its final height. Reading the bar's rect afterwards
-        // flushes that change, so both values come from the same layout.
-        if (strip) publish('--strip-h', band(strip));
+        // `--strip-h` is gone with the row it measured. The controls under the input
+        // were a band the bar had to pad itself by; what is left is the model picker,
+        // and it sits inside the box beside the send button, so there is nothing below
+        // the input to reserve — which is the ~4rem of vertical space this bought back.
+        publishPickerSpot();
         if (bar) {
             // Two numbers, and the difference between them matters.
             //

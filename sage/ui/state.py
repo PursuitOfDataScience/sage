@@ -72,7 +72,7 @@ SESSION_DEFAULTS: tuple[tuple[str, object], ...] = (
     # One list of messages is LIVE at a time — `messages`, at the top of this tuple —
     # and the records here are where the others wait. That is not duplication for its
     # own sake: `messages` is rebound, not just mutated (`start_new_turn` truncates it
-    # for an edited question, `clear_conversation` replaces it with a fresh list), so a
+    # for an edited question, opening another chat replaces it with that chat's), so a
     # record holding the same list object would come unstuck from it the first time
     # either of those ran, silently, with the sidebar then listing a conversation that
     # no longer matches the one on screen. Switching stashes the live list into the
@@ -391,16 +391,6 @@ def start_new_turn(
     st.session_state.dropped_uploads = {}
     st.session_state.upload_refusals = {}
     st.session_state.uploader_key += 1
-    st.rerun()
-
-
-def clear_conversation() -> None:
-    """Empty the open conversation, in place — it stays the open one."""
-    st.session_state.messages = []
-    # And in its record too, so the sidebar cannot go on naming an emptied chat after
-    # the question it used to start with.
-    _stash()
-    _leave_conversation()
     st.rerun()
 
 

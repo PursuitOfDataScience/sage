@@ -727,28 +727,19 @@ class TestComposerStrip:
         stub, _m = self.two_providers(monkeypatch, session)
         assert ("popover", "nemotron-3.5-lightning") in stub.events
 
-    def test_clear_appears_only_once_there_is_something_to_clear(self, monkeypatch):
-        stub, _m = self.two_providers(monkeypatch, {"messages": [], "processing": False})
-        assert "clear" not in stub.button_labels
-
+    def test_there_is_no_trash_can(self, monkeypatch):
+        """It emptied the open conversation, and the panel of chats made it the third
+        way to do a thing there were already two better ways to do: every row has a ✕
+        and New chat sits above them. "the trash can be removed because of this
+        design". What is in the composer now is the model picker and nothing else.
+        """
         session = {
             "messages": [{"role": "user", "text": "hi", "attachments": []}],
             "processing": False,
         }
         stub, _m = self.two_providers(monkeypatch, session)
-        assert "clear" in stub.button_labels
-
-    def test_clear_empties_the_conversation(self, monkeypatch):
-        session = {
-            "messages": [{"role": "user", "text": "hi", "attachments": []}],
-            "processing": False,
-            "notice": "stale",
-            "tried": ["mistral:m1"],
-        }
-        stub, _m = self.two_providers(monkeypatch, session, buttons={"clear": True})
-        assert stub.session_state["messages"] == []
-        assert stub.session_state["notice"] == ""
-        assert stub.session_state["tried"] == []
+        assert "clear" not in stub.button_labels
+        assert not any(label == "🗑️" for label in stub.button_labels.values())
 
     def test_nothing_under_the_input_but_controls(self, monkeypatch):
         """The caveat line is gone, and nothing may quietly replace it.
@@ -1907,16 +1898,20 @@ class TestComposerReset:
             for html in stub.markdown_html
         ), "app.js has nothing to watch"
 
-    def test_clearing_moves_the_token(self, monkeypatch):
+    def test_leaving_a_conversation_moves_the_token(self, monkeypatch):
+        """The trash used to be what moved it. Every path that leaves a conversation
+        does now — New chat, opening another, deleting one — because they all go through
+        `state._leave_conversation`, and app.js empties the box when the token moves."""
         session = {"messages": [{"role": "user", "text": "hi", "attachments": []}]}
         before, _m = self.app(monkeypatch, session)
         start = before.session_state["clear_token"]
-        after, _m2 = self.app(monkeypatch, session, buttons={"clear": True})
+        after, _m2 = self.app(monkeypatch, session, buttons={"new-chat": True})
         assert after.session_state["clear_token"] == start + 1
 
     def test_an_ordinary_run_leaves_the_token_alone(self, monkeypatch):
-        """It must move only on a clear: app.js empties the box whenever it changes,
-        and a token that drifted would delete a half-typed question."""
+        """It must move only when a conversation is left: app.js empties the box
+        whenever it changes, and a token that drifted would delete a half-typed
+        question."""
         session = {"messages": [{"role": "user", "text": "hi", "attachments": []}],
                    "clear_token": 7}
         stub, _m = self.app(monkeypatch, session)
