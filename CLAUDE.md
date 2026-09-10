@@ -73,7 +73,7 @@ httpx. Outbound HTTPS works. Chromium is at
   a failure. No total is written down here: it went stale three times in a week, and the
   number the suite reports is the one that is true.
 - **Layout**: `SAGE_CHROME=~/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome
-  python tools/render_check.py` — ~7 minutes for 660 renders.
+  python tools/render_check.py` — ~8 minutes for 684 renders.
 - **Anchors**: `python tools/anchor_check.py` — network-bound, so not in the suite.
   Run it after touching `slugify`, `plain_heading` or a URL scheme.
 - **Palette**: `python tools/palette_check.py` — every declared colour and token
@@ -146,6 +146,25 @@ Three things now stand between an edit and a silent repaint, in the order they f
    them the theme change and nothing else in that large commit.
 3. **`tests/test_palette.py`** runs the same comparison under `pytest`, so CI fails on
    an undeclared repaint without a new workflow step to forget.
+
+**The dark palette is written twice, and that is on purpose.** `app.css` holds it once
+under `@media (prefers-color-scheme: dark)` — for the reader who has not chosen — and
+once under `:root[data-sage-theme="dark"]`, for the reader who pressed the toggle under
+the input. There is no way in CSS to hand one declaration list to both conditions, and
+the two constructs that would (`light-dark()`, style queries) are recent enough that a
+reader's browser may not have them. So `tests/test_palette.py` holds the two blocks
+identical, token for token, and **a token added to one must be added to the other**. The
+failure mode if they drift breaks nothing and fails no bound: the reader picks dark and
+gets most of it, with one value still light on a near-black page.
+
+The toggle itself is entirely client-side (`static/app.js`): it sets that attribute,
+wraps `window.matchMedia` so Streamlit's own theme resolves to the choice, and asks
+Streamlit to re-resolve by firing `afterprint`, which is the event it already listens
+for. Nothing reaches Python — a widget click is a rerun, and a rerun during a turn
+aborts it — so the theme can be changed while an answer is streaming. Same reason the
+queued-question feature lives there: a question typed mid-answer is held on the parent
+window and handed to `st.chat_input` once the turn ends, because telling the server
+about it any earlier would end the answer it is queued behind.
 
 `python tools/palette_check.py --update` accepts a repaint, and updating the baseline
 is a deliberate act: it puts the before and after in the diff where the owner can

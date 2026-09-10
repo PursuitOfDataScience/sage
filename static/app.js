@@ -26,6 +26,7 @@
     // Filled, and rounded rather than a hard square: it is the same glyph every other
     // chat app stops a generation with, and a reader should not have to learn it here.
     var STOP_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"></rect></svg>';
+    var CLOSE_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>';
     var PENCIL_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>';
 
     function isProcessing() {
@@ -322,6 +323,19 @@
             // taking no clicks at all. The reservation is the only thing `overlays()`
             // has an opinion about.
             publish('--bar-band', rawBand(bar));
+            // How far the bar's centre is from the window's. Zero until the sidebar
+            // is opened, and then half its width: Streamlit lays its bottom bar out
+            // to the right of the panel, while the two rows this file pins — the
+            // controls under the input and the attachment chips — are pinned to the
+            // viewport at `left: 50%`. Without this they sit half a sidebar to the
+            // left of the input they belong to.
+            //
+            // Measured rather than derived from the panel's width, because what has
+            // to be matched is where Streamlit actually put the bar, and that has
+            // been `fixed`, `sticky` and full-width across versions of it.
+            var rect = bar.getBoundingClientRect();
+            publish('--bar-shift',
+                    Math.round(rect.left + rect.width / 2 - view.innerWidth / 2));
             // Height first, then decide: a container that is present at zero height
             // (or display:none) needs no gap reserved, and `composerTop` already
             // takes that view of the same node.
@@ -371,6 +385,11 @@
         var nodes = doc.querySelectorAll('[class*="st-key-answer-"], .user-message,' +
             '.stChatMessage, .notice, .error-card, [class*="st-key-error-actions"],' +
             '[class*="st-key-upload-notes"], [class*="st-key-prompt-notes"],' +
+            // A question waiting its turn stands where the next question will, at the
+            // very end of the page. Measured for the same reason the notes containers
+            // are: a tail that stops short of it reserves room to the wrong edge, and
+            // the thing left under the composer is the reader's own unsent question.
+            '.queued-note,' +
             // The editor stands where a question stood and is several times its
             // height, so a tail measured without it stops at whatever preceded it.
             '[class*="st-key-edit-box-"]');
@@ -716,6 +735,239 @@
         // view is still where it was, and recording the intended position instead
         // would read as the reader having moved it on the very next pass.
         pinnedAt = el.scrollTop;
+    }
+
+    /* --- light or dark, whichever the reader asked for ------------------- */
+    //
+    // Two halves have to agree, and only one of them is this file's.
+    //
+    // `static/app.css` carries both palettes and picks between them on
+    // `prefers-color-scheme` — the browser's setting — so a stylesheet cannot be told
+    // to use the other one. Streamlit paints the page around it (the background, the
+    // body text, every widget's chrome) from a theme resolved in React from
+    // `window.matchMedia`, which nothing here can reach either. Repainting one without
+    // the other is the exact bug `.streamlit/config.toml` was written to fix: the dark
+    // palette on a white page, source links at 1.9:1.
+    //
+    // So the choice is applied twice from one place. An attribute on <html> switches
+    // the stylesheet, which is a plain attribute selector and works in anything. And
+    // `matchMedia` is wrapped so that a question about the colour scheme answers with
+    // the choice — after which Streamlit only has to be asked to resolve its theme
+    // again, which it does on `afterprint` (it re-reads the preference when a page
+    // comes back from the printer). No reload, so the conversation survives; nothing
+    // is sent to Python, so this works while an answer is streaming.
+    //
+    // The choice itself lives in localStorage, not in session state, for the same
+    // reason: a Streamlit widget click is a rerun, and a rerun during a turn aborts
+    // it. It also means the choice outlives the session, which is what a reader
+    // expects of a theme.
+    //
+    // If a future Streamlit stops listening for `afterprint`, `enforceTheme` gives up
+    // after a few tries and the stylesheet's own palette carries the page — the
+    // reader gets our colours on Streamlit's default background rather than a broken
+    // toggle. That is the reason app.css states both palettes itself instead of
+    // leaning on the host.
+    var THEME_KEY = 'sage-theme';
+    var THEME_CYCLE = ['system', 'light', 'dark'];
+
+    // A hand-drawn set rather than emoji: ☀️/🌙 render as a different size, weight and
+    // colour in every browser, and this button sits in a row of 14px line icons.
+    var SUN_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"></path></svg>';
+    var MOON_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8"></path></svg>';
+    var AUTO_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"></path></svg>';
+
+    var THEME_ICON = {system: AUTO_SVG, light: SUN_SVG, dark: MOON_SVG};
+    var THEME_TITLE = {
+        system: 'Theme: following your browser — switch to light',
+        light: 'Theme: light — switch to dark',
+        dark: 'Theme: dark — follow your browser again'
+    };
+
+    function themeChoice() {
+        var stored = null;
+        // A browser with storage refused (private mode, third-party frame) throws on
+        // the read, not just on the write.
+        try { stored = view.localStorage.getItem(THEME_KEY); } catch (err) { stored = null; }
+        return THEME_CYCLE.indexOf(stored) === -1 ? 'system' : stored;
+    }
+
+    function storeTheme(choice) {
+        try { view.localStorage.setItem(THEME_KEY, choice); } catch (err) { /* not stored */ }
+    }
+
+    // The browser's own answer, never the wrapped one below.
+    function systemScheme() {
+        var real = view.__sageRealMM;
+        try {
+            var mql = real ? real('(prefers-color-scheme: dark)')
+                           : view.matchMedia('(prefers-color-scheme: dark)');
+            return mql && mql.matches ? 'dark' : 'light';
+        } catch (err) { return 'light'; }
+    }
+
+    // Answer a colour-scheme question with the reader's choice, and leave every other
+    // media query alone — `useViewportSize` asks this same function about widths.
+    //
+    // A plain object rather than the real MediaQueryList with `matches` overwritten:
+    // that property is read-only. add/removeEventListener forward to the real list, so
+    // a reader on `system` is still followed when they change their OS setting.
+    // Re-wrapped on every run, not wrapped once. The wrapper is a closure defined in
+    // THIS script's realm, and Streamlit destroys and rebuilds the iframe the script is
+    // served in on every rerun — so a wrapper installed on the parent window by the
+    // first copy of this file belongs, from the second rerun onwards, to a document
+    // that no longer exists. Chromium goes on calling it; that is not a guarantee
+    // worth resting a reader's colour scheme on across every browser. The ORIGINAL
+    // `matchMedia` is kept on the parent and reused, so only ever one layer deep
+    // however many times this runs.
+    function wrapMatchMedia() {
+        if (!view.matchMedia) return;
+        var real = view.__sageRealMM || view.matchMedia.bind(view);
+        view.__sageRealMM = real;
+        view.matchMedia = function (query) {
+            var mql = real(query);
+            var want = view.__sageScheme;
+            var text = String(query);
+            if (!want || text.indexOf('prefers-color-scheme') === -1) return mql;
+            var asked = text.indexOf('dark') !== -1 ? 'dark'
+                      : text.indexOf('light') !== -1 ? 'light' : '';
+            if (!asked) return mql;   // no-preference, or something we do not model
+            return {
+                media: mql.media,
+                matches: asked === want,
+                onchange: null,
+                addListener: function (fn) {
+                    try { mql.addListener(fn); } catch (err) { /* removed API */ }
+                },
+                removeListener: function (fn) {
+                    try { mql.removeListener(fn); } catch (err) { /* removed API */ }
+                },
+                addEventListener: function (kind, fn, options) {
+                    try { mql.addEventListener(kind, fn, options); } catch (err) { /* ignored */ }
+                },
+                removeEventListener: function (kind, fn, options) {
+                    try { mql.removeEventListener(kind, fn, options); } catch (err) { /* ignored */ }
+                },
+                dispatchEvent: function () { return false; }
+            };
+        };
+    }
+
+    // Ask Streamlit to resolve its theme again. It listens for `afterprint` in order
+    // to come back from a printed page, and re-reads the colour-scheme preference when
+    // it does — which by then is the wrapper above.
+    function nudgeHost() {
+        try { view.dispatchEvent(new view.Event('afterprint')); } catch (err) { /* ignored */ }
+    }
+
+    // What Streamlit is ACTUALLY painting, read off the page. Its theme lives in React
+    // state that nothing here can see, and the page background is the one part of it
+    // that is always painted and always visible.
+    function hostScheme() {
+        var nodes = [doc.querySelector('.stApp'), doc.body];
+        for (var i = 0; i < nodes.length; i++) {
+            if (!nodes[i]) continue;
+            var parts = String(view.getComputedStyle(nodes[i]).backgroundColor || '')
+                .replace(/[^0-9.,]/g, '').split(',');
+            if (parts.length < 3) continue;
+            // Transparent tells us nothing about what the reader sees; try the next.
+            if (parts.length > 3 && parseFloat(parts[3]) === 0) continue;
+            var light = (0.2126 * parseFloat(parts[0])
+                       + 0.7152 * parseFloat(parts[1])
+                       + 0.0722 * parseFloat(parts[2])) / 255;
+            return light > 0.5 ? 'light' : 'dark';
+        }
+        return '';
+    }
+
+    // Which scheme the page should be in. `null` for `system` means "whatever the
+    // browser says", which is a question only the unwrapped `matchMedia` can answer.
+    function wantedScheme() {
+        return view.__sageScheme || systemScheme();
+    }
+
+    function applyTheme(choice) {
+        var scheme = choice === 'system' ? '' : choice;
+        wrapMatchMedia();
+        view.__sageScheme = scheme || null;
+        if (scheme) doc.documentElement.setAttribute('data-sage-theme', scheme);
+        else doc.documentElement.removeAttribute('data-sage-theme');
+        view.__sageNudges = 0;
+        // Only when the page is not already in it. This runs on every rerun, because
+        // Streamlit rebuilds the iframe this script is served in — and each nudge is a
+        // React state update carrying a freshly built theme object, which compares
+        // unequal to the current one however identical it is. Nudging unconditionally
+        // therefore re-rendered the whole app once per rerun for no change at all.
+        if (hostScheme() !== wantedScheme()) nudgeHost();
+    }
+
+    // The nudge above can arrive before the React effect that listens for it — this
+    // script is an iframe on a page that is still mounting — and an event nobody is
+    // listening for is silently lost. So the wanted scheme is checked against what the
+    // page is painted with on every pass, and re-asked for if they disagree. Bounded,
+    // because a build that has stopped listening would otherwise be asked for ever.
+    //
+    // Asked about `system` too, not only about an explicit choice. Going BACK to
+    // `system` is the case that needs it most: unwrapping `matchMedia` tells the
+    // stylesheet to follow the browser again, but Streamlit is still holding the theme
+    // it was last told to use, so a reader who turned dark off on a light device was
+    // left with the light palette on a near-black page — the same mismatch
+    // `.streamlit/config.toml` exists to prevent, arrived at from the other side.
+    function enforceTheme() {
+        var have = hostScheme();
+        if (!have || have === wantedScheme()) { view.__sageNudges = 0; return; }
+        var tries = view.__sageNudges || 0;
+        if (tries >= 8) return;
+        view.__sageNudges = tries + 1;
+        nudgeHost();
+    }
+
+    function paintToggle(btn, choice) {
+        if (btn.dataset.sageTheme === choice) return;
+        btn.dataset.sageTheme = choice;
+        btn.innerHTML = THEME_ICON[choice];
+        btn.title = THEME_TITLE[choice];
+        btn.setAttribute('aria-label', btn.title);
+    }
+
+    // In the strip of controls under the input, at the left end of it, so the model
+    // picker stays in the corner it has always been in.
+    //
+    // Re-parented rather than created once: Streamlit rebuilds this container's DOM on
+    // reruns, and a button that was only ever inserted when missing came back on the
+    // *next* rebuild in the wrong place — or not at all, having gone out of the
+    // document with the node it was inside. Which of the two elements
+    // `st.container(key=…)` produces is the host is a Streamlit detail, so the same
+    // both-shapes rule the stylesheet uses applies here.
+    function addThemeToggle() {
+        var strip = doc.querySelector('.st-key-composer-strip');
+        if (!strip) return;
+        var host = strip;
+        for (var i = 0; i < strip.children.length; i++) {
+            if (strip.children[i].getAttribute('data-testid') === 'stVerticalBlock') {
+                host = strip.children[i];
+                break;
+            }
+        }
+        var btn = doc.getElementById('theme-toggle');
+        if (!btn) {
+            btn = injected('button');
+            btn.id = 'theme-toggle';
+            btn.type = 'button';
+            btn.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                var next = THEME_CYCLE[
+                    (THEME_CYCLE.indexOf(themeChoice()) + 1) % THEME_CYCLE.length
+                ];
+                storeTheme(next);
+                applyTheme(next);
+                paintToggle(btn, next);
+            });
+        }
+        if (btn.parentElement !== host || btn.previousElementSibling) {
+            host.insertBefore(btn, host.firstChild);
+        }
+        paintToggle(btn, themeChoice());
     }
 
     /* --- injected controls ---------------------------------------------- */
@@ -1141,6 +1393,16 @@
         }
         view.__sageHistoryAt = -1;
         view.__sageHistoryDraft = '';
+        // And anything queued, which belongs to the conversation being left. This
+        // token moves on a clear, on New chat and on opening another chat — see
+        // `state._leave_conversation` — so it is exactly the signal for "the questions
+        // waiting behind that answer are not wanted any more". Without it, clearing the
+        // page and then watching a question you had queued arrive in the empty
+        // conversation a second later is the app answering something nobody asked.
+        view.__sageQueue = [];
+        view.__sageSending = null;
+        view.__sageSendTries = 0;
+        view.__sageDraftHold = null;
     }
 
     // Close the model picker once a model has been picked.
@@ -1575,12 +1837,240 @@
         if (area && !area.dataset.sageBlocked) {
             area.dataset.sageBlocked = 'true';
             area.addEventListener('keydown', function (event) {
-                if (event.key === 'Enter' && !event.shiftKey && isProcessing()) {
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                }
+                if (event.key !== 'Enter' || event.shiftKey) return;
+                // The Enter that confirms an IME candidate belongs to the IME, and
+                // this used to swallow it: a reader composing Chinese, Japanese or
+                // Korean could not accept a candidate at all while an answer was
+                // arriving. It is not a send, so nothing below has to happen either.
+                if (event.isComposing) return;
+                if (!isProcessing()) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                queueDraft(area);
             }, true);
         }
+    }
+
+    /* --- a question asked while the last one is still being answered ----- */
+    //
+    // Pressing Enter mid-answer used to do nothing at all: the handler above blocked
+    // it, and the send button is the stop square for the duration, so a reader who had
+    // already thought of the next question had to hold it, watch the answer land, and
+    // then type it again. What it does now is take the question and hold it, and send
+    // it the moment the turn ends.
+    //
+    // Held HERE and not in session state, which is not a shortcut: reaching Python
+    // means a widget interaction, and a widget interaction during a run aborts that
+    // run — it is the mechanism the stop button is built on. A queue that told the
+    // server about itself would end the answer it is queued behind. So Python never
+    // learns of these until one is actually sent, at which point it is an ordinary
+    // question typed into an ordinary box.
+    //
+    // On the parent window, because Streamlit rebuilds this script's iframe on every
+    // rerun and the whole point is to survive the rerun at the end of a turn.
+
+    function queue() {
+        if (!view.__sageQueue) view.__sageQueue = [];
+        return view.__sageQueue;
+    }
+
+    function queueDraft(area) {
+        var text = (area.value || '').replace(/^\s+|\s+$/g, '');
+        if (!text) return;
+        queue().push(text);
+        // Emptied, so the box is ready for the question after it and the reader can
+        // see that the one they pressed Enter on has been taken.
+        setFieldValue(area, '');
+        area.style.height = 'auto';
+        // The same reset a real send does — the next Up starts from the newest
+        // question rather than from wherever the last walk stopped.
+        view.__sageHistoryAt = -1;
+        view.__sageHistoryDraft = '';
+        schedule();
+    }
+
+    // Take one back. Identified by its text as well as by its position, because the
+    // ✕ belongs to the row that was drawn and the queue can move underneath it: the
+    // frame after `flushQueue` shifts the first question off, the rows on screen are
+    // one behind, and a click landing in that window would drop the question next to
+    // the one the reader pointed at.
+    function dropQueued(index, text) {
+        var held = queue();
+        var at = held[index] === text ? index : held.indexOf(text);
+        if (at < 0) return;
+        held.splice(at, 1);
+        schedule();
+    }
+
+    // Drawn where the question will actually appear — the end of the conversation, in
+    // the corner a question sits in — rather than as a chip by the composer. A reader
+    // who has queued something is looking at the answer above it, and the thing they
+    // need to see is that their question is next in line.
+    //
+    // Rebuilt only when the queue's contents change: this runs on every mutation frame,
+    // and re-creating the row every time would drop the ✕ out from under the cursor.
+    function renderQueue() {
+        var held = queue();
+        var note = doc.getElementById('queued-prompts');
+        if (!held.length) {
+            if (note) note.remove();
+            return;
+        }
+        var host = doc.querySelector('[data-testid="stMainBlockContainer"]');
+        if (!host) return;
+        if (!note) {
+            note = injected('div');
+            note.id = 'queued-prompts';
+            note.className = 'queued-note';
+        }
+        // Last child, always: Streamlit appends the streaming answer as it goes, so a
+        // node merely present in the container drifts up above content that arrived
+        // after it.
+        if (note.parentElement !== host || note.nextSibling) host.appendChild(note);
+
+        var stamp = held.length + '\u0000' + held.join('\u0000');
+        if (note.dataset.sageQueue === stamp) return;
+        note.dataset.sageQueue = stamp;
+        note.textContent = '';
+        held.forEach(function (text, index) {
+            var row = doc.createElement('div');
+            row.className = 'queued-row';
+
+            var drop = doc.createElement('button');
+            drop.type = 'button';
+            drop.className = 'queued-drop';
+            drop.innerHTML = CLOSE_SVG;
+            drop.title = 'Do not send this question';
+            drop.setAttribute('aria-label', drop.title);
+            drop.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                dropQueued(index, text);
+            });
+
+            var bubble = doc.createElement('div');
+            bubble.className = 'queued-bubble';
+            var label = doc.createElement('span');
+            label.className = 'queued-label';
+            label.textContent = held.length > 1
+                ? 'Queued · ' + (index + 1) + ' of ' + held.length
+                : 'Queued';
+            bubble.appendChild(label);
+            // textContent, not innerHTML: this is the reader's own typing and it goes
+            // on the page as text.
+            bubble.appendChild(doc.createTextNode(text));
+
+            row.appendChild(drop);
+            row.appendChild(bubble);
+            note.appendChild(row);
+        });
+    }
+
+    function sendButton() {
+        var container = doc.querySelector('[data-testid="stChatInput"]');
+        if (!container) return null;
+        return container.querySelector(
+            'button:not(#paperclip-btn):not(#stop-btn):not([' + INJECTED + '])'
+        );
+    }
+
+    // Put back whatever the reader was typing when a queued question took the box off
+    // them. Only into an empty box — if they have started typing again since, that is
+    // newer than what is being restored.
+    function restoreDraft() {
+        var draft = view.__sageDraftHold;
+        view.__sageDraftHold = null;
+        if (!draft) return;
+        var area = doc.querySelector('textarea[data-testid="stChatInputTextArea"]');
+        if (!area || area.value) return;
+        setFieldValue(area, draft);
+    }
+
+    // How many questions Python has accepted. This is the receipt a send is confirmed
+    // by, and getting it wrong cost a question: the first version read the box instead,
+    // on the reasoning that Streamlit empties the field on submit — so an empty box
+    // meant "sent". It does not. The box is also empty in the window between the click
+    // and Streamlit running the script, and in that window the next queued question
+    // was written into the same widget and submitted over the top of the one already
+    // in flight. Two questions went to the box, one turn came back: measured in the
+    // running app, "second question" never reached the transcript at all.
+    //
+    // A bubble in the transcript, by contrast, exists only because a script run
+    // appended a message — so it cannot be true early. Counted rather than matched on
+    // text: `transcript.escape` turns a newline into `<br>`, which leaves no whitespace
+    // in `textContent` at all, so a pasted multi-line question would never match itself
+    // and would be handed back as unsendable.
+    function questionCount() {
+        return doc.querySelectorAll('.user-bubble').length;
+    }
+
+    // One queued question per turn, sent by driving the composer the reader would have
+    // driven: the text into the box, then Streamlit's own send button. Nothing else
+    // here can start a turn — `st.chat_input` is the only widget that carries a
+    // question to Python — and going through it means a queued question is subject to
+    // every check a typed one is, the length limit and the rate limiter included.
+    //
+    // A click that does not land is retried, because it can be made in the frame where
+    // React still has the send button disabled. Retried on a clock and not on the sync
+    // pass, though: passes run several times a second while an answer streams, and a
+    // retry faster than the server's round trip is how a double submit happens. After
+    // a few seconds of no receipt it gives up and PUTS THE TEXT BACK IN THE BOX — a
+    // question the reader can see and send themselves, rather than one that vanished.
+    // A turn the limiter refuses ends up here, which is the right place for it: the
+    // refusal is on screen and the question is in the box next to it.
+    var SEND_RETRY_MS = 400;
+    var SEND_GIVE_UP = 12;
+
+    function flushQueue() {
+        var area = doc.querySelector('textarea[data-testid="stChatInputTextArea"]');
+        if (!area) return;
+        var sending = view.__sageSending;
+
+        if (sending !== null && sending !== undefined) {
+            if (questionCount() > (view.__sageSendSeen || 0)) {
+                view.__sageSending = null;
+                view.__sageSendTries = 0;
+                restoreDraft();
+                return;
+            }
+            // A turn is running and its question has not been drawn yet: ours, one
+            // frame early. Nothing to do but wait for it.
+            if (isProcessing()) return;
+            var now = Date.now();
+            if (now - (view.__sageSentAt || 0) < SEND_RETRY_MS) return;
+            var tries = (view.__sageSendTries || 0) + 1;
+            view.__sageSendTries = tries;
+            if (tries > SEND_GIVE_UP) {
+                view.__sageSending = null;
+                view.__sageSendTries = 0;
+                view.__sageDraftHold = null;
+                if (!area.value) setFieldValue(area, sending);
+                return;
+            }
+            handToComposer(area, sending);
+            return;
+        }
+
+        var held = queue();
+        if (!held.length || isProcessing()) return;
+        // Never over the top of a question being typed: it is held and put back once
+        // the queued one has gone.
+        var draft = (area.value || '');
+        view.__sageDraftHold = draft.replace(/^\s+|\s+$/g, '') ? draft : null;
+        view.__sageSending = held.shift();
+        view.__sageSendTries = 0;
+        view.__sageSendSeen = questionCount();
+        handToComposer(area, view.__sageSending);
+    }
+
+    function handToComposer(area, text) {
+        view.__sageSentAt = Date.now();
+        if (area.value !== text) {
+            setFieldValue(area, text);
+            area.style.height = 'auto';
+        }
+        var send = sendButton();
+        if (send) send.click();
     }
 
     /* --- reopening a question -------------------------------------------- */
@@ -1726,7 +2216,14 @@
         addEditButtons();
         addQuestionCopyButtons();
         addSelectionAsk();
+        addThemeToggle();
+        enforceTheme();
         markGenerating();
+        // After `markGenerating`, which is what decides whether a turn is in flight,
+        // and before the scroll below, which measures a page this may have just added
+        // a row to.
+        renderQueue();
+        flushQueue();
         // `scroller()` first, because it is the one that asks which element actually
         // scrolls instead of assuming. This line named stMain outright while
         // `autoScroll()` two lines down asked `scroller()` — two functions in one file
@@ -1770,6 +2267,11 @@
         window.requestAnimationFrame(flush);
         window.setTimeout(flush, 32);
     }
+
+    // The theme first, and before the first sync: the attribute it sets is what
+    // app.css picks a palette with, so a frame drawn without it is a frame of the
+    // wrong colour on a page the reader is already looking at.
+    try { applyTheme(themeChoice()); } catch (err) { /* the stylesheet still has both */ }
 
     // Straight away rather than a frame from now: until this has run, the page is
     // laid out around the stylesheet's guess at the input bar rather than its

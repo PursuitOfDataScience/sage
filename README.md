@@ -53,11 +53,17 @@ and a base URL in your profile.
   quota, spent free allowance, an empty reply — hands the question on by itself, and
   keeps going down the lineup until one answers.
 - ⏹ **Stop & edit** — cut an answer short, or reword a question and re-ask it.
+- ⏭ **Ask the next question early** — send a follow-up while an answer is still
+  arriving; it waits its turn and goes the moment the current one lands.
+- 💬 **The session's conversations** — a sidebar of every chat, named after its own
+  first question, plus a New chat button.
 - 💡 **Ask about a passage** — select any text in an answer and follow up on it.
 - 📎 **Attachments** — PDFs, screenshots, job scripts, logs. Judged on bytes, not names.
 - 🙅 **Honest refusals** — weak retrieval makes it say so instead of guessing.
 - 🤐 **No shop talk** — asked how it works, it says what it looks up, not what it is made of.
-- ♿ **Light/dark, keyboard, reduced motion, print.**
+- 🌗 **Light, dark, or whatever the browser says** — one button under the input,
+  remembered between visits, and it never reloads the page or interrupts an answer.
+- ♿ **Keyboard, reduced motion, print.**
 
 ## How it works
 

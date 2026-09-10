@@ -29,6 +29,15 @@ import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+#: The two ways into the dark palette, as `tools/palette_check.py` keys them. Written
+#: out rather than discovered, so renaming or dropping either block fails here instead
+#: of quietly leaving the comparison below with nothing to compare.
+SYSTEM_DARK = (
+    '@media (prefers-color-scheme: dark) :: '
+    ':root:not([data-sage-theme="light"]) :: '
+)
+CHOSEN_DARK = ':root[data-sage-theme="dark"] :: '
+
 
 def _palette_check():
     path = os.path.join(ROOT, "tools", "palette_check.py")
@@ -74,9 +83,50 @@ class TestPalette:
         palette = _palette_check()
         css = palette.inventory()["static/app.css"]
         assert ":root :: --brand-text" in css
-        assert "@media (prefers-color-scheme: dark) :: :root :: --brand-text" in css
-        assert css[":root :: --brand-text"] != (
-            css["@media (prefers-color-scheme: dark) :: :root :: --brand-text"]
+        assert SYSTEM_DARK + "--brand-text" in css
+        assert css[":root :: --brand-text"] != css[SYSTEM_DARK + "--brand-text"]
+
+    def test_chosen_dark_matches_system_dark(self):
+        """The two dark palettes in app.css are the same palette.
+
+        There are two because there have to be. One is reached when the browser asks
+        for dark and the reader has not overridden it; the other when the reader picks
+        dark from the toggle in the composer — a media query cannot be made to match on
+        an attribute, and CSS has no way to give one declaration list to two
+        conditions. (`light-dark()` and style queries each would, and both are recent
+        enough that a reader's browser may not have them.)
+
+        So the duplication is deliberate, and this is what makes it safe. A drifted
+        copy does not break a layout or fail a bound: the reader picks dark and gets
+        most of it, with one token still holding a light value on a near-black page.
+        That is how a source link ends up at 1.9:1 and stays there — the exact failure
+        `.streamlit/config.toml` already carries a paragraph about.
+        """
+        palette = _palette_check()
+        css = palette.inventory()["static/app.css"]
+        system = {
+            key[len(SYSTEM_DARK):]: value
+            for key, value in css.items() if key.startswith(SYSTEM_DARK)
+        }
+        chosen = {
+            key[len(CHOSEN_DARK):]: value
+            for key, value in css.items() if key.startswith(CHOSEN_DARK)
+        }
+        assert system, "no dark palette under prefers-color-scheme in app.css"
+        missing = sorted(set(system) - set(chosen))
+        extra = sorted(set(chosen) - set(system))
+        assert not missing, (
+            "the reader-chosen dark palette is missing tokens the browser-chosen one "
+            f"has, so picking dark leaves these light: {missing}"
+        )
+        assert not extra, (
+            "the reader-chosen dark palette declares tokens the browser-chosen one "
+            f"does not, so a dark-mode device does not get them: {extra}"
+        )
+        differing = sorted(key for key in system if system[key] != chosen[key])
+        assert not differing, (
+            "the two dark palettes disagree on: "
+            + ", ".join(f"{key} ({system[key]} vs {chosen[key]})" for key in differing)
         )
 
     def test_a_repaint_is_detected(self):

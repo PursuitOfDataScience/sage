@@ -15,6 +15,7 @@ __all__ = [
     "assets",
     "composer",
     "landing",
+    "sidebar",
     "state",
     "transcript",
     "turn",

@@ -67,7 +67,35 @@ SESSION_DEFAULTS: tuple[tuple[str, object], ...] = (
     # replacement has actually answered, so the notice can never claim a switch
     # worked while an error card below it says it did not.
     ("switched_from", None),
+    # Every conversation this session holds, and which of them is open.
+    #
+    # One list of messages is LIVE at a time — `messages`, at the top of this tuple —
+    # and the records here are where the others wait. That is not duplication for its
+    # own sake: `messages` is rebound, not just mutated (`start_new_turn` truncates it
+    # for an edited question, `clear_conversation` replaces it with a fresh list), so a
+    # record holding the same list object would come unstuck from it the first time
+    # either of those ran, silently, with the sidebar then listing a conversation that
+    # no longer matches the one on screen. Switching stashes the live list into the
+    # open record and loads the target's, which leaves every existing path free to go
+    # on rebinding `messages` exactly as it did before.
+    #
+    # A record is {"id": int, "messages": list}. There is no stored title: the title is
+    # derived from the first question every time it is drawn, so a chat cannot end up
+    # labelled with a question the reader has since edited away.
+    ("chats", []),
+    ("chat_id", 0),
+    # Ids are handed out and never reused, so a button key can never name two
+    # different chats across one session.
+    ("next_chat_id", 1),
 )
+
+#: How much of the first question becomes the chat's name in the sidebar. Long enough
+#: to tell two questions about the same thing apart, short enough to fit the panel on
+#: one line: Streamlit's sidebar is 300px wide and a row's label has 240 of them, which
+#: is about this many characters at the size the list is set in. The stylesheet
+#: ellipses anything that still overruns, so this is where it looks deliberate rather
+#: than where it stops being possible.
+TITLE_CHARS = 34
 
 
 def initialise() -> None:
@@ -94,6 +122,138 @@ def initialise() -> None:
     for key, default in SESSION_DEFAULTS:
         if key not in st.session_state:
             st.session_state[key] = copy.deepcopy(default)
+    # The open chat always exists. The sidebar draws one row per record, so a session
+    # with none of them would show an empty list above a New chat button while a
+    # conversation was on screen — and `_stash` would have nowhere to put it.
+    if not st.session_state.chats:
+        st.session_state.chats = [{"id": 0, "messages": []}]
+        st.session_state.chat_id = 0
+        st.session_state.next_chat_id = 1
+
+
+# --- the chats in this session --------------------------------------------
+
+
+def chat_title(messages: list[dict], fallback: str) -> str:
+    """What to call a conversation in the sidebar: its first question, shortened.
+
+    Derived rather than stored, so an edited or cleared first question renames the
+    chat instead of leaving a label nothing on screen says any more. `fallback` is the
+    profile's word for a chat with nothing in it yet — the copy belongs to the
+    deployment, so it is passed in rather than written here.
+    """
+    for message in messages:
+        if message.get("role") != "user":
+            continue
+        text = " ".join(str(message.get("text", "")).split())
+        if not text:
+            continue
+        if len(text) <= TITLE_CHARS:
+            return text
+        # Cut at a word boundary where there is one within reach, so the label does
+        # not end mid-word for the sake of four characters.
+        clipped = text[:TITLE_CHARS].rstrip()
+        space = clipped.rfind(" ")
+        if space >= TITLE_CHARS - 12:
+            clipped = clipped[:space]
+        return clipped + "…"
+    return fallback
+
+
+def active_messages(chat_id: int) -> list[dict]:
+    """The messages to draw for one chat — live for the open one, stored otherwise.
+
+    The open chat's messages are read from `messages` rather than from its record,
+    because the record is only written on a switch: a turn that has just landed is in
+    `messages` and nowhere else, and a sidebar reading records would name the open
+    chat after the question before last.
+    """
+    if chat_id == st.session_state.chat_id:
+        return st.session_state.messages
+    for record in st.session_state.chats:
+        if record["id"] == chat_id:
+            return record["messages"]
+    return []
+
+
+def _stash() -> None:
+    """Write the live conversation back into the record it belongs to."""
+    for record in st.session_state.chats:
+        if record["id"] == st.session_state.chat_id:
+            record["messages"] = st.session_state.messages
+            return
+
+
+def _leave_conversation() -> None:
+    """Reset everything that belongs to the conversation being left.
+
+    Shared by clearing, switching and starting a new chat, because all three are the
+    same event as far as the rest of session state is concerned: whatever a turn left
+    behind — a half-answer, an error card, a failover ledger, files picked for a
+    question that is no longer on screen — belongs to a conversation that is no longer
+    the one being looked at.
+    """
+    st.session_state.processing = False
+    st.session_state.partial = []
+    st.session_state.stop_requested = False
+    st.session_state.editing = None
+    st.session_state.edit_session += 1
+    st.session_state.attachments = []
+    st.session_state.dropped_uploads = {}
+    st.session_state.upload_refusals = {}
+    st.session_state.error = None
+    st.session_state.error_detail = ""
+    st.session_state.notice = ""
+    st.session_state.tried = []
+    st.session_state.switched_from = None
+    # A failover in flight belongs to the turn being left. Left set, it fires on the
+    # next run and `turn.run`'s `finally` sets `processing` again — a question from
+    # the conversation that was just closed, answered into the one that replaced it.
+    st.session_state.pop("failover_to", None)
+    st.session_state.uploader_key += 1
+    # Nothing here can empty the composer — the text in it is client-side state
+    # Streamlit only reads on submit — so leaving a conversation left the last
+    # question sitting in the box over whatever replaced it, as if it were still
+    # about to be sent. app.js empties it when this counter moves.
+    st.session_state.clear_token += 1
+
+
+def new_chat() -> None:
+    """Put the open conversation away and start an empty one.
+
+    Nothing at all if the open one is already empty. Without that, pressing the button
+    twice leaves two identical `New chat` rows in the sidebar and pressing it ten times
+    leaves ten — a list of empty conversations to scroll past to reach a real one. An
+    empty chat is already the thing the button offers, so the reader is on it.
+    """
+    if not st.session_state.messages:
+        return
+    _stash()
+    chat_id = st.session_state.next_chat_id
+    st.session_state.next_chat_id += 1
+    st.session_state.chats.append({"id": chat_id, "messages": []})
+    st.session_state.chat_id = chat_id
+    st.session_state.messages = []
+    _leave_conversation()
+    st.rerun()
+
+
+def open_chat(chat_id: int) -> None:
+    """Switch to another conversation in this session."""
+    if chat_id == st.session_state.chat_id:
+        return
+    target = next(
+        (record for record in st.session_state.chats if record["id"] == chat_id), None
+    )
+    if target is None:
+        # A stale button key — the chat is gone. Doing nothing is right: the rerun
+        # this returns into redraws the sidebar without it.
+        return
+    _stash()
+    st.session_state.chat_id = chat_id
+    st.session_state.messages = target["messages"]
+    _leave_conversation()
+    st.rerun()
 
 
 @st.cache_resource(show_spinner=False)
@@ -194,25 +354,12 @@ def start_new_turn(
 
 
 def clear_conversation() -> None:
+    """Empty the open conversation, in place — it stays the open one."""
     st.session_state.messages = []
-    st.session_state.processing = False
-    st.session_state.partial = []
-    st.session_state.stop_requested = False
-    st.session_state.editing = None
-    st.session_state.edit_session += 1
-    st.session_state.attachments = []
-    st.session_state.dropped_uploads = {}
-    st.session_state.upload_refusals = {}
-    st.session_state.error = None
-    st.session_state.notice = ""
-    st.session_state.tried = []
-    st.session_state.switched_from = None
-    st.session_state.uploader_key += 1
-    # Nothing here can empty the composer — the text in it is client-side state
-    # Streamlit only reads on submit — so clearing the conversation left the last
-    # question sitting in the box on the landing screen, over a set of starter cards,
-    # as if it were still about to be sent. app.js empties it when this counter moves.
-    st.session_state.clear_token += 1
+    # And in its record too, so the sidebar cannot go on naming an emptied chat after
+    # the question it used to start with.
+    _stash()
+    _leave_conversation()
     st.rerun()
 
 

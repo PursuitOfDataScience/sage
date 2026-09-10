@@ -730,6 +730,16 @@ DOC_SCROLL = {"doc-scroll"}
 # conversation, so states and widths are what matter, not the page behind it.
 OPEN_PICKER = {"picker-open": False, "picker-open-legacy": True}
 
+# What each screen has waiting in the queue app.js keeps on the parent window. Only
+# one screen has anything: a queue exists only while an answer is arriving, and what is
+# under test is the row it draws at the end of the page.
+QUEUED = {
+    "queued": (
+        "and once it is running, how do I check whether it is still going?",
+        "second one, queued behind the first",
+    ),
+}
+
 # Which screens render the input with something in it rather than on its placeholder.
 TYPED_INPUT = {"composing", "composing-column"}
 # …and which of those stack the send button under the textarea rather than beside it.
@@ -803,6 +813,23 @@ SCENARIOS = {
     "picker-open": CHAT_MARKER + SHORT_ANSWER + strip(),
     "picker-open-legacy": CHAT_MARKER + SHORT_ANSWER + strip(),
     "in-flight": CHAT_MARKER + IN_FLIGHT + strip(wrapped=False),
+    # The same mid-turn screen with the reader's next question waiting behind it. Its
+    # body is the in-flight one: what is added is not markup but the state app.js
+    # holds a queue in, so the row measured here is the row `renderQueue` builds. It
+    # stands at the very end of the page, which is the one place a new element can
+    # hide under the composer — the failure this harness exists for, and the reason
+    # `.queued-note` is on the list of things `newest` can be.
+    #
+    # Two of them, because a second queued question adds a row and the pair is what
+    # says whether the block grows the way the page reserves for.
+    # Three finished turns behind it on purpose, not the bare in-flight screen: the
+    # bound that matters here — `newest` is under the composer — can only fire on a
+    # page long enough to scroll, and a question and a status row do not fill a
+    # window. On a short page the row sits mid-screen and every check passes without
+    # ever looking at the thing the screen was added for.
+    "queued": CHAT_MARKER
+    + "".join(answer_block(i) for i in range(3))
+    + IN_FLIGHT + strip(wrapped=False),
     # An answer whose content is wider than the column it is drawn in.
     "wide-answer": CHAT_MARKER + WIDE_ANSWER + strip(),
     "error": CHAT_MARKER
@@ -1148,6 +1175,9 @@ EDITOR = '[class*="st-key-edit-box-"]'
 # The attachment chips. `fixed` above the input, so they are part of the composer's
 # footprint: whatever the page reserves at its end has to cover them too.
 CHIPS = ".st-key-attachments"
+# The block holding whatever the reader sent while an answer was still arriving. Named
+# because it is measured as the end of the conversation as well as measured in itself.
+QUEUED_NOTE = ".queued-note"
 # The popover panel and what is in it. Named because the panel is portalled to the end
 # of <body>, so its colours come from nothing it is nested inside — if the stylesheet
 # does not state them, Streamlit's default does, and on a dark page that was white.
@@ -1180,6 +1210,11 @@ SELECTORS = [
     ANSWER_COPY, ANSWER_TEXT, ANSWER_TABLE, ANSWER_MARKER,
     STRIP, INPUT, INPUT_BOX, SEND, STOP, EDIT, "last:" + EDIT, QCOPY, EDITOR,
     CHIPS, ".st-key-attachments button",
+    # A question waiting its turn: the block, the bubble, its label and the ✕ that
+    # takes it back. All four, because the row is built by app.js rather than by a
+    # stylesheet rule anybody reads, and a piece of it going missing would show up
+    # here as a selector nothing rendered.
+    QUEUED_NOTE, ".queued-bubble", ".queued-label", ".queued-drop",
     PANEL, PANEL_BUTTON, ".status-text",
     ".st-key-composer-strip button",
     # The rightmost control in the strip, so the row is measured end to end: with
@@ -1199,6 +1234,10 @@ SELECTORS = [
 INTERACTIVE = {
     PICKER, ".st-key-composer-strip button", "last:.st-key-composer-strip button", INPUT,
     SEND, STOP, PANEL_BUTTON,
+    # The ✕ on a queued question. It is the only way to take one back, so a queue with
+    # it painted over or under the composer is a queue that sends the question the
+    # reader decided against.
+    ".queued-drop",
     ".st-key-retry button p", ".st-key-switch-model button p",
     *(f".st-key-example-card-{i} button p" for i in range(6)),
 }
@@ -1992,7 +2031,7 @@ def check_drop(width, height) -> tuple[list[str], int]:
 def page(body: str, scheme: str, scroll: bool, generating: bool = False,
          pin: bool = False, script: bool = True, sticky: bool = False,
          doc_scroll: bool = False, typed: bool = False, landing: bool = False,
-         column_input: bool = False, portal: str = "",
+         column_input: bool = False, portal: str = "", queued=(),
          driver: str = "") -> str:
     """The replica, with or without app.js, and with the bar pinned either way.
 
@@ -2027,6 +2066,14 @@ def page(body: str, scheme: str, scroll: bool, generating: bool = False,
     than padding it down to the composer. Without this the replica would render the
     one state the app never reaches — a short conversation nobody watched arrive — and
     every check here would pass on a layout the reader never sees.
+
+    `queued` is what the reader has typed and sent while this answer was still
+    arriving. Seeded as the state app.js keeps it in, NOT written into a fixture as
+    markup: the row is injected by `renderQueue`, and a hand-copy of its markup here
+    would be a replica of a replica — it would keep passing after the real function
+    stopped producing that shape. Seeding the state means the harness measures what
+    app.js actually draws. (It would also delete a static fixture on sight: with an
+    empty queue, `renderQueue` removes the row it finds.)
 
     `column_input` stacks the send button under the textarea instead of beside it. In
     the row shape a full box has 2px under its last line; in the column shape it has
@@ -2114,7 +2161,8 @@ def page(body: str, scheme: str, scroll: bool, generating: bool = False,
 {'<div id="processing-signal" hidden></div>' if generating else ''}
 {portal}
 <script>window.__scrollBottom = {str(scroll).lower()}; window.__pinLast = {str(pin).lower()};
-window.__sageWatched = {str('chat-container' in body).lower()};</script>
+window.__sageWatched = {str('chat-container' in body).lower()};
+window.__sageQueue = {json.dumps(list(queued))};</script>
 {'<script id="sage-js">' + JS + '</script>' if script else ''}
 {driver or MEASURE.replace("HOSTBAR", str(HOST_BAR)).replace("TOPGAP", str(TOP_GAP)).replace("SELECTORS", json.dumps(SELECTORS)).replace("SEND_SELECTOR", json.dumps(SEND)).replace("PICKER_SELECTOR", json.dumps(PICKER))}
 </body></html>"""
@@ -2922,7 +2970,10 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
     newest = max(
         (b for sel, b in els.items()
          if b and sel in (".st-key-answer-5", ".st-key-answer-0", ".error-card",
-                          ".st-key-error-actions", ".notice")),
+                          ".st-key-error-actions", ".notice",
+                          # A queued question is the last thing on the page when
+                          # there is one, so it is what must clear the composer.
+                          QUEUED_NOTE)),
         key=lambda b: b["bottom"], default=None,
     )
     reserved = data.get("reserved", {})
@@ -3115,6 +3166,14 @@ def main() -> int:
                     states = ["unmeasured", "rest"]
                 elif scenario == "in-flight":
                     states = ["generating"]           # it *is* the mid-turn screen
+                elif scenario == "queued":
+                    # Mid-turn, which is when a queue exists, and scrolled to the end,
+                    # which is the state the clearance bound below actually fires in:
+                    # `newest` counts the queued row, so this is what would catch it
+                    # hiding under the composer. Both are real frames — the row also
+                    # exists for the moment between the turn ending and the queue
+                    # draining, and nothing has scrolled it away by then.
+                    states = ["generating", "scrolled"]
                 elif scenario == "wide-answer":
                     # What this screen is for is the width of what is inside an
                     # answer, and that does not change with the scroll position or
@@ -3136,6 +3195,7 @@ def main() -> int:
                                 typed=scenario in TYPED_INPUT,
                                 landing=scenario.startswith("landing"),
                                 column_input=scenario in COLUMN_INPUT,
+                                queued=QUEUED.get(scenario, ()),
                                 portal=(panel(OPEN_PICKER[scenario])
                                         if scenario in OPEN_PICKER else ""))
                     data = render(name, html, width, height,
