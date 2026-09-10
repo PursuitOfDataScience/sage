@@ -332,6 +332,13 @@ body {{ margin: 0; background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme
 /* Streamlit's header: full width, transparent, and above everything. */
 [data-testid="stHeader"] {{ position: fixed; top: 0; left: 0; right: 0;
    height: {HOST_BAR}px; background: transparent; z-index: {HOST_Z}; }}
+/* Streamlit's own row inside it, and the sidebar arrow at the position it really
+   occupies. app.js measures the arrow to place the theme toggle clear of it. */
+[data-testid="stToolbar"] {{ position: relative; height: {HOST_BAR}px; }}
+.toolbar-row {{ position: absolute; top: 16px; left: 16px; height: 28px;
+                display: flex; align-items: center; }}
+[data-testid="stExpandSidebarButton"] {{ width: 28px; height: 28px; border: 0;
+                background: transparent; color: {FOREGROUNDS[scheme]}; }}
 /* The host's own control cluster, which additionally paints. */
 #host-bar {{ position: fixed; top: 0; right: 0; width: {HOST_BAR_W}px;
             height: {HOST_BAR}px; background: {BACKGROUNDS[scheme]}; z-index: 999991; }}
@@ -1175,6 +1182,7 @@ EDITOR = '[class*="st-key-edit-box-"]'
 # The attachment chips. `fixed` above the input, so they are part of the composer's
 # footprint: whatever the page reserves at its end has to cover them too.
 CHIPS = ".st-key-attachments"
+THEME_TOGGLE = "#theme-toggle"
 # The block holding whatever the reader sent while an answer was still arriving. Named
 # because it is measured as the end of the conversation as well as measured in itself.
 QUEUED_NOTE = ".queued-note"
@@ -1216,6 +1224,11 @@ SELECTORS = [
     # here as a selector nothing rendered.
     QUEUED_NOTE, ".queued-bubble", ".queued-label", ".queued-drop",
     PANEL, PANEL_BUTTON, ".status-text",
+    # The theme toggle, which lives in the one band of this page that has already
+    # killed a control: Streamlit's header takes every click aimed at anything
+    # underneath it, and the fix is a z-index that outranks the chrome. Measured AND
+    # hit-tested, because "on screen" and "clickable" came apart there once before.
+    THEME_TOGGLE, '[data-testid="stExpandSidebarButton"]',
     ".st-key-composer-strip button",
     # The rightmost control in the strip, so the row is measured end to end: with
     # a model name in it, it is the widest thing under the input.
@@ -1233,7 +1246,7 @@ SELECTORS = [
 # textarea, and "the box will not take a click" is the worst bug in the app.
 INTERACTIVE = {
     PICKER, ".st-key-composer-strip button", "last:.st-key-composer-strip button", INPUT,
-    SEND, STOP, PANEL_BUTTON,
+    SEND, STOP, PANEL_BUTTON, THEME_TOGGLE,
     # The ✕ on a queued question. It is the only way to take one back, so a queue with
     # it painted over or under the composer is a queue that sends the question the
     # reader decided against.
@@ -2151,7 +2164,16 @@ def page(body: str, scheme: str, scroll: bool, generating: bool = False,
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <style>{base_css(scheme)}</style><style>{theme_css(scheme)}</style></head>
 <body class="{'bar-sticky' if sticky else 'bar-fixed'}{' doc-scroll' if doc_scroll else ''}{' input-column' if column_input else ''}">
-<div data-testid="stHeader"></div><div id="host-bar"></div>
+<div data-testid="stHeader">
+  <!-- Streamlit's own control, at the geometry it really has (18,16,28x28). It is here
+       because app.js measures it: `--toggle-left` is published as "just past this", so
+       without it the theme toggle would only ever be rendered at its no-arrow
+       fallback and the offset that keeps the two from overlapping would go
+       unchecked. -->
+  <div data-testid="stToolbar"><div class="toolbar-row">
+    <button data-testid="stExpandSidebarButton">&raquo;</button>
+  </div></div>
+</div><div id="host-bar"></div>
 <div data-testid="stAppViewContainer">
   <div data-testid="stMain" class="main">
     <div data-testid="stMainBlockContainer" class="block-container">

@@ -56,12 +56,12 @@ and a base URL in your profile.
 - ⏭ **Ask the next question early** — send a follow-up while an answer is still
   arriving; it waits its turn and goes the moment the current one lands.
 - 💬 **The session's conversations** — a sidebar of every chat, named after its own
-  first question, plus a New chat button.
+  first question, with a New chat button and a ✕ that removes one.
 - 💡 **Ask about a passage** — select any text in an answer and follow up on it.
 - 📎 **Attachments** — PDFs, screenshots, job scripts, logs. Judged on bytes, not names.
 - 🙅 **Honest refusals** — weak retrieval makes it say so instead of guessing.
 - 🤐 **No shop talk** — asked how it works, it says what it looks up, not what it is made of.
-- 🌗 **Light, dark, or whatever the browser says** — one button under the input,
+- 🌗 **Light, dark, or whatever the browser says** — one button at the top of the page,
   remembered between visits, and it never reloads the page or interrupts an answer.
 - ♿ **Keyboard, reduced motion, print.**
 

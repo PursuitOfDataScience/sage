@@ -137,11 +137,21 @@ class Copy:
         "That account is outside the domains this deployment allows. "
         "Sign in with an allowed account."
     )
-    #: The sidebar of conversations. `new_chat` labels the button that opens an empty
-    #: one and also names a chat with nothing in it yet, because they are the same
-    #: thing said in two places and two strings would drift apart.
-    chats_heading: str = "Chats"
+    #: The sidebar of conversations.
+    #:
+    #: `chats_heading` says what the list IS, and the one thing worth saying about it is
+    #: that it lasts as long as the tab does — nothing else in the app mentions that.
+    #: It was "Chats", set in small caps above a list of chats, which is a label that
+    #: decorates rather than informs.
+    #:
+    #: `new_chat` and `untitled_chat` were one string. They cannot be: the first is an
+    #: action and the second is a state, and sharing a word put a button reading
+    #: "New chat" directly above a row reading "New chat" — the same two words for two
+    #: different things, in a panel four rows tall.
+    chats_heading: str = "This session"
     new_chat: str = "New chat"
+    untitled_chat: str = "Nothing asked yet"
+    delete_chat: str = "Delete this chat"
     #: The progress line, one phrase per stage of a turn. Fixed phrases on purpose:
     #: this row is progress, not a log, and it used to name the document being read
     #: and quote the model's query back — neither of which a reader can place. A

@@ -567,38 +567,80 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 
 /* ===== THE CHAT LIST (sidebar) =====
  *
- * One row per conversation in this session, drawn by `sage/ui/sidebar.py`. The panel
+ * The conversations this session is holding, drawn by `sage/ui/sidebar.py`. The panel
  * around them is Streamlit's and is left alone; these are the rows inside it.
  *
- * Left-aligned and truncated to one line, because a row's label is the first question
- * asked in that chat: full-width buttons centre their text by default, so a list of
- * them read as a stack of headings rather than as a list, and a long question wrapped
- * to three lines and pushed the rest of the session off the panel. */
+ * Four things carry the design, and each of them is doing a job rather than decorating:
+ *
+ * * A row is a row, not a card. No shadow, no fill at rest, no border — a list of
+ *   conversations is a list, and eight identically-bordered boxes read as eight
+ *   unrelated things.
+ * * Which one is open is said by a 2px maroon rule down its left edge, drawn as an
+ *   inset shadow so it costs no layout. That is the one loud thing in the panel, and
+ *   it is loud because "where am I" is the only question the list has to answer at a
+ *   glance. It replaced a ●/○ glyph pair in the label, which said the same thing in
+ *   the least legible way available.
+ * * The whole row reacts to the cursor, not the button under it. Two controls share a
+ *   row, and lighting only the one you happen to be over makes a row look broken.
+ * * The ✕ is present at 45% and full on hover. Hidden until hover is the trendier
+ *   choice and it is unusable on a touch screen, where there is no hover to have.
+ *
+ * There is no ALL-CAPS eyebrow over the list any more. It said "CHATS" above a list of
+ * chats, which is a label that decorates rather than informs. What is there instead
+ * says the one thing about this list a reader cannot see: it is only this session, and
+ * closing the tab is the end of it. */
 .st-key-chat-list .chats-heading {
     font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-weight: 500;
     color: var(--text-muted);
-    /* 1.5rem for a 0.5rem gap. Streamlit wraps everything given to `st.markdown` in a
-     * `[data-testid="stMarkdownContainer"]` carrying `margin-bottom: -1rem`, which
-     * collapses with this one — see the note on `.user-message`, where the same
-     * compensation is written out at length. At the 0.5rem this asks for, the New chat
-     * button's top edge landed one pixel below the heading's baseline and sat on top of
-     * the word. */
-    margin: 0 0 1.5rem;
+    /* 1.4rem for the 0.4rem gap it draws. Streamlit wraps anything given to
+     * `st.markdown` in a `[data-testid="stMarkdownContainer"]` carrying
+     * `margin-bottom: -1rem` — see the note on `.user-message`, where the same
+     * compensation is written out at length. At the 0.5rem this first asked for, the
+     * row below landed a pixel above the heading's baseline and sat on the word. */
+    margin: 0.3rem 0 1.4rem;
 }
 
+/* One row, two controls: the conversation's name, and the ✕ that removes it. Laid out
+ * by CSS rather than by `st.columns`, for the reason recorded on the composer strip — a
+ * column has no intrinsic width, which is how a control there came to be in the DOM
+ * and invisible on screen, twice. The worst a broken stylesheet can do here is stack
+ * the two, which is ugly and still works.
+ *
+ * Both container shapes, because which of the two `st.container(key=…)` produces is a
+ * Streamlit detail that has changed between versions. */
+[class*="st-key-chat-row-"],
+[class*="st-key-chat-row-"] > [data-testid="stVerticalBlock"] {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 0 !important;
+}
+
+[class*="st-key-chat-row-"] {
+    border-radius: 9px;
+    margin-bottom: 1px;
+    transition: background var(--transition);
+}
+
+/* The name takes whatever room is left; the ✕ is as wide as itself. Keyed on the slot
+ * rather than on what is in it, because the row swaps both controls when a delete is
+ * armed and the layout must not move when it does. */
+[class*="st-key-chat-name-"] { flex: 1 1 auto !important; min-width: 0 !important; }
+[class*="st-key-chat-act-"] { flex: 0 0 auto !important; }
+
 .st-key-chat-list button {
-    justify-content: flex-start !important;
-    text-align: left !important;
     background: transparent !important;
     border: 1px solid transparent !important;
-    border-radius: var(--radius-sm) !important;
+    border-radius: 9px !important;
     color: var(--text-secondary) !important;
-    padding: 5px 9px !important;
-    min-height: 32px !important;
-    transition: background var(--transition), border-color var(--transition);
+    justify-content: flex-start !important;
+    text-align: left !important;
+    padding: 6px 10px !important;
+    min-height: 34px !important;
+    transition: background var(--transition), border-color var(--transition),
+                color var(--transition);
 }
 
 .st-key-chat-list button p {
@@ -611,19 +653,18 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 
 /* The wrappers Streamlit puts between a button and its label. They are
  * `display: flex; justify-content: center; width: 100%`, which is what centres the
- * text of a full-width button — so `justify-content` on the button alone does
- * nothing, and the row above reads as a heading rather than as an entry in a list.
- * (The model picker's panel has the same rule and the same non-effect; it is left
- * alone, because how that control looks is not what was asked for here.)
+ * text of a full-width button — so `justify-content` on the button alone does nothing,
+ * and a list of them reads as a stack of headings rather than as a list. (The model
+ * picker's panel has the same rule and the same non-effect; it is left alone, because
+ * how that control looks is not what was asked for here.)
  *
- * Addressed structurally rather than by the class they carry, which is an emotion
- * build hash and would be a rule against a string that changes on a Streamlit
- * upgrade. `min-width: 0` is what lets the label shrink far enough for the ellipsis
- * above to fire instead of the question wrapping to a second line.
- *
- * If Streamlit ever changes this nesting, the rule stops matching and the labels go
- * back to being centred: visible, and harmless. That is the right failure mode for a
- * rule that cannot be written against a name worth trusting. */
+ * Addressed structurally rather than by the class they carry, which is an emotion build
+ * hash and would be a rule against a string that changes on a Streamlit upgrade.
+ * `min-width: 0` is what lets a long question shrink far enough for the ellipsis above
+ * to fire instead of wrapping to a second line. If Streamlit ever changes this nesting
+ * the rule stops matching and the labels go back to being centred: visible, and
+ * harmless, which is the right failure for a rule that cannot be written against a
+ * name worth trusting. */
 .st-key-chat-list button > div,
 .st-key-chat-list button > div > span {
     display: flex !important;
@@ -632,68 +673,144 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     min-width: 0 !important;
 }
 
-.st-key-chat-list button:not(:disabled):hover {
-    background: var(--control-bg-hover) !important;
-    border-color: var(--brand-line) !important;
-    color: var(--brand-text) !important;
+/* The row under the cursor, whichever of its two controls the cursor is actually over.
+ * Suppressed while an answer arrives, because every row is inert then and a row that
+ * cannot be clicked must not light up as though it could. Gated on the attribute app.js
+ * already puts on <body> for the duration rather than on `:has(button:not(:disabled))`
+ * — which says it more directly and is 2023-vintage CSS this app has no reason to
+ * require. */
+body:not([data-sage-generating]) [class*="st-key-chat-row-"]:hover {
+    background: var(--control-bg-hover);
 }
 
-/* A row that cannot be clicked reads as one, and every row cannot be clicked while an
- * answer is arriving — see `sage/ui/sidebar.py` for why that has to be so. */
+[class*="st-key-chat-row-"]:hover [class*="st-key-chat-name-"] button:not(:disabled) {
+    color: var(--text-primary) !important;
+}
+
+/* The conversation that is open. Clickable, deliberately: it used to be rendered
+ * `disabled`, which greyed the one row in the list that is the current one and put a
+ * not-allowed cursor on it — reported as "grey and a weird forbidden sign, which looks
+ * very uncomfortable". Clicking the chat you are already in costs a rerun and changes
+ * nothing (`state.open_chat` returns on it), so there was never anything to protect. */
+[class*="st-key-chat-row-open-"] {
+    background: var(--control-bg);
+    box-shadow: inset 2px 0 0 var(--brand-line);
+}
+
+[class*="st-key-chat-row-open-"] [class*="st-key-chat-name-"] button {
+    color: var(--text-primary) !important;
+}
+
+[class*="st-key-chat-row-open-"] [class*="st-key-chat-name-"] button p {
+    font-weight: 500 !important;
+}
+
+/* A row with its delete armed. Tinted rather than merely relabelled, so the row that
+ * is about to go is unmistakable when the panel holds six of them. */
+[class*="st-key-chat-row-arm-"] {
+    background: var(--danger-bg);
+    box-shadow: inset 2px 0 0 var(--danger);
+}
+
+[class*="st-key-chat-row-arm-"] [class*="st-key-chat-name-"] button {
+    color: var(--danger) !important;
+}
+
+/* The ✕. Muted until the row is under the cursor, and never hidden: hover-to-reveal is
+ * the fashionable treatment and it leaves a touch screen with no way to delete
+ * anything at all. */
+[class*="st-key-chat-act-"] button {
+    color: var(--icon) !important;
+    opacity: 0.45;
+    padding: 6px !important;
+    min-width: 30px !important;
+    justify-content: center !important;
+}
+
+[class*="st-key-chat-row-"]:hover [class*="st-key-chat-act-"] button { opacity: 1; }
+
+[class*="st-key-chat-act-"] button:not(:disabled):hover {
+    color: var(--danger) !important;
+    background: var(--danger-bg) !important;
+}
+
+[class*="st-key-chat-row-arm-"] [class*="st-key-chat-act-"] button {
+    color: var(--danger) !important;
+    opacity: 1;
+}
+
+/* New chat. An outline rather than a maroon fill: it is rendered only when there is a
+ * conversation to leave, so it is a way out of the current one rather than the panel's
+ * headline act — and the maroon in this panel is spent on saying which row you are in. */
+.st-key-chat-list .st-key-new-chat button {
+    border-color: var(--control-border) !important;
+    color: var(--brand-text) !important;
+    margin-bottom: 0.75rem;
+}
+
+.st-key-chat-list .st-key-new-chat button:not(:disabled):hover {
+    background: var(--control-bg-hover) !important;
+    border-color: var(--brand-line) !important;
+}
+
 .st-key-chat-list button:disabled,
 .st-key-chat-list button[disabled] {
     color: var(--text-muted) !important;
     opacity: 1 !important;
 }
 
-/* Which chat is open. Hung off a container key rather than off `:disabled`, and that
- * distinction is the whole rule: the open row IS disabled — it is not a place to go —
- * but so is every other row for the length of a turn, so emphasising the disabled one
- * emphasised all of them. With two chats and an answer streaming, both rows came out
- * looking current and the list stopped saying where the reader was.
- *
- * `[class*=…]` because the key carries the chat's id, which is the same shape as
- * `st-key-answer-` and `st-key-edit-box-` elsewhere in this file. */
-.st-key-chat-list [class*="st-key-chat-current-"] button {
-    background: var(--control-bg) !important;
-    border-color: var(--control-border) !important;
-    color: var(--text-primary) !important;
-}
-
-/* New chat is the one row that is an action rather than a destination, so it keeps the
- * brand mark: the list below it reads as history and this reads as a button. */
-.st-key-chat-list .st-key-new-chat button {
-    color: var(--brand-text) !important;
-    border-color: var(--control-border) !important;
-    background: var(--control-bg) !important;
-    margin-bottom: 0.6rem;
-}
-
-.st-key-chat-list .st-key-new-chat button:disabled,
-.st-key-chat-list .st-key-new-chat button[disabled] {
-    color: var(--text-muted) !important;
-    opacity: 0.6 !important;
-}
-
 /* ===== THE THEME TOGGLE =====
  *
- * Injected by app.js into the strip of controls under the input, so it is on screen on
- * every screen — including the landing screen, and including while an answer streams,
- * which a Streamlit button could not manage: a click on one of those is a rerun, and a
- * rerun during a turn aborts it. This one never reaches the server at all.
+ * Top of the page, pinned over Streamlit's header band — and every number here is
+ * load-bearing, because that band has killed a control in this app once already.
  *
- * Sized and painted by `.st-key-composer-strip button` above, like the 🗑️ beside it.
- * What is left here is that it holds an icon rather than a word. */
+ * `z-index` first. Streamlit's header is a transparent full-width strip at 999990 and
+ * takes every click aimed at anything underneath it; the old controls row was pinned at
+ * `top: 8px`, looked right in every mock-up, and was completely dead. A z-index that
+ * merely beats the page content is not enough — at 1000 the same thing happens. This is
+ * the number the strip of controls under the input already uses, for the same reason,
+ * at the other end of the page.
+ *
+ * `left` second, and it is measured rather than written: `--toggle-left` is published by
+ * app.js as "just past Streamlit's own sidebar arrow", or the page edge once the panel
+ * is open and there is no arrow to clear. The 56px fallback is where that lands at every
+ * width the harness renders, for the frame before app.js has measured anything.
+ *
+ * And NOT in the right-hand corner, which is where a theme toggle conventionally goes.
+ * `tools/render_check.py` models a 220px opaque host control cluster there at z-index
+ * 999991 — Community Cloud's own controls, painted over the app's header. A toggle in
+ * that corner would sit under them on the deployment and over them here, and neither is
+ * a thing to ship.
+ *
+ * A Streamlit button could not do this job at all. A click on one is a rerun, and a
+ * rerun during a turn ends the turn — so the theme could not be changed while an answer
+ * was arriving, which is exactly when a reader notices the page is too bright. */
 #theme-toggle {
+    position: fixed;
+    top: 13px;
+    left: var(--toggle-left, 56px);
+    z-index: 999995;
     display: inline-flex !important;
     align-items: center;
     justify-content: center;
     width: 34px;
-    padding: 5px !important;
+    height: 34px;
+    padding: 5px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--icon);
     cursor: pointer;
-    /* The three states differ only by the glyph inside, so the button must not
-     * resize as they change — that would reflow the row it shares with the picker. */
-    flex: 0 0 auto;
+    /* The three states differ only by the glyph inside, so the button never resizes as
+     * they change. */
+    transition: background var(--transition), border-color var(--transition),
+                color var(--transition);
+}
+
+#theme-toggle:hover {
+    background: var(--control-bg-hover);
+    border-color: var(--brand-line);
+    color: var(--brand-text);
 }
 
 #theme-toggle svg { display: block; }

@@ -166,6 +166,21 @@ queued-question feature lives there: a question typed mid-answer is held on the 
 window and handed to `st.chat_input` once the turn ends, because telling the server
 about it any earlier would end the answer it is queued behind.
 
+**Anything you put in the top 60px of the page needs a z-index above 999995, and needs
+hit-testing.** That band is `[data-testid="stHeader"]`, transparent and at 999990, and
+it takes every click aimed at whatever is underneath it — the controls row was pinned
+there once, looked right in every mock-up, and was completely dead. Two things were
+measured while moving the theme toggle up there and are worth not rediscovering:
+appending *inside* `stToolbar` does take clicks, but Streamlit **removes the whole
+toolbar from the document while the sidebar is expanded**, so a control parented there
+vanishes every time the panel opens; and the top-RIGHT corner is where
+`render_check.py` models Community Cloud's own opaque control cluster (220px, z-index
+999991), so a control in that corner is under it on the deployment and over it locally.
+The toggle therefore hangs off `<body>`, is pinned by app.css at 999995, and is placed
+horizontally from a measured offset past Streamlit's own sidebar arrow. `#theme-toggle`
+is in the harness's `INTERACTIVE` set: drop its z-index to 1000 and every width reports
+it unclickable, which is the bug reproducing itself.
+
 `python tools/palette_check.py --update` accepts a repaint, and updating the baseline
 is a deliberate act: it puts the before and after in the diff where the owner can
 disagree with it. **Do not run `--update` to make the check quiet.** If you cannot say
