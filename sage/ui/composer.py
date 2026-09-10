@@ -15,7 +15,7 @@ from __future__ import annotations
 import streamlit as st
 
 from .. import config
-from .state import clear_conversation, request_stop, start_new_turn
+from .state import request_stop, start_new_turn
 from .view import View
 
 
@@ -143,6 +143,10 @@ def submit(prompt: str) -> None:
 def render_model_picker(view: View) -> None:
     """Switch provider/model mid-session — the way round a spent API quota.
 
+    Drawn in the corner of the input box, beside the send button: it names what will
+    answer, next to the control that sends.
+
+
     A popover of buttons rather than a selectbox, for two reasons that both bit:
 
     * A selectbox stores its own value under its widget key. After an automatic
@@ -176,35 +180,31 @@ def render_model_picker(view: View) -> None:
 
 
 def render_controls(view: View, has_messages: bool) -> None:
-    """One line under the input: Clear and the model picker, in the right corner.
+    """The model picker, parked inside the input box at its bottom right.
 
-    This row used to be a bar above the conversation, which was wrong twice over.
-    It sat in the band Streamlit's own full-width header takes the clicks for, so
-    it looked right and did nothing; and on the landing screen — the one screen
-    where a new user has to choose a model before asking anything — the picker
-    inside it did not render at all. Under the input it is beside the thing it
-    affects, on every screen, at the opposite end of the page from that header.
+    There used to be a 🗑️ beside it that emptied the conversation. It is gone: the panel
+    of chats has a ✕ on every row and a New chat button above them, so the trash was a
+    third way to do a thing there were already two better ways to do — "the trash can be
+    removed because of this design".
 
-    Clear, then the picker in the corner — it names what will answer, next to the
-    button that sends. Nothing else: every extra row here is a slice of a phone
-    screen spent on furniture, which is how the bottom of this app came to look, in
-    the words of the person using it, nasty.
+    And with the trash gone the row itself had no reason to be a row. The picker is one
+    control, so it sits *in* the composer rather than under it: the bar no longer reserves
+    a band below the input for a strip of controls, which is a little over 4rem of
+    vertical space the page gets back and the reason the input box now sits lower.
 
-    One container, not a strip wrapping a row. Two of them meant two sets of layout
-    rules for two elements whose identity depends on which one `st.container(key=…)`
-    hangs the key off — and the inner rule outranked the outer one, which is how the
-    controls ended up stacked in a column in the app while every render in the
-    harness had them in a row.
+    `st.container(key="composer-strip")` keeps its name, and the name is now historical —
+    it is one control in the corner of the box, not a strip under it. Renaming the key
+    would touch a dozen stylesheet rules, the layout harness's fixture and its selector
+    table, all to say something the comment above says for free.
 
-    No `st.columns`: a column has no intrinsic width, which is how the picker came
-    to be invisible twice. The row is laid out by CSS instead, so each control is
-    as wide as its own label and the worst a broken stylesheet can do is stack them.
+    `has_messages` is still taken, and no longer read. It said whether there was anything
+    to clear, which was the trash's question.
+
+    No `st.columns`: a column has no intrinsic width, which is how the picker came to be
+    invisible twice. Where it sits is measured by app.js from Streamlit's own send
+    button and published for the stylesheet, so it stays beside it at every width.
     """
     with st.container(key="composer-strip"):
-        if has_messages and st.button(
-            "🗑️", key="clear", help="Clear this conversation"
-        ):
-            clear_conversation()
         render_model_picker(view)
 
 

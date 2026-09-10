@@ -92,15 +92,15 @@
      * neither is a constant: the controls are taller on a narrow window, and an
      * attachment chip adds a row.
      *
-     * These two are only the pre-measurement fallback, and they have to agree
-     * with each other: `--strip-h` is what the bar reserves below the input, so
-     * `--bar-h` must be at least that plus the input and the bar's own padding.
-     * A --bar-h of 9.5rem alongside a --strip-h of 4.5rem was under-counting the
-     * bar it described by 26px, and CI caught the newest answer 2px underneath
-     * the input on the one screen where the measurement had not landed yet.
-     * Generous on purpose: over-reserving is dead space app.js takes back on the
-     * first frame, under-reserving hides an answer. */
-    --strip-h: 4.5rem;
+     * These are only the pre-measurement fallback. Generous on purpose: over-reserving
+     * is dead space app.js takes back on the first frame, under-reserving hides an
+     * answer.
+     *
+     * `--strip-h` used to be here — the band the bar padded itself by so a row of
+     * controls could sit below the input inside its paint. That row is gone (the trash
+     * with it, and the model picker moved into the box), so the band is gone, and with
+     * it the requirement that two hand-written fallbacks agree with each other, which
+     * had already been got wrong once by 26px. */
     /* The bar alone, and what the page reserves. They differ by the attachment chips,
      * which are pinned to the first and counted in the second — see `measureChrome`
      * for why those cannot be one number.
@@ -112,16 +112,17 @@
      * the box they belong to, which the `attached` screens caught the moment they
      * existed.
      *
-     * Derived from `--strip-h` rather than guessed, because the bar's band IS the
-     * strip it reserves plus the input and its padding. Two hand-tuned numbers agreed
-     * with each other by luck and were both ~20px under the real first-frame band;
-     * this way one of them changing cannot silently break the other.
+     * 7.375rem is 118px: the 86px box, Streamlit's own 16px above it, and the 16px this
+     * stylesheet pads below it. It used to be `calc(var(--strip-h) + 5.5rem)`, because
+     * the bar's band was the strip of controls below the input plus the input itself.
+     * With no strip there the band is the input and its padding, so this is that.
      *
-     * The 5.5rem is the input: an 86px box and the padding around it. It was 5.25rem
-     * — 84px — which is 2px under the box alone, and the chips duly landed 2px inside
-     * it on the first frame. Nothing had said so, because the harness modelled the box
-     * without the 12px of padding Streamlit puts above and below the field. */
-    --bar-band: calc(var(--strip-h) + 5.5rem);
+     * Written to the pixel rather than rounded up, and the direction matters: this is a
+     * POSITION, so generous is not safe. At 12rem against a measured 134px it floated
+     * the chips 58px above the box they belong to; left at the old 5.5rem after the bar
+     * lost 3.85rem of padding, the harness reported them 8px inside it. Both are one
+     * frame long, and both are a frame the reader sees. */
+    --bar-band: 7.375rem;
     /* Raised from 12rem when the Sources strip became a numbered list: a heading on
      * its own line is ~30px taller than the chip row it replaced, and the first frame
      * — before app.js has measured anything — put the newest content 5px under the
@@ -342,91 +343,68 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     overflow-x: hidden !important;
 }
 
-/* ===== COMPOSER STRIP (clear + model picker) ===== */
-
-/* Pinned under the chat input, at the opposite end of the page from Streamlit's
- * header. Both earlier homes for these controls were above the conversation and
- * both failed:
+/* ===== THE MODEL PICKER, INSIDE THE BOX =====
  *
- * * `position: fixed; top: 8px` put the bar inside `[data-testid="stHeader"]` —
- *   Streamlit's full-width strip across the top of every app. It is transparent,
- *   so the bar was never hidden and every mock-up looked right; it is also at a
- *   z-index no stylesheet can outrank, so it took every click aimed at the
- *   controls underneath. The bar was on screen and completely dead.
- * * In flow and sticky it was clickable, but the picker inside it did not render
- *   on the landing screen — the one screen where a new user has to pick a model
- *   before there is any conversation to pick one for.
+ * `.st-key-composer-strip` keeps its name and the name is historical: it was a row of
+ * controls under the input — a 🗑️ and the picker — and it is now the picker alone, in
+ * the bottom-right corner of the input box beside the send button. Renaming the key
+ * would touch every rule below, the layout harness's fixture and its selector table, to
+ * say what this comment says for free.
  *
- * Down here the header cannot reach it, and it is part of the composer rather
- * than of the conversation, so it is on screen on every screen. `fixed` rather
- * than `sticky` because it must never scroll away from the input it belongs to;
- * the bar above reserves exactly `--strip-h` of room for it, so the two cannot
- * overlap however tall the row of controls gets. */
+ * Where it used to be, and why it is not there any more:
+ *
+ * * `position: fixed; top: 8px` put it inside `[data-testid="stHeader"]` — Streamlit's
+ *   full-width strip across the top of every app. It is transparent, so every mock-up
+ *   looked right; it is also at a z-index no stylesheet can outrank, so it took every
+ *   click aimed at the controls underneath. The bar was on screen and completely dead.
+ * * In flow and sticky it was clickable, but the picker inside it did not render on the
+ *   landing screen — the one screen where a new user has to pick a model before there is
+ *   any conversation to pick one for.
+ * * A fixed row below the input worked, and cost a band of its own: the bar padded
+ *   itself by `--strip-h` so the row could sit inside its paint, a little over 4rem of
+ *   the window given to one control. With the trash gone there was one control left, and
+ *   one control does not need a row.
+ *
+ * So it is `fixed`, at a position app.js measures from Streamlit's own send button —
+ * `--pick-right` and `--pick-bottom` — which keeps it beside that button at every width
+ * without this file having to know how wide the box is. The fallbacks are where that
+ * lands at the widths the harness renders, for the frame before app.js has measured.
+ *
+ * `z-index` above Streamlit's own chrome, because the pinned bottom container paints
+ * over anything that merely beats the page content: at 1000 the bar painted straight
+ * over this and the harness reported the picker unreachable at every width. */
 .st-key-composer-strip {
     position: fixed;
-    /* Lifted off the window edge with `bottom`, not with padding: this element is
-     * a direct child of the main vertical block, and the
-     * `[data-testid="stVerticalBlock"] > div` reset above it is the more specific
-     * selector, so an `!important` padding here computes to 0. app.js measures the
-     * band this occupies from the bottom of the window, so the offset is part of
-     * what the bar reserves and cannot become an overlap.
-     *
-     * A whole 1rem of it. At 0.4rem the row sat flush against the bottom edge of
-     * the window, which reads exactly like something being cut off. This is the
-     * clearance Streamlit's own bar had before any of this moved. */
-    bottom: 1rem;
-    left: 50%;
-    transform: translateX(-50%);
-    /* Above Streamlit's own chrome, which is where `[data-testid="stHeader"]`
-     * lives at 999990 and where the pinned bottom bar plausibly lives too. A
-     * z-index that merely beats the page content is not enough: at 1000 the bar
-     * painted straight over these controls and the harness reported the picker
-     * unreachable at every width — the same failure as the old top bar, one end
-     * of the page down. Safe to outrank, because the strip only ever covers the
-     * band the bar reserves for it below the input. */
+    /* The fallbacks are computed, not guessed, because a flat number cannot be right at
+     * two widths: the box is centred and `--input-max` is `min(780px, 88vw)`, so its
+     * right edge is `(100vw - --input-max) / 2` from the window's. Add the send button
+     * and the gap beside it and this lands on the measured value exactly — 382px at
+     * 1440, 82px at 500. A flat 60px was 322px wrong at 1440, and the harness duly
+     * reported the picker outside the box and over the send button in the one state
+     * where the fallback is what renders: the first frame, before app.js has measured
+     * anything. That is a frame the reader sees. */
+    right: var(--pick-right, calc((100vw - var(--input-max)) / 2 + 52px));
+    bottom: var(--pick-bottom, 43px);
     z-index: 999995;
-    width: var(--input-max) !important;
-    max-width: 100% !important;
-    /* Centred on the INPUT, not on the window, and those stopped being the same
-     * thing the day the sidebar could open: Streamlit moves its bottom bar to the
-     * right of an expanded panel, and this row — pinned to the viewport at `left:
-     * 50%` — stayed where it was. The controls under the input drifted half a
-     * sidebar to the left of the input they belong to.
-     *
-     * app.js measures the offset between the bar's centre and the window's and
-     * publishes it. With no sidebar open, and in `tools/render_check.py` where
-     * app.js does not run at all, it is 0 and this rule does nothing — which is why
-     * it is written as a margin on top of the existing centring rather than as a
-     * different way of centring. */
-    margin-left: var(--bar-shift, 0px);
+    width: auto !important;
+    max-width: none !important;
 }
 
-/* One line: Clear, then the model name hard right — the corner every other assistant puts it in, and the corner the
- * send button is already in, so the two controls that decide "what happens when I
- * press this" line up.
- *
- * A row rather than `st.columns`, whose children have no intrinsic width — that is
- * how the picker managed to be in the DOM and invisible on screen, twice.
- *
- * Both the keyed element and a vertical block inside it, because which of the two
- * `st.container(key=…)` produces is a Streamlit implementation detail: the class
- * can land on the vertical block itself or on a wrapper around one, and it has
- * changed between versions. Styling only the descendant left the controls stacked
- * in a column in the real app while every render in the harness had them in a row —
- * the shape the replica happened to model was the shape that worked. `display:
- * flex` is set here too, so the rule works on a wrapper that is a plain block
- * rather than a flex container. */
+/* Both the keyed element and a vertical block inside it, because which of the two
+ * `st.container(key=…)` produces is a Streamlit implementation detail: the class can
+ * land on the vertical block itself or on a wrapper around one, and it has changed
+ * between versions. Styling only the descendant left the control stacked in a column in
+ * the real app while every render in the harness had it in a row. */
 .st-key-composer-strip,
 .st-key-composer-strip > [data-testid="stVerticalBlock"] {
     display: flex !important;
     flex-direction: row !important;
-    flex-wrap: wrap !important;
     align-items: center !important;
     justify-content: flex-end !important;
     gap: 0.4rem !important;
 }
 
-/* Every wrapper Streamlit puts between the row and a button, under either name it
+/* Every wrapper Streamlit puts between the row and the control, under either name it
  * has used for them, so nothing in the chain stretches to the full width. */
 .st-key-composer-strip > [data-testid="stVerticalBlock"] > div,
 .st-key-composer-strip .element-container,
@@ -441,19 +419,19 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 
 /* Model picker. A popover trigger, i.e. a button, so it would be sized by its own
  * label — which is exactly the problem. Every model has a different-length name, so
- * picking one resized this button, which reflowed the right-aligned row it sits in
- * and moved the panel anchored to it. That is the jitter: not an animation, a layout
- * that depended on the length of the current selection.
+ * picking one resized this button, which reflowed the row it sits in and moved the
+ * panel anchored to it. That is the jitter: not an animation, a layout that depended on
+ * the length of the current selection.
  *
- * So the width is fixed, and set from the longest name the picker can offer rather
- * than from the one showing: independent of the selection, which is what kills the
- * jitter, but no wider than it has to be. `app.py` publishes that length in
- * `--picker-chars`, because only it knows what the provider actually served — the
- * lineup is discovered at runtime and differs per deployment.
+ * So the width is fixed, and set from the longest name the picker can offer rather than
+ * from the one showing: independent of the selection, which is what kills the jitter,
+ * but no wider than it has to be. `app.py` publishes that length in `--picker-chars`,
+ * because only it knows what the provider actually served — the lineup is discovered at
+ * runtime and differs per deployment.
  *
  * It was a flat 15rem, which was 240px for a name that needed 136, and read as a wide
- * empty box with a word at one end of it. That is still the ceiling: a name long
- * enough to pass it ellipses rather than pushing the row off the corner.
+ * empty box with a word at one end of it. That is still the ceiling: a name long enough
+ * to pass it ellipses rather than pushing the control off the corner.
  *
  * `ch` is the width of a "0", so this runs a little generous for lowercase ids — about
  * 10% — which is the safe direction: slack looks like padding, a shortfall truncates
@@ -462,10 +440,9 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
  *
  * The 0.78 is the label's own font size in rem, below. `ch` resolves against the
  * element it is written on, and that is this button, which Streamlit leaves at 16px
- * while the name inside it renders at 0.78rem — so an unscaled `ch` measured
- * characters a third larger than the ones on screen, and the width never came down off
- * the 15rem ceiling at all. Keep the two in step; the harness fails if the name stops
- * fitting. */
+ * while the name inside it renders at 0.78rem — so an unscaled `ch` measured characters
+ * a third larger than the ones on screen, and the width never came down off the 15rem
+ * ceiling at all. Keep the two in step; the harness fails if the name stops fitting. */
 .st-key-composer-strip [data-testid="stPopover"] button {
     width: min(calc(var(--picker-chars, 21) * 0.78ch + var(--picker-chrome)), 15rem)
         !important;
@@ -479,6 +456,28 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* Inside the box now, so it is painted as part of it: quieter than the bordered pill it
+ * was when it sat on the page below the input, and it no longer needs a backdrop blur
+ * to separate it from the conversation behind it. */
+.st-key-composer-strip button {
+    background: var(--control-bg) !important;
+    border: 1px solid transparent !important;
+    border-radius: var(--radius-sm) !important;
+    color: var(--text-secondary) !important;
+    padding: 4px 8px !important;
+    min-height: 30px !important;
+    transition: background var(--transition), border-color var(--transition),
+                color var(--transition);
+}
+
+.st-key-composer-strip button:hover {
+    background: var(--control-bg-hover) !important;
+    border-color: var(--brand-line) !important;
+    color: var(--brand-text) !important;
+}
+
+.st-key-composer-strip button p { font-size: 0.78rem !important; margin: 0 !important; }
 
 /* ===== THE POPOVER PANEL =====
  *
@@ -1242,13 +1241,20 @@ body[data-sage-dropping] .stChatInput > div {
 
 /* ===== BOTTOM BAR + DISCLAIMER ===== */
 
-/* The bar paints the app background across this whole band, and the strip of
- * controls is fixed inside the part of it reserved here. Reserving it on the bar
- * — rather than giving the strip a background of its own — is what keeps the two
- * looking like one bar without this stylesheet having to guess what colour
- * Streamlit is painting the page. */
+/* The bar used to pad itself by a whole band — `--strip-h`, a little over 4rem — so the
+ * row of controls fixed below the input had somewhere to sit inside the bar's own paint.
+ * There is no row any more: the trash is gone and the model picker sits inside the box.
+ * So the padding goes too, and that band is vertical space the page gets back — which
+ * is what "the textbox can be placed at somewhere slightly lower to save more vertical
+ * spacing" asked for. */
 [data-testid="stBottomBlockContainer"] {
-    padding-bottom: calc(var(--strip-h) + 0.35rem) !important;
+    /* 1rem, not the 0.35rem this first became. At 0.35rem the box sat 6px off the
+     * bottom of the window, which is the look the deleted strip's own comment warned
+     * about: "at 0.4rem the row sat flush against the bottom edge of the window, which
+     * reads exactly like something being cut off". This is the clearance Streamlit's
+     * own bar had before any of this moved, and the saving is still most of the band —
+     * a little over 4rem down to one. */
+    padding-bottom: 1rem !important;
 }
 
 /* ===== FILE UPLOADER (visually hidden, still reachable) ===== */
@@ -2108,12 +2114,9 @@ body[data-sage-dropping] .stChatInput > div {
     .user-bubble { max-width: 88%; }
     /* Room for three controls on one line at 360px, model name included. */
     .st-key-composer-strip [data-testid="stPopover"] button { max-width: 9.5rem; }
-    /* The controls take more room at this width, so the strip and the bar above it
-     * are both taller. app.js measures both; these are the fallbacks it starts
-     * from, and they only have to hold for the first frame — but they still have
-     * to hold, and to agree with each other, so --bar-h covers this --strip-h
-     * plus the input and the bar's padding. */
-    :root { --strip-h: 6rem; --bar-h: 20rem; }
+    /* The composer is taller at this width. app.js measures it; this is the fallback it
+     * starts from, and it only has to hold for the first frame. */
+    :root { --bar-h: 20rem; }
     .welcome { margin-top: 4vh; }
 }
 

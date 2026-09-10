@@ -212,22 +212,6 @@ class TestSwitchingChats:
         assert stub.session_state.uploader_key == before[0] + 1
         assert stub.session_state.clear_token == before[1] + 1
 
-    def test_clearing_empties_the_open_chat_without_opening_another(self, monkeypatch):
-        stub, _ = run_app(
-            monkeypatch,
-            session={"messages": [{"role": "user", "text": "q", "attachments": []}]},
-        )
-        state = _state()
-        opened = stub.session_state.chat_id
-        with pytest.raises(stub_streamlit.Rerun):
-            state.clear_conversation()
-        assert stub.session_state.messages == []
-        assert stub.session_state.chat_id == opened
-        assert len(stub.session_state.chats) == 1
-        # And in the record too, or the sidebar goes on naming an emptied chat after
-        # the question it used to start with.
-        assert stub.session_state.chats[0]["messages"] == []
-
 
 class TestTheSidebar:
     def test_it_is_drawn_before_the_body(self, monkeypatch):
