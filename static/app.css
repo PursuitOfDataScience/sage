@@ -673,17 +673,18 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     min-width: 0 !important;
 }
 
-/* The row under the cursor, whichever of its two controls the cursor is actually over.
- * Suppressed while an answer arrives, because every row is inert then and a row that
- * cannot be clicked must not light up as though it could. Gated on the attribute app.js
- * already puts on <body> for the duration rather than on `:has(button:not(:disabled))`
- * — which says it more directly and is 2023-vintage CSS this app has no reason to
- * require. */
-body:not([data-sage-generating]) [class*="st-key-chat-row-"]:hover {
+/* The row under the cursor, whichever of its two controls the cursor is actually over —
+ * lighting only the one you happen to be over makes a row look broken.
+ *
+ * It used to be suppressed while an answer was arriving, because the rows went inert
+ * for the length of a turn and a row that cannot be clicked must not look like it can.
+ * They are live throughout a turn now (`sidebar.leave` ends the turn and keeps what
+ * arrived), so there is nothing left to suppress and no `:not(:disabled)` to write. */
+[class*="st-key-chat-row-"]:hover {
     background: var(--control-bg-hover);
 }
 
-[class*="st-key-chat-row-"]:hover [class*="st-key-chat-name-"] button:not(:disabled) {
+[class*="st-key-chat-row-"]:hover [class*="st-key-chat-name-"] button {
     color: var(--text-primary) !important;
 }
 
@@ -718,7 +719,7 @@ body:not([data-sage-generating]) [class*="st-key-chat-row-"]:hover {
 
 [class*="st-key-chat-row-"]:hover [class*="st-key-chat-act-"] button { opacity: 1; }
 
-[class*="st-key-chat-act-"] button:not(:disabled):hover {
+[class*="st-key-chat-act-"] button:hover {
     color: var(--danger) !important;
     background: var(--danger-bg) !important;
 }
@@ -732,15 +733,9 @@ body:not([data-sage-generating]) [class*="st-key-chat-row-"]:hover {
     margin-bottom: 0.75rem;
 }
 
-.st-key-chat-list .st-key-new-chat button:not(:disabled):hover {
+.st-key-chat-list .st-key-new-chat button:hover {
     background: var(--control-bg-hover) !important;
     border-color: var(--brand-line) !important;
-}
-
-.st-key-chat-list button:disabled,
-.st-key-chat-list button[disabled] {
-    color: var(--text-muted) !important;
-    opacity: 1 !important;
 }
 
 /* ===== THE THEME TOGGLE =====

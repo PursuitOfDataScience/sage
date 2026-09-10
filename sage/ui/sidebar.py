@@ -29,34 +29,48 @@ from .state import (
     active_messages,
     chat_title,
     delete_chat,
+    finish_stopped_turn,
     new_chat,
     open_chat,
 )
 from .view import View
 
 
+def leave(view: View) -> None:
+    """Keep the half-written answer, then let the caller walk away from it.
+
+    Everything in this panel works while an answer is streaming, and this is what makes
+    that safe. A click on any Streamlit widget aborts the run that is streaming — that
+    is the mechanism the stop button is built on — so there is no version of this where
+    the turn survives the click. The choice is only between refusing the click and
+    ending the turn well, and refusing it was wrong: "you can't create a new chat when
+    the current session is generating the answer, which is problematic", and the same
+    for switching.
+
+    So a click ends the turn the way the stop button does. `finish_stopped_turn` commits
+    whatever text had arrived to the conversation being left, marked `stopped`, so the
+    transcript shows a half answer with a note saying so rather than a question with
+    nothing under it. It ignores a call with no turn running, so this is a no-op the
+    rest of the time.
+
+    Called BEFORE the switch, because it appends to `messages` — the live list — and
+    the switch is what stashes that list into the record it belongs to.
+    """
+    finish_stopped_turn(view.model.key, view.public_names)
+
+
 def render(view: View) -> None:
     """Draw the panel: a way out of this conversation, then the ones there are.
 
-    Every control here is inert while an answer is streaming, and that is the whole
-    reason this is safe to add. A click on any Streamlit widget aborts the run that is
-    streaming — that is the mechanism the stop button is built on — so a live chat
-    switch would end the turn halfway, throw the half-written answer away, and leave
-    the reader in a different conversation wondering where their answer went. `disabled`
-    is the only thing that stops a click reaching the server, so it is what is used
-    here rather than a check once the click has arrived. The queued-prompt path in
-    `static/app.js` is what a reader who wants to get on with something else uses
-    instead, and it does not touch the server at all.
-
-    The open row is NOT disabled, though it was. Streamlit renders a disabled button
-    greyed and with a not-allowed cursor, which put the panel's one emphasised row
-    behind a forbidden sign — and clicking the conversation you are already in costs a
-    rerun and changes nothing, so there was never anything to protect. Which row is
-    open is said by the stylesheet instead, off the row's container key.
+    Nothing here is `disabled`. Two states used to be: every row and the New chat button
+    while an answer was arriving, and the open row always. Both were reported as bugs —
+    a greyed row behind a not-allowed cursor ("grey and a weird forbidden sign"), and a
+    panel that could not be used at all for the length of a turn. Which row is open is
+    said by the stylesheet instead, off the row's container key, and a turn in flight is
+    handled by `leave` rather than by refusing the click.
     """
     copy = view.copy
     chats = list(st.session_state.chats)
-    busy = bool(st.session_state.processing)
 
     with st.sidebar, st.container(key="chat-list"):
         # Always drawn. It was drawn only when the open conversation had messages, on
@@ -80,8 +94,8 @@ def render(view: View) -> None:
             f"＋  {copy.new_chat}",
             key="new-chat",
             use_container_width=True,
-            disabled=busy,
         ):
+            leave(view)
             new_chat()
 
         # What the list is, said once. It replaced an ALL-CAPS "CHATS" over a list of
@@ -95,10 +109,10 @@ def render(view: View) -> None:
         # Newest first: the list grows downward as a session goes on, and the chat a
         # reader is most likely to want back is the one they just left.
         for record in reversed(chats):
-            _row(record["id"], copy, busy=busy)
+            _row(view, record["id"], copy)
 
 
-def _row(chat_id: int, copy, *, busy: bool) -> None:
+def _row(view: View, chat_id: int, copy) -> None:
     """One conversation: its name, and the ✕ that removes it.
 
     The ✕ removes it on the first click. It used to arm the row and want a second click
@@ -113,9 +127,9 @@ def _row(chat_id: int, copy, *, busy: bool) -> None:
     layout depends on rather than anything about the buttons themselves.
 
     The row's own container key carries which conversation is open (`chat-row-open-…`
-    against `chat-row-past-…`), because that is the only thing a stylesheet can read. It
-    cannot read `disabled` instead: every row is disabled while an answer arrives, so a
-    rule keyed on that emphasised the whole list at once.
+    against `chat-row-past-…`), because that is the only thing a stylesheet can read —
+    and because nothing in this panel is `disabled` any more, there is nothing else it
+    could have keyed on.
     """
     open_now = chat_id == st.session_state.chat_id
 
@@ -124,13 +138,18 @@ def _row(chat_id: int, copy, *, busy: bool) -> None:
             chat_title(active_messages(chat_id), copy.untitled_chat),
             key=f"chat-name-{chat_id}",
             use_container_width=True,
-            disabled=busy,
         ):
+            leave(view)
             open_chat(chat_id)
         # No `help=` on the ✕ either, and one reason more than the button above:
         # Streamlit's tooltip is a black panel that opens beside the cursor, and on a
         # 240px row it covered the row above. `static/app.js` gives it a `title` and an
         # `aria-label` instead — a native tooltip is small, and unlike `help=` it also
         # gives the control an accessible name, which a lone ✕ badly needs.
-        if st.button("✕", key=f"chat-act-{chat_id}", disabled=busy):
+        if st.button("✕", key=f"chat-act-{chat_id}"):
+            # The turn ends here too, and it has to: the click has already aborted the
+            # run that was streaming, so the only question is whether what arrived is
+            # kept. It is — in the conversation it belongs to, which may well not be
+            # the one being deleted.
+            leave(view)
             delete_chat(chat_id)

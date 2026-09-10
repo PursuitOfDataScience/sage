@@ -157,6 +157,15 @@ identical, token for token, and **a token added to one must be added to the othe
 failure mode if they drift breaks nothing and fails no bound: the reader picks dark and
 gets most of it, with one value still light on a near-black page.
 
+**A click on any widget aborts a streaming turn, so a control that must work during one
+has two honest options and only two:** be client-side and never reach the server (the
+theme toggle, the queued question), or end the turn well. The sidebar takes the second —
+`sidebar.leave` commits whatever text had arrived to the conversation being left, marked
+`stopped`, before the switch stashes that list. Refusing the click was the third option
+and it was wrong: the panel was `disabled` for the length of every turn, and a reader
+could not start or open a chat exactly when they wanted to. **`leave` must be called
+before the state change**, because `_leave_conversation` empties `partial`.
+
 The toggle itself is entirely client-side (`static/app.js`): it sets that attribute,
 wraps `window.matchMedia` so Streamlit's own theme resolves to the choice, and asks
 Streamlit to re-resolve by firing `afterprint`, which is the event it already listens
