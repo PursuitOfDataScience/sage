@@ -783,16 +783,29 @@
         dark: 'Theme: dark — follow your browser again'
     };
 
+    // The choice, and where it lives — which is two places for one reason.
+    //
+    // `view.__sageTheme` is the authority for this visit. It has to be: localStorage is
+    // refusable (private mode, a browser configured against it, an embedded frame) and
+    // when it is refused the READ throws too, not only the write. Keyed off storage
+    // alone, every rerun read `null`, decided the choice was `system`, and painted the
+    // icon accordingly — so the button lied about its own state and the theme came
+    // undone a moment after being set. Measured in a context with storage denied:
+    // `attr: light`, `painted: system`.
+    //
+    // localStorage is what carries the choice to the NEXT visit, and nothing more. If
+    // it is unavailable the toggle still works; it just forgets between visits.
     function themeChoice() {
+        var held = view.__sageTheme;
+        if (THEME_CYCLE.indexOf(held) !== -1) return held;
         var stored = null;
-        // A browser with storage refused (private mode, third-party frame) throws on
-        // the read, not just on the write.
         try { stored = view.localStorage.getItem(THEME_KEY); } catch (err) { stored = null; }
         return THEME_CYCLE.indexOf(stored) === -1 ? 'system' : stored;
     }
 
     function storeTheme(choice) {
-        try { view.localStorage.setItem(THEME_KEY, choice); } catch (err) { /* not stored */ }
+        view.__sageTheme = choice;
+        try { view.localStorage.setItem(THEME_KEY, choice); } catch (err) { /* this visit only */ }
     }
 
     // The browser's own answer, never the wrapped one below.
@@ -932,8 +945,7 @@
     // Where the toggle goes, and this is the part of it with a history.
     //
     // Top of the page, which in this app is Streamlit's own 60px header band — and
-    // putting anything there has gone wrong twice, in two different ways, both of them
-    // measured rather than reasoned about:
+    // putting anything there has gone wrong three times, all of them measured:
     //
     // * `[data-testid="stHeader"]` is transparent and sits at z-index 999990, so an
     //   element merely placed in that band is painted over and takes no clicks. That is
@@ -943,55 +955,100 @@
     //   child of the header at `z-index: auto`.
     // * Appending INSIDE `stToolbar` does take clicks. It is still the wrong home:
     //   Streamlit removes the whole toolbar from the document when the sidebar is
-    //   expanded, so the toggle disappeared every time the panel was opened. Measured
-    //   at 1280 and 768 — `stToolbar` is null in both once the panel is out.
+    //   expanded, so the toggle disappeared every time the panel was opened.
+    // * Placing it from a measured offset past Streamlit's sidebar arrow — on the LEFT —
+    //   was the last mistake, and the reader reported it as "very unstable". Closing the
+    //   panel puts that arrow back while the panel is still sliding out, so the
+    //   measurement lands at x≈300 instead of x≈18, and nothing corrects it afterwards
+    //   because `sync()` stops running on a page with nothing left to mutate. Measured:
+    //   `--toggle-left` went 56px → 356px on the first open-and-close and stayed there.
     //
-    // So the button hangs off <body>, which cannot be rebuilt out from under it, and
-    // is pinned by the stylesheet at a z-index that outranks the chrome — exactly what
-    // the strip of controls under the input already does at the other end of the page.
+    // It is in the top-RIGHT corner now, beside the Share button, which is where the
+    // reader asked for it — and that corner is also the stable one. Streamlit's header
+    // shrinks from the left when the panel opens (measured: 1280 wide becomes
+    // `[300, 0, 980, 60]`), so its right edge does not move and neither does anything
+    // anchored to it. Nothing on the right animates, which is the whole reason the left
+    // anchor could not be trusted.
     //
-    // Horizontally it stays out of the right-hand corner, and that is not aesthetic:
-    // `tools/render_check.py` models a 220px opaque host control cluster there at
-    // z-index 999991, which is what Community Cloud paints over an app's own header.
-    // A toggle in that corner would be under it on the deployment and above it only
-    // here. `--toggle-left` is measured instead — just past Streamlit's own sidebar
-    // arrow while that exists, and at the page edge once the panel is open and it does
-    // not.
-    function publishToggleLeft() {
-        var arrow = doc.querySelector('[data-testid="stExpandSidebarButton"]');
-        // No arrow to clear — Streamlit removes it while the panel is open, and takes
-        // the whole toolbar with it. The last measured offset is kept rather than
-        // recomputed: the alternative is a button that slides 40px sideways every time
-        // the panel is opened or closed, which is movement a reader notices and gains
-        // nothing. Until one has ever been measured, the stylesheet's own fallback
-        // stands.
-        if (!arrow) return;
-        var rect = arrow.getBoundingClientRect();
-        // Mid-rebuild, so there is nothing to measure yet. Same answer.
-        if (rect.width <= 0) return;
-        publish('--toggle-left', Math.round(rect.right + 10));
+    // So it hangs off <body>, which cannot be rebuilt out from under it, and app.css
+    // pins it at a z-index that outranks the chrome — exactly what the strip of controls
+    // under the input already does at the other end of the page.
+    //
+    // REBUILT ONCE PER RUN of this script, and that is the whole of the "the toggle
+    // doesn't work at all" bug. Streamlit destroys and rebuilds the iframe this file is
+    // served in on every rerun. A click listener added by the first copy is a closure
+    // belonging to that copy's realm, and once the realm is gone the listener never
+    // fires again — the button is still there, still on top, still hit-tests as itself,
+    // and does nothing. It worked for exactly one click, before the first rerun.
+    // Keeping the node and adding a fresh listener has the same problem, because the
+    // listener is the part that goes stale, so the node is replaced.
+    //
+    // `built` is a plain closure variable, so it is false again in each new copy of this
+    // script and true for the rest of that copy's syncs: one rebuild per rerun rather
+    // than one per mutation frame.
+    var built = false;
+
+    // How far from the right edge, so the button lands NEXT TO the host's own controls
+    // rather than on top of them. `Share` is a host toolbar item — Community Cloud sends
+    // it over the host-communication channel and Streamlit renders it into
+    // `stToolbarActions` — so it does not exist on a local run, and its width is not
+    // something this repo can know. It is measured instead: sit just left of the
+    // leftmost thing in the header's right-hand group, or in the corner when there is
+    // nothing there.
+    //
+    // The value only ever grows. Streamlit rebuilds the header as the panel opens and
+    // closes, and for a frame or two those controls are absent — read at face value that
+    // would snap the button into the corner and back, which is the instability this
+    // placement exists to end. Once a Share button has been seen, the room reserved for
+    // it stays reserved.
+    var RIGHT_CONTROLS = [
+        '[data-testid="stToolbarActions"]',
+        '[data-testid="stAppDeployButton"]',
+        '[data-testid="stMainMenu"]'
+    ];
+    var TOGGLE_RIGHT_MIN = 16;
+
+    function publishToggleRight() {
+        var edge = 0;
+        RIGHT_CONTROLS.forEach(function (selector) {
+            doc.querySelectorAll(selector).forEach(function (node) {
+                var rect = node.getBoundingClientRect();
+                if (rect.width <= 0 || rect.height <= 0) return;
+                var room = Math.round(view.innerWidth - rect.left) + 8;
+                if (room > edge) edge = room;
+            });
+        });
+        var want = Math.max(TOGGLE_RIGHT_MIN, edge);
+        if (want < (view.__sageToggleRight || 0)) return;   // never creep leftward
+        view.__sageToggleRight = want;
+        publish('--toggle-right', want);
     }
 
     function addThemeToggle() {
-        var btn = doc.getElementById('theme-toggle');
-        if (!btn) {
-            btn = injected('button');
-            btn.id = 'theme-toggle';
-            btn.type = 'button';
-            btn.addEventListener('click', function (event) {
-                event.preventDefault();
-                event.stopPropagation();
-                var next = THEME_CYCLE[
-                    (THEME_CYCLE.indexOf(themeChoice()) + 1) % THEME_CYCLE.length
-                ];
-                storeTheme(next);
-                applyTheme(next);
-                paintToggle(btn, next);
-            });
+        publishToggleRight();
+        var existing = doc.getElementById('theme-toggle');
+        if (built && existing && existing.parentElement === doc.body) {
+            paintToggle(existing, themeChoice());
+            return;
         }
-        if (btn.parentElement !== doc.body) doc.body.appendChild(btn);
-        publishToggleLeft();
+        if (existing) existing.remove();
+
+        var btn = injected('button');
+        btn.id = 'theme-toggle';
+        btn.type = 'button';
+        btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            var next = THEME_CYCLE[
+                (THEME_CYCLE.indexOf(themeChoice()) + 1) % THEME_CYCLE.length
+            ];
+            storeTheme(next);
+            applyTheme(next);
+            paintToggle(btn, next);
+        });
         paintToggle(btn, themeChoice());
+        doc.body.appendChild(btn);
+        built = true;
     }
 
     /* --- the arrows that open and close the panel ------------------------ */
@@ -1034,18 +1091,12 @@
     // tooltip's wrapper. A `title` is a small native tooltip, and `aria-label` is the
     // accessible name a lone ✕ has no other way of getting.
     //
-    // Which of the two labels depends on whether the row's delete is armed, and that
-    // is read off the row's container key — the same thing the stylesheet reads.
     function labelChatActions() {
-        doc.querySelectorAll('[class*="st-key-chat-act-"]').forEach(function (slot) {
-            var row = slot.closest('[class*="st-key-chat-row-"]');
-            var armed = !!row && row.className.indexOf('st-key-chat-row-arm-') !== -1;
-            slot.querySelectorAll('button').forEach(function (btn) {
-                // "chat", not "conversation": the button beside it says New chat and
-                // the confirmation says Delete this chat, and an action that changes
-                // its noun halfway through a flow is one a reader has to re-learn.
-                label(btn, armed ? 'Keep this chat' : 'Delete this chat');
-            });
+        doc.querySelectorAll('[class*="st-key-chat-act-"] button').forEach(function (btn) {
+            // "chat", not "conversation": the button above the list says New chat, and
+            // an action that changes its noun halfway through is one a reader has to
+            // re-learn.
+            label(btn, 'Delete this chat');
         });
     }
 
@@ -1912,10 +1963,21 @@
             }
         }
 
+        // Re-registered on every run, not once per textarea. A listener added here is a
+        // closure belonging to this copy of the script, and Streamlit rebuilds the
+        // iframe it is served in on every rerun — after which the closure's realm is
+        // gone and the listener never fires again. That is not a theory: the theme
+        // toggle was built the "add it once" way and was dead from the first click,
+        // measured. It only escaped notice here because Streamlit usually rebuilds the
+        // chat input's DOM too, so the marker went with it and a fresh listener was
+        // added by luck. `__sageEnterOff` makes it deliberate — the same shape
+        // `addPromptHistory` and the drag, paste and selection handlers already use.
         var area = doc.querySelector('textarea[data-testid="stChatInputTextArea"]');
-        if (area && !area.dataset.sageBlocked) {
-            area.dataset.sageBlocked = 'true';
-            area.addEventListener('keydown', function (event) {
+        if (area) {
+            if (view.__sageEnterOff) {
+                try { view.__sageEnterOff(); } catch (err) { /* node gone */ }
+            }
+            var onEnter = function (event) {
                 if (event.key !== 'Enter' || event.shiftKey) return;
                 // The Enter that confirms an IME candidate belongs to the IME, and
                 // this used to swallow it: a reader composing Chinese, Japanese or
@@ -1926,7 +1988,11 @@
                 event.preventDefault();
                 event.stopImmediatePropagation();
                 queueDraft(area);
-            }, true);
+            };
+            area.addEventListener('keydown', onEnter, true);
+            view.__sageEnterOff = function () {
+                area.removeEventListener('keydown', onEnter, true);
+            };
         }
     }
 
@@ -2294,7 +2360,13 @@
 
     /* --- type to focus --------------------------------------------------- */
 
-    doc.addEventListener('keydown', function (event) {
+    // One listener, replaced each run rather than added each run. Registered without a
+    // teardown it piled up one per rerun — hundreds over a long session, all but the
+    // newest belonging to a destroyed realm and doing nothing.
+    if (view.__sageTypeOff) {
+        try { view.__sageTypeOff(); } catch (err) { /* previous realm */ }
+    }
+    var onType = function (event) {
         if (event.ctrlKey || event.altKey || event.metaKey) return;
         // A single printable character only: never swallow Tab, Escape, arrows,
         // function keys, or Space/Enter aimed at a control.
@@ -2308,7 +2380,11 @@
 
         var input = doc.querySelector('textarea[data-testid="stChatInputTextArea"]');
         if (input) input.focus();
-    });
+    };
+    doc.addEventListener('keydown', onType);
+    view.__sageTypeOff = function () {
+        doc.removeEventListener('keydown', onType);
+    };
 
     /* --- scheduling ------------------------------------------------------ */
 

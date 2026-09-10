@@ -126,10 +126,11 @@ class TestSwitchingChats:
         scroll past, and an empty chat is already what the button offers — so the
         button says so by being inert, and the function refuses the case as well."""
         stub, _ = run_app(monkeypatch)
-        # Not drawn at all, rather than drawn inert: a disabled `New chat` button
-        # directly above a row that also said "New chat" was two of the same words for
-        # two different things.
-        assert "new-chat" not in stub.button_labels
+        # Drawn and live, though. Hiding it on an empty conversation meant pressing it
+        # made it disappear — the chat it opens has no messages by definition — which
+        # is a control that vanishes as you use it.
+        assert "New chat" in stub.button_labels["new-chat"]
+        assert stub.disabled["new-chat"] is False
         state = _state()
         opened = stub.session_state.chat_id
         state.new_chat()            # no Rerun raised
@@ -238,13 +239,13 @@ class TestTheSidebar:
         assert "sidebar" in kinds
         assert kinds.index("sidebar") < kinds.index("chat_input")
 
-    def test_an_empty_session_offers_no_way_out_of_nothing(self, monkeypatch):
-        """The panel a reader opens on the landing screen: the label, and one row for
-        the conversation they have not started yet. No `New chat`, because they are on
-        one, and nothing greyed out."""
+    def test_an_empty_session_names_the_conversation_not_yet_started(self, monkeypatch):
+        """The panel a reader opens on the landing screen: New chat, the label, and one
+        row for the conversation they have not asked anything in yet. Nothing greyed
+        out, and the row does not share the button's words."""
         stub, _ = run_app(monkeypatch)
         chat_id = stub.session_state.chat_id
-        assert "new-chat" not in stub.button_labels
+        assert stub.disabled["new-chat"] is False
         assert stub.button_labels[f"chat-name-{chat_id}"] == "Nothing asked yet"
         assert stub.disabled[f"chat-name-{chat_id}"] is False
 
@@ -354,46 +355,29 @@ class TestTheSidebar:
         ]
         assert order == ["chat-name-2", "chat-name-1", "chat-name-0"]
 
-    def test_the_two_slots_keep_their_keys_when_a_delete_is_armed(self, monkeypatch):
-        """The stylesheet sizes the row off these two keys — name flexes, action does
-        not — so arming a delete must not change which slot is which, or the row would
-        move under the cursor reaching for it."""
+    def test_both_slots_are_keyed_for_the_stylesheet(self, monkeypatch):
+        """The row's layout hangs off these two keys — the name flexes, the ✕ does not —
+        so they are a contract between this module and two selectors in app.css, and
+        nothing else would notice one being renamed."""
         stub, _ = run_app(
             monkeypatch,
-            session={
-                "messages": [{"role": "user", "text": "q", "attachments": []}],
-                "pending_delete": 0,
-            },
+            session={"messages": [{"role": "user", "text": "q", "attachments": []}]},
         )
-        assert stub.session_state.chat_id == 0
-        assert stub.button_labels["chat-name-0"] == "Delete this chat"
+        assert stub.button_labels["chat-name-0"] == "q"
         assert stub.button_labels["chat-act-0"] == "✕"
         rows = [
             key for name, key in stub.events
             if name == "container" and isinstance(key, str)
             and key.startswith("chat-row-")
         ]
-        assert rows == ["chat-row-arm-0"]
+        assert rows == ["chat-row-open-0"]
 
 
 class TestDeletingChats:
-    def test_the_first_click_only_arms_it(self, monkeypatch):
-        """Nothing anywhere else has a copy of a conversation, so one click cannot be
-        what removes it.
-
-        And it reruns. The run that delivered the click is the one drawing the panel,
-        so the row was already rendered in its old state by the time this was reached —
-        without a fresh run the ✕ set a flag and changed nothing on screen.
-        """
-        stub, _ = run_app(monkeypatch)
-        state = _state()
-        before = list(stub.session_state.chats)
-        with pytest.raises(stub_streamlit.Rerun):
-            state.arm_delete(0)
-        assert stub.session_state.pending_delete == 0
-        assert stub.session_state.chats == before
-
-    def test_the_second_click_removes_it(self, monkeypatch):
+    def test_one_click_removes_it(self, monkeypatch):
+        """One click, not two. Arming the row and waiting for a second click read as a
+        broken button — "the chat doesn't go away but you need to click it again" — so
+        the ✕ does what it says on the first press."""
         stub, _ = run_app(
             monkeypatch,
             session={
@@ -401,14 +385,12 @@ class TestDeletingChats:
                           {"id": 1, "messages": []}],
                 "chat_id": 1,
                 "next_chat_id": 2,
-                "pending_delete": 0,
             },
         )
         state = _state()
         with pytest.raises(stub_streamlit.Rerun):
             state.delete_chat(0)
         assert [record["id"] for record in stub.session_state.chats] == [1]
-        assert stub.session_state.pending_delete is None
         # The reader was not in it, so what is on their screen is untouched.
         assert stub.session_state.chat_id == 1
 
@@ -473,18 +455,3 @@ class TestDeletingChats:
         state = _state()
         state.delete_chat(999)          # no Rerun raised
         assert len(stub.session_state.chats) == 1
-
-    def test_leaving_a_conversation_disarms_the_confirmation(self, monkeypatch):
-        """A ✕ pressed once and then left alone is one stray click from deleting a
-        conversation the reader never meant to name."""
-        stub, _ = run_app(
-            monkeypatch,
-            session={
-                "messages": [{"role": "user", "text": "q", "attachments": []}],
-                "pending_delete": 0,
-            },
-        )
-        state = _state()
-        with pytest.raises(stub_streamlit.Rerun):
-            state.new_chat()
-        assert stub.session_state.pending_delete is None
