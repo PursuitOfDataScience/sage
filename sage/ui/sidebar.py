@@ -27,7 +27,6 @@ import streamlit as st
 
 from .state import (
     active_messages,
-    arm_delete,
     chat_title,
     delete_chat,
     new_chat,
@@ -58,25 +57,26 @@ def render(view: View) -> None:
     copy = view.copy
     chats = list(st.session_state.chats)
     busy = bool(st.session_state.processing)
-    armed = st.session_state.pending_delete
 
     with st.sidebar, st.container(key="chat-list"):
-        # Rendered only when there is a conversation to leave. On an empty one it had
-        # nothing to do, and a panel opening on a disabled `New chat` button directly
-        # above a row that also read "New chat" was the same two words for two
-        # different things — reported as "two awkward new chats".
+        # Always drawn. It was drawn only when the open conversation had messages, on
+        # the reasoning that an empty one has nothing to leave — and the effect was that
+        # pressing it made it disappear, because the chat it opens is empty by
+        # definition. Reported as "after adding two new chats, that adding new chat
+        # button is gone. also buggy", and it was.
         #
-        # One `if`, and the short circuit is the point: with no messages `st.button` is
-        # never called, so the widget is not drawn at all rather than drawn inert.
+        # Pressing it on an empty conversation does nothing at all (`state.new_chat`
+        # returns on that case, so ten presses cannot leave ten identical rows). That is
+        # a quieter failure than a control that vanishes as you use it, and the two
+        # labels no longer collide: the button says New chat and an unasked conversation
+        # says something else entirely.
         #
-        # No `help=` on it either. The label already says what the button does, so a
-        # tooltip is a black box following the cursor around — the same reason the
-        # starter cards do without one. It is also not free: Streamlit renders a `help`
-        # tooltip by wrapping the control, and the wrapper carries a second,
-        # zero-sized copy of the button — two elements answering to
-        # `.st-key-chat-list button`, one of them invisible and unclickable, for a
-        # sentence nobody needed.
-        if st.session_state.messages and st.button(
+        # No `help=`: the label already says what the button does, so a tooltip is a
+        # black box following the cursor around — the same reason the starter cards do
+        # without one. It is also not free, because Streamlit renders a `help` tooltip by
+        # wrapping the control and the wrapper carries a second, zero-sized copy of the
+        # button.
+        if st.button(
             f"＋  {copy.new_chat}",
             key="new-chat",
             use_container_width=True,
@@ -95,41 +95,31 @@ def render(view: View) -> None:
         # Newest first: the list grows downward as a session goes on, and the chat a
         # reader is most likely to want back is the one they just left.
         for record in reversed(chats):
-            _row(record["id"], copy, busy=busy, armed=armed == record["id"])
+            _row(record["id"], copy, busy=busy)
 
 
-def _row(chat_id: int, copy, *, busy: bool, armed: bool) -> None:
-    """One conversation: its name and the ✕ — or, once armed, the confirmation.
+def _row(chat_id: int, copy, *, busy: bool) -> None:
+    """One conversation: its name, and the ✕ that removes it.
 
-    Two widget keys per row, and they are the same two whichever state the row is in
-    (`chat-name-…` and `chat-act-…`). That is deliberate: the stylesheet sizes the row
-    off those keys, so arming a delete must not change which slot is which, or the row
-    would move under the cursor reaching for it. Buttons hold no state, so re-using a
-    key for a different label across states is free.
+    The ✕ removes it on the first click. It used to arm the row and want a second click
+    to confirm, on the reasoning that a conversation exists in this session's memory and
+    nowhere else — and what that read as was a broken button: "when clicking x to delete
+    a chat, the chat doesn't go away but you need to click it again. which is buggy". A
+    control that does nothing the first time you press it is worse than one that does
+    what it says, so it does what it says.
 
-    The row's own container key carries the state — `chat-row-open-…`,
-    `chat-row-past-…`, `chat-row-arm-…` — because that is the only thing a stylesheet
-    can read. It cannot read `disabled` instead: every row is disabled while an answer
-    arrives, so a rule keyed on that emphasised the whole list at once.
+    Two widget keys per row, `chat-name-…` and `chat-act-…`. The stylesheet sizes the
+    row off those keys — the name flexes, the ✕ does not — so they are what the row's
+    layout depends on rather than anything about the buttons themselves.
+
+    The row's own container key carries which conversation is open (`chat-row-open-…`
+    against `chat-row-past-…`), because that is the only thing a stylesheet can read. It
+    cannot read `disabled` instead: every row is disabled while an answer arrives, so a
+    rule keyed on that emphasised the whole list at once.
     """
     open_now = chat_id == st.session_state.chat_id
-    state = "arm" if armed else ("open" if open_now else "past")
 
-    with st.container(key=f"chat-row-{state}-{chat_id}"):
-        if armed:
-            # Active voice, and it says what the click does. A ✓ would be one glyph
-            # asking the reader to guess which of two irreversible readings it has.
-            if st.button(
-                copy.delete_chat,
-                key=f"chat-name-{chat_id}",
-                use_container_width=True,
-                disabled=busy,
-            ):
-                delete_chat(chat_id)
-            if st.button("✕", key=f"chat-act-{chat_id}", disabled=busy):
-                arm_delete(None)
-            return
-
+    with st.container(key=f"chat-row-{'open' if open_now else 'past'}-{chat_id}"):
         if st.button(
             chat_title(active_messages(chat_id), copy.untitled_chat),
             key=f"chat-name-{chat_id}",
@@ -137,15 +127,10 @@ def _row(chat_id: int, copy, *, busy: bool, armed: bool) -> None:
             disabled=busy,
         ):
             open_chat(chat_id)
-        # Two clicks, because this cannot be undone: the conversation is only in this
-        # session's memory and nothing anywhere else has a copy of it.
-        #
-        # No `help=` on either ✕, and it is the same two reasons as the New chat button
-        # above plus a third. Streamlit's tooltip is a black panel that opens beside the
-        # cursor — on a 240px row it covered the row above, which is the one thing a
-        # reader needs to see while deciding whether to delete this one. `static/app.js`
-        # gives both buttons a `title` and an `aria-label` instead: a native tooltip is
-        # small, and unlike `help=` it also gives the control an accessible name, which
-        # a lone ✕ badly needs.
+        # No `help=` on the ✕ either, and one reason more than the button above:
+        # Streamlit's tooltip is a black panel that opens beside the cursor, and on a
+        # 240px row it covered the row above. `static/app.js` gives it a `title` and an
+        # `aria-label` instead — a native tooltip is small, and unlike `help=` it also
+        # gives the control an accessible name, which a lone ✕ badly needs.
         if st.button("✕", key=f"chat-act-{chat_id}", disabled=busy):
-            arm_delete(chat_id)
+            delete_chat(chat_id)

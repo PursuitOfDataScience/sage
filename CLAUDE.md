@@ -166,20 +166,44 @@ queued-question feature lives there: a question typed mid-answer is held on the 
 window and handed to `st.chat_input` once the turn ends, because telling the server
 about it any earlier would end the answer it is queued behind.
 
+**A DOM listener added by this script dies on the next rerun.** Streamlit destroys and
+rebuilds the `components.html` iframe `app.js` is served in on every rerun, and a
+listener registered from inside it is a closure belonging to that copy's realm — once
+the realm is gone the listener never fires again. Nothing announces this: the element is
+still there, still painted, still hit-tests as itself, and does nothing. It is how the
+theme toggle shipped completely dead. **So every listener on a node that outlives a
+rerun must be re-registered per run**, which is what `__sageHistoryOff`,
+`__sageEnterOff`, `__sageTypeOff`, `__sagePasteOff`, `__sageDropOff` and `__sageAskOff`
+are for — tear down, re-add, every run. For an element this script *creates* and parents
+to `<body>`, rebuild the element itself once per run (`addThemeToggle`); adding a fresh
+listener to a kept node has the same problem, because the listener is the part that goes
+stale. Verified by A/B: reuse the node and the toggle is dead from the first click.
+
 **Anything you put in the top 60px of the page needs a z-index above 999995, and needs
 hit-testing.** That band is `[data-testid="stHeader"]`, transparent and at 999990, and
 it takes every click aimed at whatever is underneath it — the controls row was pinned
-there once, looked right in every mock-up, and was completely dead. Two things were
-measured while moving the theme toggle up there and are worth not rediscovering:
-appending *inside* `stToolbar` does take clicks, but Streamlit **removes the whole
-toolbar from the document while the sidebar is expanded**, so a control parented there
-vanishes every time the panel opens; and the top-RIGHT corner is where
-`render_check.py` models Community Cloud's own opaque control cluster (220px, z-index
-999991), so a control in that corner is under it on the deployment and over it locally.
-The toggle therefore hangs off `<body>`, is pinned by app.css at 999995, and is placed
-horizontally from a measured offset past Streamlit's own sidebar arrow. `#theme-toggle`
-is in the harness's `INTERACTIVE` set: drop its z-index to 1000 and every width reports
-it unclickable, which is the bug reproducing itself.
+there once, looked right in every mock-up, and was completely dead. Three placements
+were measured for the theme toggle and are worth not rediscovering:
+
+* Appending *inside* `stToolbar` does take clicks, but Streamlit **removes the whole
+  toolbar from the document while the sidebar is expanded**, so a control parented there
+  vanishes every time the panel opens.
+* Anchoring on the **left** is unstable. Closing the panel puts Streamlit's sidebar arrow
+  back while the panel is still sliding out, so a measurement taken from it lands at
+  x≈300 instead of x≈18 — and nothing corrects it, because `sync()` stops running on a
+  page with nothing left to mutate. Measured: 56px → 356px on one open-and-close.
+* The **right** edge does not move: Streamlit's header shrinks from the left when the
+  panel opens. So the toggle is anchored there, beside the host's own Share button.
+
+`Share` is a HOST toolbar item — Community Cloud sends it over the host-communication
+channel into `stToolbarActions` — so it does not exist locally and its width cannot be
+known from this repo. app.js reserves room by measuring whatever is in the header's
+right-hand group, and **only ever reserves more, never less**, so a frame where
+Streamlit has rebuilt the header without those controls cannot snap the button into the
+corner. The harness models that cluster at the width `#host-bar` paints and fails if
+the toggle overlaps it — it would be invisible here and painted over Share on the
+deployment. `#theme-toggle` is also in `INTERACTIVE`: drop its z-index to 1000 and every
+width reports it unclickable.
 
 `python tools/palette_check.py --update` accepts a repaint, and updating the baseline
 is a deliberate act: it puts the before and after in the diff where the owner can

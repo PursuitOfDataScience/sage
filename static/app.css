@@ -705,17 +705,6 @@ body:not([data-sage-generating]) [class*="st-key-chat-row-"]:hover {
     font-weight: 500 !important;
 }
 
-/* A row with its delete armed. Tinted rather than merely relabelled, so the row that
- * is about to go is unmistakable when the panel holds six of them. */
-[class*="st-key-chat-row-arm-"] {
-    background: var(--danger-bg);
-    box-shadow: inset 2px 0 0 var(--danger);
-}
-
-[class*="st-key-chat-row-arm-"] [class*="st-key-chat-name-"] button {
-    color: var(--danger) !important;
-}
-
 /* The ✕. Muted until the row is under the cursor, and never hidden: hover-to-reveal is
  * the fashionable treatment and it leaves a touch screen with no way to delete
  * anything at all. */
@@ -734,14 +723,9 @@ body:not([data-sage-generating]) [class*="st-key-chat-row-"]:hover {
     background: var(--danger-bg) !important;
 }
 
-[class*="st-key-chat-row-arm-"] [class*="st-key-chat-act-"] button {
-    color: var(--danger) !important;
-    opacity: 1;
-}
-
-/* New chat. An outline rather than a maroon fill: it is rendered only when there is a
- * conversation to leave, so it is a way out of the current one rather than the panel's
- * headline act — and the maroon in this panel is spent on saying which row you are in. */
+/* New chat. An outline rather than a maroon fill: it is a way out of the current
+ * conversation rather than the panel's headline act, and the maroon in this panel is
+ * spent on saying which row you are in. */
 .st-key-chat-list .st-key-new-chat button {
     border-color: var(--control-border) !important;
     color: var(--brand-text) !important;
@@ -771,16 +755,20 @@ body:not([data-sage-generating]) [class*="st-key-chat-row-"]:hover {
  * the number the strip of controls under the input already uses, for the same reason,
  * at the other end of the page.
  *
- * `left` second, and it is measured rather than written: `--toggle-left` is published by
- * app.js as "just past Streamlit's own sidebar arrow", or the page edge once the panel
- * is open and there is no arrow to clear. The 56px fallback is where that lands at every
- * width the harness renders, for the frame before app.js has measured anything.
+ * `right` second. The toggle sits in the top-right corner beside the Share button,
+ * which is where the reader asked for it, and that corner is also the only stable one:
+ * Streamlit's header shrinks from the LEFT when the sidebar opens, so its right edge
+ * never moves. Anchoring on the left is what made the button slide 300px across the
+ * page on the first open-and-close — see `publishToggleRight` in app.js.
  *
- * And NOT in the right-hand corner, which is where a theme toggle conventionally goes.
- * `tools/render_check.py` models a 220px opaque host control cluster there at z-index
- * 999991 — Community Cloud's own controls, painted over the app's header. A toggle in
- * that corner would sit under them on the deployment and over them here, and neither is
- * a thing to ship.
+ * `--toggle-right` is measured, because Share is a HOST toolbar item: Community Cloud
+ * sends it over the host-communication channel and Streamlit renders it into
+ * `stToolbarActions`, so it does not exist on a local run and its width is not
+ * something this repo can know. app.js reserves room for whatever is actually in the
+ * header's right-hand group, and only ever reserves more — never less — so a frame in
+ * which Streamlit has rebuilt the header without those controls cannot snap the button
+ * into the corner. The 16px fallback is the corner itself, which is where it lands
+ * locally and in the harness, where there is no Share button to clear.
  *
  * A Streamlit button could not do this job at all. A click on one is a rerun, and a
  * rerun during a turn ends the turn — so the theme could not be changed while an answer
@@ -788,7 +776,7 @@ body:not([data-sage-generating]) [class*="st-key-chat-row-"]:hover {
 #theme-toggle {
     position: fixed;
     top: 13px;
-    left: var(--toggle-left, 56px);
+    right: var(--toggle-right, 16px);
     z-index: 999995;
     display: inline-flex !important;
     align-items: center;

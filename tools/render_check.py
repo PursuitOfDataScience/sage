@@ -337,6 +337,16 @@ body {{ margin: 0; background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme
 [data-testid="stToolbar"] {{ position: relative; height: {HOST_BAR}px; }}
 .toolbar-row {{ position: absolute; top: 16px; left: 16px; height: 28px;
                 display: flex; align-items: center; }}
+/* Flush with `#host-bar` and exactly as wide, because on the deployment they are one
+   cluster: the toggle has to clear the band the host paints, not just the word inside
+   it. Modelled 32px narrower at first, and the bound duly reported the toggle 8px
+   inside the host's own controls at every width. */
+.toolbar-actions {{ position: absolute; top: 16px; right: 0; height: 28px;
+                    width: {HOST_BAR_W}px; display: flex; align-items: center;
+                    justify-content: flex-end; padding-right: 16px;
+                    box-sizing: border-box; }}
+[data-testid="stToolbarActionButton"] {{ height: 28px; border: 0;
+                    background: transparent; color: {FOREGROUNDS[scheme]}; }}
 [data-testid="stExpandSidebarButton"] {{ width: 28px; height: 28px; border: 0;
                 background: transparent; color: {FOREGROUNDS[scheme]}; }}
 /* The host's own control cluster, which additionally paints. */
@@ -1228,7 +1238,7 @@ SELECTORS = [
     # killed a control: Streamlit's header takes every click aimed at anything
     # underneath it, and the fix is a z-index that outranks the chrome. Measured AND
     # hit-tested, because "on screen" and "clickable" came apart there once before.
-    THEME_TOGGLE, '[data-testid="stExpandSidebarButton"]',
+    THEME_TOGGLE, '[data-testid="stExpandSidebarButton"]', "#host-bar",
     ".st-key-composer-strip button",
     # The rightmost control in the strip, so the row is measured end to end: with
     # a model name in it, it is the widest thing under the input.
@@ -2165,14 +2175,24 @@ def page(body: str, scheme: str, scroll: bool, generating: bool = False,
 <style>{base_css(scheme)}</style><style>{theme_css(scheme)}</style></head>
 <body class="{'bar-sticky' if sticky else 'bar-fixed'}{' doc-scroll' if doc_scroll else ''}{' input-column' if column_input else ''}">
 <div data-testid="stHeader">
-  <!-- Streamlit's own control, at the geometry it really has (18,16,28x28). It is here
-       because app.js measures it: `--toggle-left` is published as "just past this", so
-       without it the theme toggle would only ever be rendered at its no-arrow
-       fallback and the offset that keeps the two from overlapping would go
-       unchecked. -->
-  <div data-testid="stToolbar"><div class="toolbar-row">
-    <button data-testid="stExpandSidebarButton">&raquo;</button>
-  </div></div>
+  <!-- Streamlit's own sidebar arrow, at the geometry it really has (18,16,28x28), and
+       the host's toolbar actions on the right. The second one is why this markup
+       exists: `Share` is a HOST item — Community Cloud sends it over the
+       host-communication channel and Streamlit renders it into `stToolbarActions` — so
+       it is absent from any local run, and app.js reserves room for the theme toggle by
+       measuring it. Modelled at the width `#host-bar` paints, because on the deployment
+       they are the same cluster, and the toggle has to clear the whole of it rather
+       than just the word. Without this the toggle would only ever render at its
+       no-controls fallback of 16px, in the corner, and the bound that keeps it off the
+       host's own buttons would have nothing to fail on. -->
+  <div data-testid="stToolbar">
+    <div class="toolbar-row">
+      <button data-testid="stExpandSidebarButton">&raquo;</button>
+    </div>
+    <div data-testid="stToolbarActions" class="toolbar-actions">
+      <button data-testid="stToolbarActionButton">Share</button>
+    </div>
+  </div>
 </div><div id="host-bar"></div>
 <div data-testid="stAppViewContainer">
   <div data-testid="stMain" class="main">
@@ -2456,6 +2476,20 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
     if data["docOverflowX"] > 0:
         problems.append(f"{where}: page scrolls sideways by {data['docOverflowX']}px")
 
+    # The theme toggle is in the top-right corner, which is also where the host paints
+    # its own controls — Share and the ⋮ menu, at a z-index this app deliberately
+    # outranks. Outranking them means a toggle placed carelessly does not disappear
+    # under them; it covers them, which is worse, because it is invisible here and
+    # visible only to a reader of the deployment. So the reservation app.js measures is
+    # bounded on geometry: beside them, never on top.
+    toggle, host = els.get(THEME_TOGGLE), els.get("#host-bar")
+    if toggle and host and toggle["right"] > host["left"] and toggle["bottom"] > host["top"]:
+        problems.append(
+            f"{where}: {THEME_TOGGLE} overlaps the host's own controls by "
+            f"{round(toggle['right'] - host['left'])}px — it would be painted over "
+            f"Share on the deployment"
+        )
+
     bar = els.get('[data-testid="stBottomBlockContainer"]')
     # The top of everything pinned at the bottom, not just of the bar. The attachment
     # chips sit above the bar and are `fixed` too, so a gap measured to the bar's top
@@ -2472,7 +2506,11 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
         # beneath a fixed host overlay is inherent, not an app defect. What must
         # never happen is content being unreachable — covered by the input-bar
         # check below, which only runs in the scrolled state.
-        if (not scrolled and b["top"] < data["hostBar"] and b["bottom"] > 0
+        # `#host-bar` is exempt: it is not content of this app but the model OF the
+        # overlay this check is about, so it collides with itself by construction. It
+        # is measured only so the theme toggle can be held clear of it above.
+        if (sel != "#host-bar"
+                and not scrolled and b["top"] < data["hostBar"] and b["bottom"] > 0
                 and b["right"] > width - HOST_BAR_W):
             problems.append(
                 f"{where}: {sel} collides with the host toolbar "
