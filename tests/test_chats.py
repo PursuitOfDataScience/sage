@@ -311,10 +311,17 @@ class TestTheSidebar:
         ]
         assert rows == ["chat-row-open-1", "chat-row-past-0"]
 
-    def test_nothing_switches_while_an_answer_is_arriving(self, monkeypatch):
-        """A click is a rerun, and a rerun during a turn aborts it — that is the
-        mechanism the stop button is built on. `disabled` is the only thing that keeps
-        the click off the wire, so the half-written answer survives."""
+    def test_the_panel_works_while_an_answer_is_arriving(self, monkeypatch):
+        """Nothing is inert mid-answer, and that is the point.
+
+        Every control here was `disabled` for the length of a turn, because a click on
+        any Streamlit widget aborts the run that is streaming. What that bought was a
+        panel a reader could not use exactly when they wanted to: "you can't create a
+        new chat when the current session is generating the answer, which is
+        problematic", and the same for switching. The click still ends the turn — there
+        is no version where it does not — so what changed is that the turn now ends
+        well. See `sidebar.leave`.
+        """
         stub, _ = run_app(
             monkeypatch,
             session={
@@ -325,14 +332,59 @@ class TestTheSidebar:
                 "processing": True,
             },
         )
-        assert stub.disabled["new-chat"] is True
-        rows = [
+        live = [
             key for key in stub.disabled
-            if key.startswith(("chat-name-", "chat-act-"))
+            if key == "new-chat" or key.startswith(("chat-name-", "chat-act-"))
         ]
-        assert len(rows) == 4, rows
-        for key in rows:
-            assert stub.disabled[key] is True, key
+        assert len(live) == 5, live          # New chat, plus a name and a ✕ per row
+        for key in live:
+            assert stub.disabled[key] is False, key
+
+    def test_leaving_mid_answer_keeps_what_had_arrived(self, monkeypatch):
+        """The half-written answer goes to the conversation it belongs to, marked
+        `stopped`, rather than being dropped on the floor — the transcript then shows a
+        part-answer with a note saying so instead of a question with nothing under it.
+
+        `_leave_conversation` empties `partial`, so this only works because the commit
+        happens first. That ordering is the whole of `sidebar.leave`.
+        """
+        stub, module = run_app(
+            monkeypatch,
+            session={
+                "messages": [{"role": "user", "text": "the question", "attachments": []}],
+            },
+        )
+        assert module is not None
+        from sage.ui import sidebar  # noqa: PLC0415
+
+        # Set after the run rather than in `session`: with `processing` already true the
+        # app reaches `turn.run` on import, which needs a scripted provider it has no
+        # reason to have here. What is under test is the moment the reader clicks, and
+        # this is that state.
+        stub.session_state.processing = True
+        stub.session_state.partial = ["half an ", "answer"]
+        sidebar.leave(module.VIEW)
+        state = _state()
+        with pytest.raises(stub_streamlit.Rerun):
+            state.new_chat()
+
+        kept = stub.session_state.chats[0]["messages"]
+        assert [item["text"] for item in kept] == ["the question", "half an answer"]
+        assert kept[-1]["stopped"] is True
+        assert stub.session_state.messages == []
+        assert stub.session_state.processing is False
+
+    def test_leaving_with_no_turn_running_appends_nothing(self, monkeypatch):
+        """`finish_stopped_turn` ignores a call with no turn in flight, which is what
+        makes it safe to put in front of every control in the panel."""
+        stub, module = run_app(
+            monkeypatch,
+            session={"messages": [{"role": "user", "text": "q", "attachments": []}]},
+        )
+        from sage.ui import sidebar  # noqa: PLC0415
+
+        sidebar.leave(module.VIEW)
+        assert [item["text"] for item in stub.session_state.messages] == ["q"]
 
     def test_the_rows_are_newest_first(self, monkeypatch):
         """The chat a reader is most likely to want back is the one they just left."""
