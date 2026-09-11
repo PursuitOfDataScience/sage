@@ -135,10 +135,14 @@
      * can scroll past its last message, so it is dead space, one gap's worth. */
     --tail-gap: 1.75rem;
 
-    /* How far above the floor of the composer box the paperclip and the send button
-     * are parked. One value because they are one row; see the paperclip's rule for
-     * why it is 25 and not the 10 it was. */
-    --composer-btn-bottom: 25px;
+    /* The composer's own two-row geometry. The band is the row of controls under the
+     * text; the controls are pinned `--composer-ctl-bottom` off the bottom of the box,
+     * which centres a 34px control in a 46px band. `--composer-min-h` is one line of
+     * text plus that band, so an empty box is not taller than it needs to be. */
+    --composer-band: 46px;
+    --composer-ctl-bottom: 6px;
+    --composer-pad: 14px;
+    --composer-min-h: 92px;
 
     /* Everything in the model picker's trigger that is not the model's name: 18px of
      * padding, 2px of border, and the 20px chevron Streamlit puts after the label with
@@ -146,7 +150,11 @@
     --picker-chrome: 42px;
 
     --content-max: min(820px, 92vw);
-    --input-max: min(780px, 88vw);
+    /* Wider than it was (780px / 88vw), because the controls moved inside the box and
+     * a box with a row of its own in it needs the room — asked for as "expand the
+     * textbox width a bit". Still narrower than a full-width composer: a line of text
+     * much past this is harder to read back than it is to type. */
+    --input-max: min(880px, 92vw);
     --user-bubble-max: 78%;
     --radius-sm: 8px;
     --radius-md: 14px;
@@ -375,16 +383,28 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
  * over this and the harness reported the picker unreachable at every width. */
 .st-key-composer-strip {
     position: fixed;
-    /* The fallbacks are computed, not guessed, because a flat number cannot be right at
-     * two widths: the box is centred and `--input-max` is `min(780px, 88vw)`, so its
-     * right edge is `(100vw - --input-max) / 2` from the window's. Add the send button
-     * and the gap beside it and this lands on the measured value exactly — 382px at
-     * 1440, 82px at 500. A flat 60px was 322px wrong at 1440, and the harness duly
-     * reported the picker outside the box and over the send button in the one state
-     * where the fallback is what renders: the first frame, before app.js has measured
-     * anything. That is a frame the reader sees. */
-    right: var(--pick-right, calc((100vw - var(--input-max)) / 2 + 52px));
-    bottom: var(--pick-bottom, 43px);
+    /* In the band under the text, at its left end just past the paperclip — where
+     * ChatGPT and Claude both put it, and the reason is the same: the right-hand end of
+     * that band belongs to the button that sends, and a picker next to it was two
+     * controls competing for one corner. On the deployment that pair took a quarter of
+     * the box's width between them.
+     *
+     * Anchored LEFT, which also fixes what the reader saw as the picker jumping: its
+     * width now follows the name in it, and a left-anchored control that changes width
+     * moves nothing, while a right-anchored one moves itself.
+     *
+     * The fallbacks are computed, not guessed, because a flat number cannot be right at
+     * two widths: the box is centred and `--input-max` is `min(880px, 92vw)`, so its
+     * left edge is `(100vw - --input-max) / 2` from the window's. Add the paperclip and
+     * the gap beside it. A flat number was 322px wrong at 1440 when this was anchored
+     * right, and the harness reported the picker outside the box at every width in the
+     * one state where a fallback renders — the first frame, which the reader sees. */
+    left: var(--pick-left, calc((100vw - var(--input-max)) / 2 + 52px));
+    /* The fallback is the box's own floor, not a number: the bar pads 1rem below the
+     * box, and the other two controls sit `--composer-ctl-bottom` inside it, so this is
+     * where they all are. A flat 12px put the picker 4px below the box and 12px out of
+     * line with its neighbours, in every `unmeasured` render — the first frame again. */
+    bottom: var(--pick-bottom, calc(1rem + var(--composer-ctl-bottom)));
     z-index: 999995;
     width: auto !important;
     max-width: none !important;
@@ -443,9 +463,25 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
  * while the name inside it renders at 0.78rem — so an unscaled `ch` measured characters
  * a third larger than the ones on screen, and the width never came down off the 15rem
  * ceiling at all. Keep the two in step; the harness fails if the name stops fitting. */
+/* Sized by the name it is showing, not by the longest name the lineup can offer.
+ *
+ * It was the longest, deliberately: the width then did not change when a different
+ * model was picked, and a control that resizes on selection reflowed the right-aligned
+ * row it used to sit in and moved the panel anchored to it. That reasoning died with
+ * the row. Left-anchored in the band, a picker that changes width moves nothing.
+ *
+ * And the old way was ruinous here. `--picker-chars` is the longest id the provider
+ * serves, which on the deployment is around 27 characters — so the button was ~210px
+ * wide to show the word "enigma", and it and the send button took a quarter of the box
+ * between them: "the model picker box takes a lot of horizontal space". The name was
+ * never the problem; the width picked for it was.
+ *
+ * `max-width` is still the ceiling a very long id ellipses against, and it is generous
+ * because nothing moves when this control is wide — it just takes more of a band that
+ * is otherwise empty. */
 .st-key-composer-strip [data-testid="stPopover"] button {
-    width: min(calc(var(--picker-chars, 21) * 0.78ch + var(--picker-chrome)), 15rem)
-        !important;
+    width: auto !important;
+    max-width: min(15rem, 40vw) !important;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1025,14 +1061,28 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 
 [data-testid="stChatInput"] { margin-top: 0 !important; padding-top: 0 !important; }
 
+/* The box is two rows: the text, and a band of controls under it.
+ *
+ * It was one row — the text between a paperclip inset on the left and the send button
+ * inset on the right — and the model picker was floated into that row's right-hand end.
+ * What the reader saw was the picker painted over their own question: "currently the
+ * model picker will block the prompt if it's too long", with a screenshot of a sentence
+ * running underneath it. A control that overlaps the text cannot be made safe by moving
+ * it, only by taking it out of the text's row.
+ *
+ * So the text has the full width of the box and the controls have a band of their own
+ * below it, which is what ChatGPT and Claude both do. `padding-bottom` is that band;
+ * the paperclip, the picker and the send button are absolutely positioned inside it.
+ * Nothing can overlap the text, however long the text gets. */
 .stChatInput > div {
     border-radius: var(--radius-lg) !important;
     border: 2px solid var(--input-border) !important;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
-    min-height: 56px !important;
+    min-height: var(--composer-min-h) !important;
     display: flex !important;
-    align-items: center !important;
-    padding-left: 50px !important;
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    padding: 0 var(--composer-pad) var(--composer-band) !important;
     position: relative !important;
     z-index: 100 !important;
     transition: border-color var(--transition), box-shadow var(--transition);
@@ -1052,13 +1102,13 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 }
 
 .stChatInput textarea {
-    /* 10px on the left, not 24. The box already insets the textarea past the
-     * paperclip, so the textarea's own padding is added on top of that: at 24px the
-     * cursor sat 26px clear of the clip, which reads as two unrelated things that
-     * happen to share a box. 10px puts it 12px away — the same inset the clip itself
-     * has from the edge — so the row is one thing. Right side is 0 because the box
-     * reserves the send button's corner instead. */
-    padding: 16px 0 16px 10px !important;
+    /* The full width of the box, both sides. It used to be inset 50px on the left for
+     * the paperclip and 56px on the right for the send button, with the picker floated
+     * over the right-hand end on top of that — and the text ran under it. The controls
+     * are in their own band below now, so the text needs no insets at all beyond the
+     * box's own padding. */
+    padding: 14px 2px 4px 2px !important;
+    width: 100% !important;
     min-height: 24px !important;
     height: auto !important;
     resize: none !important;
@@ -1069,9 +1119,10 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 .stChatInput textarea::placeholder { color: var(--text-muted) !important; }
 .stChatInput div[data-baseweb="textarea"] { padding: 0 !important; }
 .stChatInput div[data-baseweb="base-input"] {
-    min-height: 56px !important;
+    min-height: 24px !important;
+    width: 100% !important;
     display: flex !important;
-    align-items: center !important;
+    align-items: flex-start !important;
 }
 
 /* The send button, out of the flow and parked in the corner.
@@ -1089,7 +1140,7 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 .stChatInput button:not(#paperclip-btn) {
     position: absolute !important;
     right: 10px !important;
-    bottom: var(--composer-btn-bottom) !important;
+    bottom: var(--composer-ctl-bottom) !important;
     z-index: 102 !important;
 }
 
@@ -1110,10 +1161,8 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     color: #ffffff !important;
 }
 
-/* Room for it, so a long line of text does not run underneath. Matches the button's
- * 36px plus its 10px inset and a little air. */
-.stChatInput > div { padding-right: 56px !important; }
-.stChatInput textarea { padding-right: 0 !important; }
+/* No right-hand inset on the box any more: the send button is in the band below the
+ * text, not beside it, so there is nothing for a long line to run underneath. */
 
 /* Paperclip injected by app.js — styled here so it follows the theme.
  *
@@ -1136,8 +1185,8 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
  * padding at all. */
 #paperclip-btn {
     position: absolute;
-    left: 12px;
-    bottom: var(--composer-btn-bottom);
+    left: 10px;
+    bottom: var(--composer-ctl-bottom);
     z-index: 1000;
     display: flex;
     align-items: center;
@@ -2112,8 +2161,8 @@ body[data-sage-dropping] .stChatInput > div {
 
     .user-message { padding-right: 0 !important; }
     .user-bubble { max-width: 88%; }
-    /* Room for three controls on one line at 360px, model name included. */
-    .st-key-composer-strip [data-testid="stPopover"] button { max-width: 9.5rem; }
+    /* Room for the picker and the send button in one band at 360px. */
+    .st-key-composer-strip [data-testid="stPopover"] button { max-width: 8rem !important; }
     /* The composer is taller at this width. app.js measures it; this is the fallback it
      * starts from, and it only has to hold for the first frame. */
     :root { --bar-h: 20rem; }

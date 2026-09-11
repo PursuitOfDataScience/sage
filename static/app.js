@@ -304,11 +304,16 @@
     // where Streamlit is rebuilding the composer instead of snapping the picker into the
     // corner and back.
     function publishPickerSpot() {
-        var send = sendButton();
-        if (!send) return;
-        var rect = send.getBoundingClientRect();
+        // Measured from the paperclip, which is the control it sits beside. It was the
+        // send button, on the other side of the band, and that put the picker and the
+        // arrow in the same corner — a quarter of the box's width between them on the
+        // deployment, and the picker painted over the reader's own question whenever
+        // the question was long enough to reach it.
+        var clip = doc.getElementById('paperclip-btn');
+        if (!clip) return;
+        var rect = clip.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) return;
-        publish('--pick-right', Math.round(view.innerWidth - rect.left) + 8);
+        publish('--pick-left', Math.round(rect.right) + 6);
         publish('--pick-bottom', Math.round(view.innerHeight - rect.bottom));
     }
 

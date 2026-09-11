@@ -177,11 +177,27 @@ def active_messages(chat_id: int) -> list[dict]:
 
 
 def _stash() -> None:
-    """Write the live conversation back into the record it belongs to."""
-    for record in st.session_state.chats:
-        if record["id"] == st.session_state.chat_id:
+    """Put the live conversation away — or drop it, if nothing was ever asked in it.
+
+    A conversation with no messages is not a conversation, and keeping it is what made
+    `New chat` look broken. It used to refuse to do anything on an empty chat, so that
+    pressing it ten times could not leave ten identical `Nothing asked yet` rows — and
+    what that read as was a dead button: "when clicking +new chat button, it doesn't
+    work until a new prompt is entered in that session".
+
+    Pruning here rather than refusing there gets both: the button always opens a new
+    conversation, and the list never fills with blanks, because the blank you are
+    leaving goes as you leave it. (A reader pressing it twice on an empty chat sees no
+    change, and there is none to see — both states are an empty conversation.)
+    """
+    for index, record in enumerate(st.session_state.chats):
+        if record["id"] != st.session_state.chat_id:
+            continue
+        if st.session_state.messages:
             record["messages"] = st.session_state.messages
-            return
+        else:
+            st.session_state.chats.pop(index)
+        return
 
 
 def _leave_conversation() -> None:
@@ -259,16 +275,54 @@ def delete_chat(chat_id: int) -> None:
     st.rerun()
 
 
-def new_chat() -> None:
-    """Put the open conversation away and start an empty one.
+def abandon_turn(model_key: str, names: dict[str, str] | None = None) -> None:
+    """End the turn because the reader is leaving this conversation, not watching it.
 
-    Nothing at all if the open one is already empty. Without that, pressing the button
-    twice leaves two identical `New chat` rows in the sidebar and pressing it ten times
-    leaves ten — a list of empty conversations to scroll past to reach a real one. An
-    empty chat is already the thing the button offers, so the reader is on it.
+    A part-answer is kept, exactly as a stop keeps one — it is text the reader may want,
+    in the conversation it belongs to.
+
+    An answer that had produced NOTHING yet is different, and this is the difference
+    `finish_stopped_turn` cannot make. That function appends an empty assistant message
+    on purpose, so a reader who pressed Stop sees that something happened rather than
+    being left with a question and no reply. A reader who has walked off to another chat
+    is not looking at that screen, and what they find when they come back to it is a
+    question with the bare word `Stopped` under it and no answer — reported with a
+    screenshot of exactly that, and "this is certainly a bug".
+
+    So a turn that arrived empty is dropped whole, the question with it, and the
+    conversation is left as it was before it was asked. Nothing half-done, and — because
+    `_stash` drops a conversation with no messages — no empty chat left in the panel
+    either, which is where that screenshot's spare `Nothing asked yet` row came from.
     """
-    if not st.session_state.messages:
+    if not st.session_state.processing:
         return
+    if "".join(st.session_state.partial).strip():
+        finish_stopped_turn(model_key, names)
+        return
+
+    st.session_state.partial = []
+    st.session_state.processing = False
+    st.session_state.stop_requested = False
+    # The same reason `_leave_conversation` pops it: a pending failover would re-ask
+    # this question on the next run, in whatever conversation is open by then.
+    st.session_state.pop("failover_to", None)
+    st.session_state.switched_from = None
+    st.session_state.error = None
+    st.session_state.error_detail = ""
+    st.session_state.notice = ""
+    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+        st.session_state.messages.pop()
+    logger.info("Turn abandoned before it produced anything; the question goes with it")
+
+
+def new_chat() -> None:
+    """Put the open conversation away and start an empty one. Always.
+
+    It used to return without doing anything when the open conversation was empty, to
+    keep the panel from filling with identical blank rows. `_stash` drops the blank
+    instead, so this no longer has to refuse — and refusing is what a reader read as a
+    broken button.
+    """
     _stash()
     chat_id = st.session_state.next_chat_id
     st.session_state.next_chat_id += 1
