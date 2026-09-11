@@ -174,6 +174,17 @@ offer, which is what it used to do to stop it resizing on selection: on the depl
 that made a ~210px button to show the word "enigma", and it and the send button took a
 quarter of the box between them.
 
+**Nothing of Streamlit's may appear in the theme toggle's corner, and one thing did.**
+Its running indicator (`[data-testid="stStatusWidget"]`) mounts and unmounts around every
+turn, in the header's right-hand group, immediately left of the host's Share button —
+which is exactly where the toggle is. It was photographed drawn on top of the toggle, and
+the toggle left stranded a long way from Share afterwards, because app.js reserved room
+for it and the reservation was clamped so it could only grow. **app.css hides the
+indicator** (the composer's send arrow becomes a stop square, so nothing is lost) and
+**the reservation is read fresh every pass**, never clamped. `render_check.py` renders
+that indicator in the `generating` state so the hide rule has something to hide and the
+toggle's hit test has something to fail on.
+
 **Every fallback position in the composer is computed, never a flat number.** The box is
 centred and `--input-max` is `min(880px, 92vw)`, so anything measured from a window edge
 depends on the viewport width; a flat fallback was 322px wrong at 1440. Fallbacks only

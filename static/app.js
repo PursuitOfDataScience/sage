@@ -303,18 +303,71 @@
     // when it cannot be found, which holds the last good position through the frames
     // where Streamlit is rebuilding the composer instead of snapping the picker into the
     // corner and back.
+    // Where the picker sits: the right-hand end of the band, just left of the send
+    // button, measured off that button rather than written down. It spent a revision at
+    // the other end of the band, past the paperclip, which is where ChatGPT and Claude
+    // put theirs — the ask was specific, so it is on the right.
+    //
+    // Its RIGHT edge is what is pinned. The picker is sized by the name it is showing,
+    // and a control pinned by its right edge grows leftward into empty band rather than
+    // pushing the button beside it around.
     function publishPickerSpot() {
-        // Measured from the paperclip, which is the control it sits beside. It was the
-        // send button, on the other side of the band, and that put the picker and the
-        // arrow in the same corner — a quarter of the box's width between them on the
-        // deployment, and the picker painted over the reader's own question whenever
-        // the question was long enough to reach it.
-        var clip = doc.getElementById('paperclip-btn');
-        if (!clip) return;
-        var rect = clip.getBoundingClientRect();
+        var send = sendButton();
+        if (!send) return;
+        var rect = send.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) return;
-        publish('--pick-left', Math.round(rect.right) + 6);
+        publish('--pick-right', Math.round(view.innerWidth - rect.left) + 8);
         publish('--pick-bottom', Math.round(view.innerHeight - rect.bottom));
+    }
+
+    /* --- the box grows with the prompt ----------------------------------- */
+
+    // Streamlit does not autosize this textarea. Measured: a prompt whose `scrollHeight`
+    // was 704px sat in a textarea 44px tall — one line's worth of window — so a reader
+    // writing anything long could see one line of it at a time. Reported as "the textbox
+    // should be able to adjust its vertical size dynamically so that users can see their
+    // prompt easier".
+    //
+    // Collapsed before it is measured, because `scrollHeight` on an element that is
+    // already tall enough reports the height it has rather than the height it needs: a
+    // box sized this way without the reset only ever grows, and deleting half the prompt
+    // left the empty space behind.
+    //
+    // Capped by `--composer-max-text`, past which the text scrolls — the composer is not
+    // allowed to eat the conversation. `overflow-y` is switched with it so there is no
+    // scrollbar sitting in a box that does not scroll.
+    function autosizeComposer() {
+        var area = doc.querySelector('textarea[data-testid="stChatInputTextArea"]');
+        if (!area) return;
+        var cap = parseFloat(
+            view.getComputedStyle(doc.documentElement)
+                .getPropertyValue('--composer-max-text')
+        ) || 240;
+        area.style.height = 'auto';
+        var want = Math.min(area.scrollHeight, cap);
+        area.style.height = want + 'px';
+        area.style.overflowY = area.scrollHeight > want + 1 ? 'auto' : 'hidden';
+    }
+
+    // On every keystroke, and re-registered per run: a listener added here belongs to
+    // this copy of the script, and Streamlit destroys the iframe it is served in on
+    // every rerun — see the theme toggle, which shipped dead for exactly that reason.
+    //
+    // `sync()` calls `autosizeComposer` as well, which is what shrinks the box back
+    // after a send: submitting empties the field through Streamlit rather than through
+    // an event this listener would see.
+    function growComposer() {
+        var area = doc.querySelector('textarea[data-testid="stChatInputTextArea"]');
+        if (!area) return;
+        if (view.__sageGrowOff) {
+            try { view.__sageGrowOff(); } catch (err) { /* node gone */ }
+        }
+        var onInput = function () { autosizeComposer(); };
+        area.addEventListener('input', onInput);
+        view.__sageGrowOff = function () {
+            area.removeEventListener('input', onInput);
+        };
+        autosizeComposer();
     }
 
     function measureChrome() {
@@ -1021,15 +1074,23 @@
     // leftmost thing in the header's right-hand group, or in the corner when there is
     // nothing there.
     //
-    // The value only ever grows. Streamlit rebuilds the header as the panel opens and
-    // closes, and for a frame or two those controls are absent — read at face value that
-    // would snap the button into the corner and back, which is the instability this
-    // placement exists to end. Once a Share button has been seen, the room reserved for
-    // it stays reserved.
+    // Read fresh every pass, and NOT clamped to its own maximum, which is what it was.
+    // Growing-only sounded safe — it kept a frame where Streamlit had rebuilt the header
+    // without its controls from snapping the toggle into the corner — and it was wrong
+    // about a control that comes and goes: the running indicator appeared, the
+    // reservation grew to clear it, and when it went the toggle stayed where it had been
+    // pushed. Reported as the toggle being "too far away from share". The indicator is
+    // hidden now (see app.css), so nothing in this group appears and disappears, and a
+    // fresh reading is stable because the thing being read is.
     var RIGHT_CONTROLS = [
         '[data-testid="stToolbarActions"]',
         '[data-testid="stAppDeployButton"]',
-        '[data-testid="stMainMenu"]'
+        '[data-testid="stMainMenu"]',
+        // Streamlit's running indicator. app.css hides it — it mounts and unmounts
+        // around every turn in exactly this corner, and the reader photographed it
+        // drawn on top of the toggle. Measured anyway, so that if that rule ever stops
+        // matching the toggle steps aside instead of being sat on.
+        '[data-testid="stStatusWidget"]'
     ];
     var TOGGLE_RIGHT_MIN = 16;
 
@@ -1043,10 +1104,7 @@
                 if (room > edge) edge = room;
             });
         });
-        var want = Math.max(TOGGLE_RIGHT_MIN, edge);
-        if (want < (view.__sageToggleRight || 0)) return;   // never creep leftward
-        view.__sageToggleRight = want;
-        publish('--toggle-right', want);
+        publish('--toggle-right', Math.max(TOGGLE_RIGHT_MIN, edge));
     }
 
     function addThemeToggle() {
@@ -2429,6 +2487,7 @@
         addPasteHandler();
         addDropHandler();
         addPromptHistory();
+        growComposer();
         resetComposerOnClear();
         closePickerOnPick();
         addCodeCopyButtons();

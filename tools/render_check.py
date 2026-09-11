@@ -347,6 +347,14 @@ body {{ margin: 0; background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme
                     box-sizing: border-box; }}
 [data-testid="stToolbarActionButton"] {{ height: 28px; border: 0;
                     background: transparent; color: {FOREGROUNDS[scheme]}; }}
+/* Streamlit's running indicator, in the place and at the size it really renders: in the
+   header's right-hand group, immediately left of the host's Share button, and only while
+   a script is running. It is modelled so the app's rule hiding it has something to hide
+   — the reader photographed this drawn on top of the theme toggle, and with nothing here
+   the hit test on that toggle had nothing to fail on. */
+.status-widget {{ position: absolute; top: 16px; height: 28px;
+                  right: {HOST_BAR_W}px; width: 92px;
+                  background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme]}; }}
 [data-testid="stExpandSidebarButton"] {{ width: 28px; height: 28px; border: 0;
                 background: transparent; color: {FOREGROUNDS[scheme]}; }}
 /* The host's own control cluster, which additionally paints. */
@@ -2204,6 +2212,7 @@ def page(body: str, scheme: str, scroll: bool, generating: bool = False,
     <div data-testid="stToolbarActions" class="toolbar-actions">
       <button data-testid="stToolbarActionButton">Share</button>
     </div>
+    {'<div class="status-widget" data-testid="stStatusWidget">Stop</div>' if generating else ''}
   </div>
 </div><div id="host-bar"></div>
 <div data-testid="stAppViewContainer">
