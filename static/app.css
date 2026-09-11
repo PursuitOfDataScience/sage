@@ -9,6 +9,28 @@
 :root {
     color-scheme: light dark;
 
+    /* The typeface. IBM Plex Sans for everything a person reads, IBM Plex Mono for
+     * text that is machine data — code, a path, a model id, the `docs` badge under an
+     * answer — and the distinction is the point: a reader should be able to tell at a
+     * glance which of the two they are looking at without reading it.
+     *
+     * The @font-face rules are NOT here. They live in `.streamlit/config.toml` under
+     * `[[theme.fontFaces]]`, because Streamlit's own widgets take their font from
+     * that file and from nowhere else — so the faces are declared once, where the
+     * half of the page this stylesheet cannot reach will also see them. What is left
+     * here is the two stacks, and `tests/test_streamlit_config.py` holds these names
+     * against the families that file declares: a typo in one of them is a page that
+     * renders perfectly in the fallback and fails nothing.
+     *
+     * `tools/render_check.py` builds its own @font-face from the same config table,
+     * so the geometry it measures is Plex's and not whatever sans the machine running
+     * it happens to have. That matters more than it sounds: nothing on this cluster
+     * or in CI has Source Sans Pro installed, so for as long as the harness named it
+     * every measurement it took was of DejaVu Sans — 12% wider than Plex, and the
+     * bounds were tuned around it. */
+    --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
     --brand: #800000;
     --brand-deep: #a5122a;
     --gradient: linear-gradient(135deg, var(--brand), var(--brand-deep));
@@ -56,12 +78,6 @@
     --control-border: rgba(0, 0, 0, 0.12);
 
     --input-border: #d1d5db;
-    /* The popover panel. Its own pair rather than reusing --card-bg, because the card
-     * background is a gradient and a floating panel wants one flat colour — and
-     * because this is the one surface Streamlit renders outside everything else this
-     * file reaches, so it must be stated, not inherited. */
-    --popover-bg: #ffffff;
-    --popover-border: #e2e8f0;
     --code-inline-bg: rgba(128, 0, 0, 0.1);
     --code-inline-fg: #8a1020;
 
@@ -206,8 +222,6 @@
         --input-border: #374151;
         /* Streamlit painted this one white on a near-black page. Matched to the input
          * box's own surface so the panel reads as part of the composer it belongs to. */
-        --popover-bg: #1c1d24;
-        --popover-border: rgba(255, 255, 255, 0.16);
         --code-inline-bg: rgba(240, 168, 172, 0.14);
         --code-inline-fg: #f0a8ac;
 
@@ -269,8 +283,6 @@
     --input-border: #374151;
     /* Streamlit painted this one white on a near-black page. Matched to the input
      * box's own surface so the panel reads as part of the composer it belongs to. */
-    --popover-bg: #1c1d24;
-    --popover-border: rgba(255, 255, 255, 0.16);
     --code-inline-bg: rgba(240, 168, 172, 0.14);
     --code-inline-fg: #f0a8ac;
 
@@ -289,6 +301,52 @@
  * browser goes on deciding. */
 :root[data-sage-theme="light"] { color-scheme: light; }
 :root[data-sage-theme="dark"] { color-scheme: dark; }
+
+/* ===== TYPE =====
+ *
+ * One declaration and a list, and the list is the interesting half.
+ *
+ * The sans is set on the root so everything inherits it, including the things this
+ * file never mentions. It is not the only place it is set — `[theme] font` in
+ * `.streamlit/config.toml` is what reaches Streamlit's own widgets — and neither is
+ * redundant: a rule here cannot outrank the emotion class Streamlit puts on its
+ * buttons, and a value there cannot reach markup this app writes itself.
+ *
+ * The mono list is every place the text is machine data rather than language. It is
+ * one block rather than a `font-family` line added to each of the rules that own
+ * these elements, because *which text is machine-shaped* is a single typographic
+ * decision and a reader should be able to see all of it at once — scattered across
+ * five sections it becomes five unrelated declarations, and the next one goes
+ * wherever it is convenient. Nothing else here declares a font-family, so the order
+ * of this block against the rest of the file does not matter.
+ *
+ * What is NOT in it is worth as much: a document's title in the Sources strip is
+ * language (the badge beside it, `docs` or `web`, is not), an uploaded file's name in
+ * a question bubble is sitting in the middle of a sentence, and the status row's
+ * phrases are prose. Paths reach the page inside an answer's `<code>`, which the
+ * first selector already covers. */
+html, body { font-family: var(--font-sans); }
+
+/* The `p` selectors are not belt-and-braces. Streamlit renders a button's label as
+ * markdown, which means a `<p>` inside the button — and it puts its own
+ * `font-family` on that paragraph, so the button inheriting the mono face hands it to
+ * a child that has already been told otherwise. Measured in the running app: the
+ * trigger came out in Plex Mono and all four names in the open panel came out in Plex
+ * Sans, from one rule that named only the button. Anything whose label goes through
+ * `st.button` needs the paragraph named too — and `!important` with it, for the same
+ * reason the `font-size` rules on these two paragraphs further down carry one: the
+ * declaration it is competing with is Streamlit's own, on an emotion class whose
+ * specificity is not fixed and not visible from here. */
+.stChatMessage code,
+.stChatMessage pre,
+.source-kind {
+    font-family: var(--font-mono) !important;
+}
+
+/* The Think pill is NOT on that list, and the omission is the point: the model
+ * picker's label was a served model id — machine data, and set in the code face for
+ * the same reason a path in an answer is. This label is one English word chosen by
+ * the deployment, so it belongs to the interface and takes the interface's face. */
 
 /* ===== BASE RESETS ===== */
 .stDeployButton, #MainMenu, footer { display: none !important; }
@@ -379,60 +437,53 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     overflow-x: hidden !important;
 }
 
-/* ===== THE MODEL PICKER, INSIDE THE BOX =====
+/* ===== THE THINK TOGGLE, INSIDE THE BOX =====
  *
- * `.st-key-composer-strip` keeps its name and the name is historical: it was a row of
- * controls under the input — a 🗑️ and the picker — and it is now the picker alone, in
- * the bottom-right corner of the input box beside the send button. Renaming the key
- * would touch every rule below, the layout harness's fixture and its selector table, to
- * say what this comment says for free.
+ * `.st-key-composer-strip` keeps its name, and the name is historical twice over. It
+ * was a row of controls under the input — a 🗑️ and the model picker — then the picker
+ * alone in the bottom-right corner of the box, and it is now the Think toggle in that
+ * same corner. Renaming the key would touch every rule below, the layout harness's
+ * fixture and its selector table, to say what this comment says for free.
  *
- * Where it used to be, and why it is not there any more:
+ * The picker is gone by decision, not by accident: "we shouldn't have a model picker
+ * but rather use the model picker position for the think toggle". What went with it was
+ * a popover panel, a width computed from the longest model id the provider served
+ * (`--picker-chars`), and the only manual escape from a model that was answering badly
+ * — the error card's "Use <model>" button is what is left of that, and it appears only
+ * after a turn has already failed. Automatic failover is untouched.
+ *
+ * Where this corner has been, and why it is not there any more:
  *
  * * `position: fixed; top: 8px` put it inside `[data-testid="stHeader"]` — Streamlit's
  *   full-width strip across the top of every app. It is transparent, so every mock-up
  *   looked right; it is also at a z-index no stylesheet can outrank, so it took every
  *   click aimed at the controls underneath. The bar was on screen and completely dead.
- * * In flow and sticky it was clickable, but the picker inside it did not render on the
- *   landing screen — the one screen where a new user has to pick a model before there is
- *   any conversation to pick one for.
- * * A fixed row below the input worked, and cost a band of its own: the bar padded
- *   itself by `--strip-h` so the row could sit inside its paint, a little over 4rem of
- *   the window given to one control. With the trash gone there was one control left, and
- *   one control does not need a row.
+ * * A fixed row below the input worked, and cost a band of its own: a little over 4rem
+ *   of the window given to one control. One control does not need a row.
  *
  * So it is `fixed`, at a position app.js measures from Streamlit's own send button —
- * `--pick-right` and `--pick-bottom` — which keeps it beside that button at every width
- * without this file having to know how wide the box is. The fallbacks are where that
- * lands at the widths the harness renders, for the frame before app.js has measured.
+ * `--pick-right` and `--pick-bottom`, which keep their names for the same reason the
+ * container key keeps its — so it stays beside that button at every width without this
+ * file having to know how wide the box is. The fallbacks are where that lands at the
+ * widths the harness renders, for the frame before app.js has measured.
  *
  * `z-index` above Streamlit's own chrome, because the pinned bottom container paints
  * over anything that merely beats the page content: at 1000 the bar painted straight
- * over this and the harness reported the picker unreachable at every width. */
+ * over this and the harness reported the control unreachable at every width. */
 .st-key-composer-strip {
     position: fixed;
-    /* In the band under the text, at its RIGHT end just left of the send button, which
-     * is where the reader asked for it. It spent one revision on the left, past the
-     * paperclip, because that is where ChatGPT and Claude put theirs — but the ask was
-     * specific and it is a preference, not a bug, so it goes on the right.
-     *
-     * Anchored on its right edge, so the send button never moves: the picker is sized
-     * by the name it is showing, and a control pinned by its right edge grows leftward
-     * into empty band rather than pushing its neighbour. That is the same reasoning
-     * that makes this safe now and made it unsafe before — what it used to share the
-     * right-hand end with was the reader's own text.
-     *
-     * The fallbacks are computed, not guessed, because a flat number cannot be right at
-     * two widths: the box is centred and `--input-max` is `min(880px, 92vw)`, so its
-     * right edge is `(100vw - --input-max) / 2` from the window's. Add the send button
-     * and the gap beside it. A flat number was 322px wrong at 1440, and the harness
-     * reported the picker outside the box at every width in the one state where a
-     * fallback renders — the first frame, which the reader sees. */
+    /* Anchored on its right edge, so the send button never moves. The fallbacks are
+     * computed, not guessed, because a flat number cannot be right at two widths: the
+     * box is centred and `--input-max` is `min(880px, 92vw)`, so its right edge is
+     * `(100vw - --input-max) / 2` from the window's. Add the send button and the gap
+     * beside it. A flat number was 322px wrong at 1440, and the harness reported the
+     * control outside the box at every width in the one state where a fallback renders
+     * — the first frame, which the reader sees. */
     right: var(--pick-right, calc((100vw - var(--input-max)) / 2 + 56px));
     /* The fallback is the box's own floor, not a number: the bar pads 1rem below the
      * box, and the other two controls sit `--composer-ctl-bottom` inside it, so this is
-     * where they all are. A flat 12px put the picker 4px below the box and 12px out of
-     * line with its neighbours, in every `unmeasured` render — the first frame again. */
+     * where they all are. A flat 12px put it 4px below the box and 12px out of line
+     * with its neighbours, in every `unmeasured` render — the first frame again. */
     bottom: var(--pick-bottom, calc(1rem + var(--composer-ctl-bottom)));
     z-index: 999995;
     width: auto !important;
@@ -458,80 +509,39 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 .st-key-composer-strip > [data-testid="stVerticalBlock"] > div,
 .st-key-composer-strip .element-container,
 .st-key-composer-strip [data-testid="stElementContainer"],
-.st-key-composer-strip [data-testid="stPopover"],
-.st-key-composer-strip .stPopover,
 .st-key-composer-strip .stButton {
     width: auto !important;
     flex: 0 0 auto !important;
     min-width: 0 !important;
 }
 
-/* Model picker. A popover trigger, i.e. a button, so it would be sized by its own
- * label — which is exactly the problem. Every model has a different-length name, so
- * picking one resized this button, which reflowed the row it sits in and moved the
- * panel anchored to it. That is the jitter: not an animation, a layout that depended on
- * the length of the current selection.
+/* The pill itself, off.
  *
- * So the width is fixed, and set from the longest name the picker can offer rather than
- * from the one showing: independent of the selection, which is what kills the jitter,
- * but no wider than it has to be. `app.py` publishes that length in `--picker-chars`,
- * because only it knows what the provider actually served — the lineup is discovered at
- * runtime and differs per deployment.
+ * Quiet: painted as part of the box it sits in rather than as a control on top of it,
+ * which is what the picker settled on in this corner and the reason it needs no
+ * backdrop blur to separate it from the conversation behind.
  *
- * It was a flat 15rem, which was 240px for a name that needed 136, and read as a wide
- * empty box with a word at one end of it. That is still the ceiling: a name long enough
- * to pass it ellipses rather than pushing the control off the corner.
+ * `--radius-sm` and a 1px border rather than the fully-round borderless pill the shape
+ * was taken from. The reference was ChatGPT's `Think`, and what was worth taking from
+ * it is the content — an icon, one short word, muted until pressed, and a tooltip that
+ * says what the reader gets rather than what the parameter is called. Its chrome was
+ * not: a fully-round borderless pill beside this app's own 8px bordered controls reads
+ * as two controls from two different apps, and the send button is 8px away.
  *
- * `ch` is the width of a "0", so this runs a little generous for lowercase ids — about
- * 10% — which is the safe direction: slack looks like padding, a shortfall truncates
- * the name. The 21 fallback is the longest name in the configured lists, for a page
- * that gets this stylesheet without app.py's variable.
- *
- * The 0.78 is the label's own font size in rem, below. `ch` resolves against the
- * element it is written on, and that is this button, which Streamlit leaves at 16px
- * while the name inside it renders at 0.78rem — so an unscaled `ch` measured characters
- * a third larger than the ones on screen, and the width never came down off the 15rem
- * ceiling at all. Keep the two in step; the harness fails if the name stops fitting. */
-/* Sized by the name it is showing, not by the longest name the lineup can offer.
- *
- * It was the longest, deliberately: the width then did not change when a different
- * model was picked, and a control that resizes on selection reflowed the right-aligned
- * row it used to sit in and moved the panel anchored to it. That reasoning died with
- * the row. Left-anchored in the band, a picker that changes width moves nothing.
- *
- * And the old way was ruinous here. `--picker-chars` is the longest id the provider
- * serves, which on the deployment is around 27 characters — so the button was ~210px
- * wide to show the word "enigma", and it and the send button took a quarter of the box
- * between them: "the model picker box takes a lot of horizontal space". The name was
- * never the problem; the width picked for it was.
- *
- * `max-width` is still the ceiling a very long id ellipses against, and it is generous
- * because nothing moves when this control is wide — it just takes more of a band that
- * is otherwise empty. */
-.st-key-composer-strip [data-testid="stPopover"] button {
-    width: auto !important;
-    max-width: min(15rem, 40vw) !important;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.st-key-composer-strip [data-testid="stPopover"] button p {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* Inside the box now, so it is painted as part of it: quieter than the bordered pill it
- * was when it sat on the page below the input, and it no longer needs a backdrop blur
- * to separate it from the conversation behind it. */
+ * No width rule at all, which is the whole difference from the control this replaces.
+ * The picker's width had to be pinned to the longest id the provider served, because
+ * its label changed with the selection and a control that resizes on selection reflowed
+ * the row it sat in — around 210px of button to show the word "enigma". This label is
+ * one word from the profile and it is the SAME word in both states, so the box never
+ * changes size and nothing has to be pinned. */
 .st-key-composer-strip button {
     background: var(--control-bg) !important;
     border: 1px solid transparent !important;
     border-radius: var(--radius-sm) !important;
     color: var(--text-secondary) !important;
-    padding: 4px 8px !important;
+    padding: 4px 10px !important;
     min-height: 30px !important;
+    white-space: nowrap;
     transition: background var(--transition), border-color var(--transition),
                 color var(--transition);
 }
@@ -544,108 +554,47 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 
 .st-key-composer-strip button p { font-size: 0.78rem !important; margin: 0 !important; }
 
-/* ===== THE POPOVER PANEL =====
+/* The brain, injected by app.js ahead of the label — an inline stroke SVG, like the
+ * paperclip and the stop square and the theme toggle's sun. Not an emoji: there is no
+ * emoji anywhere in this band, the starter cards are the only place they appear in the
+ * app at all, and an emoji is a different typeface on every reader's machine. */
+.st-key-composer-strip button svg {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+    margin-right: 5px;
+    vertical-align: -2px;
+}
+
+/* And on. `--brand` filled with white on it, which is exactly what the send button does
+ * the moment there is text to send — so the app already has one word for "this is
+ * armed" and this is it, with no new token and nothing new for a reader to learn.
  *
- * Rendered in a portal at the end of <body>, outside everything else this stylesheet
- * reaches, and it came out white on a page that is otherwise dark — "very sharp and
- * uncomfortable", which is what an unthemed panel looks like next to a themed one.
+ * Keyed on the CONTAINER, `st-key-think-on`, and not on the `aria-pressed` app.js
+ * writes. That was the first version and the paint was permanently one frame behind:
+ * `sync()` runs off a mutation observer, so the pass that set the attribute had read
+ * the state from before the click, and no later pass came to correct it. Measured in
+ * the running app — the marker said `data-on="1"` while its button still said
+ * `aria-pressed="false"` five seconds later, so the pill stayed grey with the feature
+ * switched on. Streamlit puts a container key on the node in the same run that changed
+ * it, which is why `sidebar._row` carries which conversation is open the same way.
  *
- * `[data-baseweb="popover"]` is the handle rather than a Streamlit test id: Streamlit
- * builds its popover on Base Web, the attribute is Base Web's own contract, and it is
- * the one name here that does not belong to an unversioned internal. The test id is
- * matched too, for the version that carries it, but the rule does not depend on it. */
-/* Colour on every wrapper, because any of them can be the one painting white; the
- * border and shadow on the body ALONE. Applied to the wrapper too, they drew a ring
- * inside a ring 2px apart with the shadow rendered twice, whenever Streamlit's portal
- * was three divs deep instead of two — and how deep it is is not visible from here. */
-[data-baseweb="popover"] [data-testid="stPopoverBody"],
-[data-baseweb="popover"] > div > div,
-[data-testid="stPopoverBody"] {
-    background: var(--popover-bg) !important;
-    color: var(--text-primary) !important;
+ * app.js still sets `aria-pressed`, because a screen reader needs to be told and being
+ * a frame late there costs nothing anyone can see. */
+.st-key-think-on button {
+    background: var(--brand) !important;
+    border-color: var(--brand) !important;
+    color: #ffffff !important;
 }
 
-[data-testid="stPopoverBody"] {
-    border: 1px solid var(--popover-border) !important;
-    border-radius: var(--radius-md) !important;
-    box-shadow: var(--shadow-lg) !important;
+.st-key-think-on button p { color: #ffffff !important; }
+
+.st-key-think-on button:hover {
+    background: var(--brand-deep) !important;
+    border-color: var(--brand-deep) !important;
+    color: #ffffff !important;
 }
 
-/* A width of its own, for the same reason the trigger has one: the panel is a column
- * of model names, and letting it size to the longest one meant it changed width — and
- * so did its position, since it is anchored to a right-aligned trigger. */
-[data-testid="stPopoverBody"] {
-    width: 19rem !important;
-    max-width: min(19rem, 92vw) !important;
-}
-
-[data-baseweb="popover"] [data-testid="stCaptionContainer"],
-[data-testid="stPopoverBody"] [data-testid="stCaptionContainer"] {
-    color: var(--text-muted) !important;
-}
-
-/* The model buttons inside the panel are already styled, by `.st-key-model-list`
- * further down. A copy of those rules lived here and was one class more specific, so
- * its neutral hover border silently replaced the maroon one that was intended. Deleted
- * rather than reconciled: one owner per control. */
-
-.st-key-composer-strip button {
-    background: var(--control-bg) !important;
-    border: 1px solid var(--control-border) !important;
-    border-radius: var(--radius-sm) !important;
-    color: var(--text-secondary) !important;
-    padding: 5px 9px !important;
-    min-height: 34px !important;
-    backdrop-filter: blur(8px);
-    transition: background var(--transition), border-color var(--transition);
-}
-
-.st-key-composer-strip button:hover {
-    background: var(--control-bg-hover) !important;
-    border-color: var(--brand-line) !important;
-    color: var(--brand-text) !important;
-}
-
-.st-key-composer-strip button p { font-size: 0.78rem !important; margin: 0 !important; }
-
-/* The model list lives inside a popover, and Streamlit renders popover panels in
- * a portal at the end of <body> — outside .st-key-composer-strip, so none of the rules
- * above reach it. Hence its own container key. */
-.st-key-model-list { max-height: 45vh; overflow-y: auto; }
-
-.st-key-model-list button {
-    justify-content: flex-start !important;
-    text-align: left !important;
-    background: transparent !important;
-    border: 1px solid transparent !important;
-    padding: 4px 8px !important;
-    min-height: 30px !important;
-}
-
-.st-key-model-list button p { font-size: 0.82rem !important; margin: 0 !important; }
-
-/* The same wrapper-flattening the chat list needs, and for the same reason: Streamlit
- * nests the label in two `display: flex; justify-content: center` boxes that fill the
- * button's content box, so `justify-content: flex-start` on the button above has
- * nothing left to move and the rule read as done while the panel rendered centred.
- *
- * What that cost is the column: measured at a 1440 viewport, four options in a 272px
- * button had their labels start at x=1133, 1134, 1145 and 1151 — 18px of rag — so the
- * ●/○ markers formed no column and finding the selected one meant reading every row.
- * Left-aligned they all start at the button's padding edge and the filled dot is one
- * glance. Structural, not by the emotion hash, and it fails back to centred. */
-.st-key-model-list button > div,
-.st-key-model-list button > div > span {
-    display: flex !important;
-    justify-content: flex-start !important;
-    width: 100% !important;
-    min-width: 0 !important;
-}
-
-.st-key-model-list button:hover {
-    background: var(--control-bg-hover) !important;
-    border-color: var(--brand-line) !important;
-}
 
 /* ===== THE CHAT LIST (sidebar) =====
  *
@@ -2243,6 +2192,106 @@ body[data-sage-dropping] .stChatInput > div {
     0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
     40% { transform: scale(1); opacity: 1; }
 }
+
+/* ===== THE STEPS UNDER IT =====
+ *
+ * One line per thing the turn did — what was searched for, which section was read —
+ * with the live one last, and a `<details>` the whole block folds into once the answer
+ * starts arriving. `sage/ui/turn.py` builds the markup; this only has to lay it out.
+ *
+ * Not one colour in here, on purpose. Every declared colour in this file is held
+ * against `tools/palette_baseline.json`, and a block of new ones would have to be
+ * accepted into that baseline by somebody who asked for them — nobody did. So the
+ * live line keeps the row above, unchanged, and everything else inherits the text
+ * colour of the message it is in. The hierarchy is size and weight, which cost
+ * nothing and cannot drift.
+ *
+ * `.status-block` carries the margin the row carried, and the row inside it gives its
+ * own up: the block is one piece of furniture where the row used to be, so the space
+ * around it has to be the row's space and not the row's space per line. A block with
+ * no steps in it is never drawn — turn.py emits the bare row for that — which is what
+ * keeps the first frame of every turn the frame it has always been. */
+.status-block { margin: 0.5rem 0 1rem; }
+.status-block .status-row { margin: 0; }
+
+.status-step {
+    display: flex;
+    /* Baseline, not centre: two typefaces on one line (the name in the body's, the
+     * path in the mono one) sit on each other's baseline or they sit at two heights,
+     * and a column of six of those reads as a ragged list. */
+    align-items: baseline;
+    gap: 8px;
+    padding: 0.1rem 0;
+    font-size: clamp(0.78rem, 1.8vw, 0.84rem);
+    /* Six of these is the tallest the block gets (`config.MAX_TOOL_ROUNDS`, plus the
+     * parallel calls one round can hold), and every one of them has to be ONE line: a
+     * step that wraps grows the page a line per step, under a reader who is waiting
+     * and watching. The ellipsis below is what holds it; this is stated rather than
+     * inherited because `tools/render_check.py` counts lines as height over
+     * line-height, and a line count is only as definite as the line-height it is
+     * divided by. */
+    line-height: 1.45;
+}
+
+/* The ✓ and the name: fixed, so they are the part that never moves as the block
+ * fills. Slightly smaller than the text it marks — a tick at full size reads as a
+ * bullet point rather than as a result. */
+.status-mark { flex: 0 0 auto; font-size: 0.85em; }
+.status-name { flex: 0 0 auto; font-weight: 600; }
+
+/* The machine's half of the line: a path, an anchor, a query. Monospace because it is
+ * something a reader might retype, and the generic family rather than a stack of this
+ * stylesheet's own — the typeface is somebody else's decision and this is not the
+ * place to make it.
+ *
+ * The one element on the block allowed to be narrower than its content. Everything
+ * else is `flex: 0 0 auto`, so this is what gives when the row runs out of room, and
+ * it gives by ellipsing rather than by wrapping — `min-width: 0` because a flex item
+ * will not shrink past its content without it, which is the whole reason a nowrap
+ * ellipsis inside a flex row is usually a row that overflows instead. turn.py clips
+ * the value to `config.STATUS_ARGUMENT_CHARS` before it gets here; that is about the
+ * size of the DOM, this is about the width of the line, and neither does the other's
+ * job.
+ *
+ * `.status-arg` is exempt from the harness's overflow check for exactly this reason
+ * (`ELLIPSIS_OK` in tools/render_check.py): a truncated line reports scrollWidth past
+ * clientWidth, which is what ellipsing IS. */
+.status-arg {
+    /* `var(--font-mono)` and not the bare `monospace` this was written with: the
+     * status block and the typeface arrived as two separate changes, and the block
+     * deliberately named no font stack of its own so the two could not collide. The
+     * token is the contract between them — a path on a step line is the same kind of
+     * text as a path in a code block and has to look like it. Not added to the mono
+     * selector list further up, because that list exists to override the family
+     * Streamlit paints on its own widgets with `!important`, and this element is
+     * ours. */
+    font-family: var(--font-mono);
+    font-size: clamp(0.74rem, 1.7vw, 0.82rem);
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Tabular figures so a column of times lines up on the decimal point instead of
+ * shuffling sideways as each one lands. */
+.status-time { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+
+/* The folded block. `<details>` and its own disclosure marker: the browser's, kept
+ * rather than restyled, because it is the one affordance every reader already knows
+ * and it costs no colour to keep. A click on it never reaches the server, which is
+ * the requirement — this line is on screen while the answer is streaming, and a
+ * Streamlit widget here would abort the turn it is summarising. */
+.status-done { margin: 0.5rem 0 1rem; }
+.status-summary {
+    cursor: pointer;
+    font-size: clamp(0.78rem, 1.8vw, 0.84rem);
+    /* Chrome puts the marker outside the box by default, which at the left edge of the
+     * message column clips it. */
+    list-style-position: inside;
+}
+.status-done .status-block { margin: 0.2rem 0 0; }
 
 /* ===== NOTICE (e.g. provider failover) ===== */
 .notice {

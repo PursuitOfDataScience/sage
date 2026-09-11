@@ -12,6 +12,8 @@ when it is wanted.
 
 from __future__ import annotations
 
+import html
+
 import streamlit as st
 
 from .. import config
@@ -52,26 +54,23 @@ def render_attachments(view: View) -> None:
             config.sees_images(view.model.id)
         ):
             # Said next to the picture, once, rather than discovered when the answer
-            # ignores it. The picker is right there.
+            # ignores it.
+            #
+            # It used to end "— pick a Pixtral or Claude model to have this one looked
+            # at", with the names built from `SAGE_VISION_MODELS` so the sentence could
+            # not drift from the list that decides it. That instruction died with the
+            # model picker: there is nothing left for a reader to pick. What is left is
+            # the fact, and the fact is worth keeping — the alternative is a reader
+            # who attaches a screenshot and learns it was never read from an answer
+            # that talks about something else.
+            #
+            # On this deployment it is now a rare line rather than the common one: the
+            # default provider is on `SAGE_VISION_MODELS`, so this renders only after
+            # an automatic failover has moved the turn to a model that cannot see.
             st.caption(
-                f"{view.model.label} cannot read images — pick a "
-                f"{_vision_names()} model to have this one looked at."
+                f"{view.model.label} cannot read images — this one is attached, "
+                "and will not be looked at."
             )
-
-
-def _vision_names() -> str:
-    """"a Pixtral or Claude" — from the configured list, not from a sentence.
-
-    `SAGE_VISION_MODELS` is what decides whether the caption appears at all, so it is
-    also what should decide which names it tells the reader to look for. Written out
-    by hand, the two drifted apart the first time a deployment set the variable.
-    """
-    names = [mark.strip().title() for mark in config.VISION_MODELS if mark.strip()]
-    if not names:
-        return "vision-capable"
-    if len(names) == 1:
-        return names[0]
-    return f"{', '.join(names[:-1])} or {names[-1]}"
 
 
 def ask(view: View) -> str | None:
@@ -140,72 +139,93 @@ def submit(prompt: str) -> None:
         start_new_turn(asked, st.session_state.attachments)
 
 
-def render_model_picker(view: View) -> None:
-    """Switch provider/model mid-session — the way round a spent API quota.
+def render_think_toggle(view: View) -> None:
+    """Ask the model to work through the question before answering.
 
-    Drawn in the corner of the input box, beside the send button: it names what will
-    answer, next to the control that sends.
+    A `st.button` that flips a session flag, and NOT `st.toggle`, for the reason that
+    cost this app the model picker twice over: a stateful widget stores its value under
+    its own widget key, and this one can be changed from Python. An automatic failover
+    can move the session to a provider that does not take the field, at which point the
+    flag is cleared — and a widget that had been switched on would hand its previous
+    value straight back on the next run and switch it on again. The model picker was a
+    selectbox and did exactly that with the provider that had just refused; the chat
+    list is buttons for the same reason. A button holds no state, so Python's word is
+    final.
 
+    Not drawn at all unless the model answering now takes the parameter — see
+    `View.can_think`. A pill that is present and does nothing is the failure this app
+    has a standing rule about.
 
-    A popover of buttons rather than a selectbox, for two reasons that both bit:
-
-    * A selectbox stores its own value under its widget key. After an automatic
-      failover set `session_state.model` and reran, the selectbox handed back its
-      *previous* value on that run and switched straight back to the provider
-      that had just refused. Buttons hold no state, so a programmatic switch
-      survives.
-    * A selectbox is a block with no intrinsic width, so in a row that sizes its
-      children to their content it resolved to zero and the control was invisible.
-      A button is sized by its label, exactly like the ℹ️ and 🗑️ beside it.
+    One word in both states, from the profile. The pill is the leftmost member of a
+    right-anchored cluster, so a label that grew from "Think" to "Thinking" on click
+    would move the control out from under the cursor that had just pressed it. The
+    state is said by the fill, and by `aria-pressed` for a reader who cannot see it.
     """
-    if len(view.models) < 2:
+    if not view.can_think:
+        # And the flag goes with it, so a failover onto a provider without reasoning
+        # cannot leave a turn quietly asking for a field that provider will reject.
+        st.session_state.thinking = False
         return
-    # One `with`, not two nested: the caption that used to sit between them is gone,
-    # and ruff is right that a bare nest reads as if something belonged in the gap.
-    with st.popover(view.model.label), st.container(key="model-list"):
-        for index, option in enumerate(view.models):
-            mark = "●" if option.key == view.model.key else "○"
-            if st.button(
-                f"{mark}  {option.label}",
-                key=f"pick-{index}",
-                use_container_width=True,
-            ):
-                st.session_state.model = option.key
-                # A deliberate choice clears the record of the automatic one,
-                # so the next refusal can fail over again.
-                st.session_state.tried = []
-                st.session_state.switched_from = None
-                st.session_state.notice = ""
-                st.rerun()
+    on = bool(st.session_state.thinking)
+    # The state is carried by the CONTAINER KEY, not by an attribute app.js writes.
+    # It was `aria-pressed`, set from a marker element on every sync pass, and the
+    # paint was a frame behind for good: `sync()` runs off a mutation observer, so the
+    # pass that set the attribute saw the state before the click and the pass that
+    # would have corrected it never came — measured in the running app, the marker
+    # read `data-on="1"` while the button it belonged to still said
+    # `aria-pressed="false"` five seconds later. A container key cannot be a frame
+    # behind, because Streamlit puts it on the node in the same run that changed it.
+    # `sidebar._row` reached the same answer for which conversation is open, and its
+    # comment is the general form: the container key is the only thing a stylesheet
+    # can read. app.js still sets `aria-pressed` for the accessibility tree, where
+    # being a frame late costs nothing a reader can see.
+    with st.container(key="think-on" if on else "think-off"):
+        if st.button(view.copy.think_label, key="think-toggle"):
+            st.session_state.thinking = not on
+            st.rerun()
+    # What app.js needs to style and label it: the state, and the words for the
+    # `title`/`aria-label` it sets. A marker element rather than `help=`, because
+    # Streamlit's tooltip is a black panel beside the cursor AND it wraps the control
+    # in a second, zero-sized copy of the button — which the composer's geometry
+    # bounds would then be measuring. The ✕ on a chat row is labelled the same way.
+    st.markdown(
+        f'<div id="think-state" data-on="{"1" if on else "0"}" '
+        f'data-hint="{html.escape(view.copy.think_hint, quote=True)}" hidden></div>',
+        unsafe_allow_html=True,
+    )
 
 
-def render_controls(view: View, has_messages: bool) -> None:
-    """The model picker, parked inside the input box at its bottom right.
+def render_controls(view: View) -> None:
+    """The Think toggle, parked inside the input box at its bottom right.
 
-    There used to be a 🗑️ beside it that emptied the conversation. It is gone: the panel
-    of chats has a ✕ on every row and a New chat button above them, so the trash was a
-    third way to do a thing there were already two better ways to do — "the trash can be
-    removed because of this design".
+    Two controls have stood here and gone. A 🗑️ that emptied the conversation, removed
+    because the chat panel has a ✕ on every row and a New chat button above them. And
+    the model picker, which named what would answer and let a reader change it — the
+    documented way round a spent quota. It is gone by decision: "we shouldn't have a
+    model picker but rather use the model picker position for the think toggle... we
+    don't need users to pick a model or anything like that."
 
-    And with the trash gone the row itself had no reason to be a row. The picker is one
-    control, so it sits *in* the composer rather than under it: the bar no longer reserves
-    a band below the input for a strip of controls, which is a little over 4rem of
-    vertical space the page gets back and the reason the input box now sits lower.
+    What that costs is worth writing down rather than discovering. A reader can no
+    longer move off a model that is slow or answering badly; the only remaining manual
+    switch is the error card's "Use <model>", which appears when a turn has already
+    failed. Automatic failover is untouched — `View.alternative` and the whole lineup
+    still walk on a refusal — so the recovery path that matters most is the one that
+    never needed a control. And nothing on the page now names the model answering.
+    Where a deployment's default is a router that serves a different model per request,
+    that label was already telling the reader less than it appeared to — which is why
+    a profile gives such a row a nickname instead of a model name.
 
-    `st.container(key="composer-strip")` keeps its name, and the name is now historical —
-    it is one control in the corner of the box, not a strip under it. Renaming the key
-    would touch a dozen stylesheet rules, the layout harness's fixture and its selector
-    table, all to say something the comment above says for free.
+    `st.container(key="composer-strip")` keeps its name. It was historical when one
+    control replaced two, and it is historical again; renaming it would touch a dozen
+    stylesheet rules, the layout harness's fixture and its selector table, to say what
+    this comment says for free.
 
-    `has_messages` is still taken, and no longer read. It said whether there was anything
-    to clear, which was the trash's question.
-
-    No `st.columns`: a column has no intrinsic width, which is how the picker came to be
-    invisible twice. Where it sits is measured by app.js from Streamlit's own send
+    No `st.columns`: a column has no intrinsic width, which is how the picker came to
+    be invisible twice. Where this sits is measured by app.js from Streamlit's own send
     button and published for the stylesheet, so it stays beside it at every width.
     """
     with st.container(key="composer-strip"):
-        render_model_picker(view)
+        render_think_toggle(view)
 
 
 def render_stop_hook() -> None:

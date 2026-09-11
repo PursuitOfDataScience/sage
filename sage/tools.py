@@ -49,6 +49,16 @@ class Tool(Protocol):
     #: tool at all should have used instead, and `sage.redact` swaps one for the other.
     #: Optional: a tool that leaves it empty is simply never substituted.
     label: str
+    #: Which of this tool's arguments is worth showing a reader while it runs — the
+    #: query for a search, the path for a read. The status row names the tool and
+    #: prints this one value beside it, so a reader watching a turn can see what was
+    #: searched for and which section was opened.
+    #:
+    #: Declared per tool rather than guessed at by the row, because only the tool
+    #: knows which of its arguments is the subject and which are options. Optional:
+    #: a tool that leaves it empty is named on the row with nothing beside it, which
+    #: is the right outcome for a tool whose arguments would mean nothing on screen.
+    argument: str
 
     @property
     def schema(self) -> dict: ...
@@ -118,6 +128,7 @@ class SearchDocs:
 
     name = SEARCH_DOCS
     label = "search"
+    argument = "query"
 
     def __init__(self, retriever: Retriever, identity: Identity) -> None:
         self.retriever = retriever
@@ -201,6 +212,7 @@ class ReadDoc:
 
     name = READ_DOC
     label = "read"
+    argument = "path"
 
     def __init__(self, retriever: Retriever, identity: Identity) -> None:
         self.retriever = retriever
@@ -323,6 +335,21 @@ class Toolset:
             tool.name: getattr(tool, "label", "")
             for tool in self.tools
             if getattr(tool, "label", "")
+        }
+
+    @property
+    def public_arguments(self) -> dict[str, str]:
+        """Internal name -> which argument the status row shows, for `sage.ui.turn`.
+
+        The same shape and the same reasoning as `public_names` one property up: read
+        off the tools, so a deployment that registers a third tool says what to show
+        for it by declaring `argument` and nothing here has to be edited. A tool that
+        declares none is left out, and the row then names it with nothing beside it.
+        """
+        return {
+            tool.name: getattr(tool, "argument", "")
+            for tool in self.tools
+            if getattr(tool, "argument", "")
         }
 
     def runner(self) -> ToolRunner:

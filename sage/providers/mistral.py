@@ -39,7 +39,7 @@ class MistralProvider:
     def models(self) -> list[Model]:
         return [Model(self.name, name) for name in self.entry.models]
 
-    def stream(self, model, messages, tools) -> Iterator[Chunk]:
+    def stream(self, model, messages, tools, thinking=False) -> Iterator[Chunk]:
         stream = self._client.chat.stream(
             model=model,
             messages=messages,

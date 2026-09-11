@@ -28,6 +28,7 @@ has to change and none of them are settings.
 | `SAGE_OPENROUTER_FREE_ONLY` | `1` | Off, the picker offers all 387 models OpenRouter fronts, most of which need a balance |
 | `SAGE_ZEN_DENY` | *(see profile)* | Model ids never offered, however the provider lists them. For a model that is served and cannot answer — maintained by `lineup.yml`, and cleared when the model answers again |
 | `SAGE_STREAM_REPAINT_MS` | `40` | Shortest gap between repaints of a streaming answer. Deltas arriving inside one interval are drawn together, because `write_stream` redraws the whole answer every time. `0` = one repaint per delta |
+| `SAGE_STATUS_ARGUMENT_CHARS` | `96` | How much of a tool's argument the progress block shows — the query searched for, the path read. A ceiling on what a model can put in the page, not a layout number: the row ellipses whatever is too wide for the window it is in |
 | `SAGE_MAX_UPLOAD_BYTES` | `10485760` | Upload size limit, per file |
 | `SAGE_MAX_ATTACHED_BYTES` | `20971520` | Upload size limit, across one turn |
 | `SAGE_IMAGE_MAX_EDGE` | `1568` | Longest edge an image is downscaled to before it is sent |
@@ -205,6 +206,17 @@ device while Streamlit painted a white page underneath it. `server.maxUploadSize
 deliberately larger than `SAGE_MAX_UPLOAD_BYTES` for a related reason — Streamlit
 renders its own "file is too large" inside the uploader widget, which this app hides,
 so the app has to be the one that refuses.
+
+The typeface is stated there too, and it has to be: `[theme] font` and
+`[theme] codeFont` are the only things that reach Streamlit's own widgets, while
+`--font-sans` / `--font-mono` in `static/app.css` are the only things that reach the
+markup this app writes itself. Both name IBM Plex, and `tests/test_streamlit_config.py`
+holds the two files to the same families. The faces are five OFL woff2 files in
+[`static/fonts/`](static/fonts) rather than a Google Fonts URL, so an offline
+deployment renders correctly and no third party sees the reader — which is why
+`server.enableStaticServing` must stay `true`: the `app/static/…` urls under
+`[[theme.fontFaces]]` 404 without it, and a 404 there is not an error anywhere. The
+page simply renders in the browser's default sans.
 
 ## Sharing a deployment
 
