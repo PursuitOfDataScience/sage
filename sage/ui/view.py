@@ -52,6 +52,11 @@ class View:
         return self.runtime.toolset.public_arguments
 
     @property
+    def section_arguments(self) -> frozenset[str]:
+        """Which tools' progress-row argument is a corpus id, not reader-facing text."""
+        return self.runtime.toolset.section_arguments
+
+    @property
     def can_think(self) -> bool:
         """Whether the model answering NOW takes a `reasoning` parameter.
 
