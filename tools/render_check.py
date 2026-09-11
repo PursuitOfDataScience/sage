@@ -287,7 +287,14 @@ STATUS_LABEL = max(PROFILE.copy.status_phrases, key=len)
 # measures nothing that ships.
 STEP_NAMES = (tools_module.SearchDocs.label, tools_module.ReadDoc.label)
 # A real read, anchor and all — the profile's own example of one.
-STEP_PATH = PROFILE.identity.path_example
+# A section TITLE, which is what a read step shows — never the corpus path. The row
+# resolves the id it is given to `Chunk.label` before painting it, because a path is
+# this repository's name for a file rather than the documentation's and it was reported
+# on sight: "docs/allocations.md shouldn't be disclosed in this way". Modelled as a
+# title here so the width this measures is the width the app draws; the old value was
+# `PROFILE.identity.path_example`, which is shorter than a real label and would have
+# under-measured the row.
+STEP_PATH = "Allocations and Service Units FAQ — Service Units (SUs)"
 # And the widest line the block can hold, which is where `turn.shown` clips. Past that
 # a value's own length stops mattering and short of it every length is narrower, so
 # this is the exact worst case rather than a guess at one. `x` in a monospace face is

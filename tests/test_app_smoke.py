@@ -813,15 +813,40 @@ class TestStatusBlock:
             module.VIEW, {"name": tools.SEARCH_DOCS, "input": {"query": "gpu jobs"}}
         ) == ("search", "gpu jobs")
 
-    def test_a_read_shows_the_path_and_the_anchor(self, monkeypatch):
-        """The anchor especially: it is the difference between a page and the section
-        of it this turn actually opened."""
+    def test_a_read_shows_the_section_title_and_never_the_path(self, monkeypatch):
+        """`docs/allocations.md#...` is this repository's name for a file — the corpus
+        layout, not the documentation — and it reached the page: "docs/allocations.md
+        shouldn't be disclosed in this way". It is resolved to the section's own title,
+        which is the same phrase the Sources strip under the answer already shows, so
+        the row discloses nothing the citation does not."""
         module = self.app(monkeypatch)
         name, detail = module.turn.call_step(
             module.VIEW,
-            {"name": tools.READ_DOC, "input": {"path": "docs/storage/main.md#quotas"}},
+            {"name": tools.READ_DOC, "input": {"path": "docs/allocations.md#storage"}},
         )
-        assert (name, detail) == ("read", "docs/storage/main.md#quotas")
+        assert name == "read"
+        assert detail == "Allocations and Service Units FAQ — Storage"
+        assert "docs/" not in detail and ".md" not in detail
+
+    def test_a_whole_page_read_shows_the_page_title(self, monkeypatch):
+        """A read with no anchor is a legitimate call and has no chunk id — `chunk()`
+        keys on `{source}/{path}#{anchor}` — but the page still has a title, so it
+        still has a reader-facing name. Without the fallback every page-level read drew
+        `read` and nothing at all."""
+        module = self.app(monkeypatch)
+        assert module.turn.call_step(
+            module.VIEW,
+            {"name": tools.READ_DOC, "input": {"path": "docs/slurm/sbatch.md"}},
+        ) == ("read", "Batch jobs")
+
+    def test_a_path_that_resolves_to_nothing_shows_nothing(self, monkeypatch):
+        """Not a fallback to the string. A model that invented a path has told the
+        reader nothing, and printing the invention is the disclosure itself."""
+        module = self.app(monkeypatch)
+        assert module.turn.call_step(
+            module.VIEW,
+            {"name": tools.READ_DOC, "input": {"path": "docs/not-a-real-file.md#nope"}},
+        ) == ("read", "")
 
     def test_the_name_is_the_one_an_answer_would_use(self, monkeypatch):
         """`sage.redact` swaps these words into an answer that names a tool. The block
@@ -1013,11 +1038,21 @@ class TestStatusBlock:
 
     # --- and the whole thing, driven -------------------------------------
 
+    # A REAL section id from the shipped corpus, not the synthetic one the turn-loop
+    # tests share. It is what makes the row's resolution exercised rather than
+    # asserted: an id that resolves to nothing would let the row fall back to the raw
+    # path and still pass, which is the disclosure `Tool.argument_is_section` exists
+    # to stop.
+    REAL_READ = [
+        event(tool_calls=[
+            tool_call(0, "c2", "read_doc", '{"path":"docs/allocations.md#storage"}')])
+    ]
+
     def test_a_real_turn_shows_what_it_searched_and_what_it_read(self, monkeypatch):
         """The wiring. Every test above holds one piece of this in isolation, and a
         call site that stopped calling `begin` would leave all of them passing while
         the reader watched one unchanging line again."""
-        client = ScriptedProvider([self.SEARCH, self.READ, self.ANSWER])
+        client = ScriptedProvider([self.SEARCH, self.REAL_READ, self.ANSWER])
         stub, _module = run_app(monkeypatch, client=client, session={
             "messages": [{"role": "user", "text": "what is my storage quota",
                           "attachments": []}],
@@ -1025,12 +1060,15 @@ class TestStatusBlock:
         })
         drawn = [html for html in stub.markdown_html if "status-" in html]
         assert any('class="status-arg">quota<' in html for html in drawn)
-        assert any('class="status-arg">docs/storage/main.md#quotas<' in html
-                   for html in drawn)
+        assert any('class="status-arg">Allocations and Service Units FAQ — Storage<'
+                   in html for html in drawn)
+        # And no corpus path anywhere on the page while the turn runs.
+        assert not any("docs/allocations.md" in html for html in drawn)
         # Two calls, in the order they were made, on lines of their own.
         widest = max(drawn, key=lambda html: html.count("status-step"))
         assert widest.count('class="status-step"') == 2
-        assert widest.index(">quota<") < widest.index(">docs/storage/main.md#quotas<")
+        assert widest.index(">quota<") < widest.index(
+            ">Allocations and Service Units FAQ — Storage<")
         # And it folded when the answer began.
         assert any(html.startswith("<details") and "2 steps" in html for html in drawn)
 

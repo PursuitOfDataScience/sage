@@ -2314,6 +2314,52 @@ body[data-sage-dropping] .stChatInput > div {
 }
 .status-done .status-block { margin: 0.2rem 0 0; }
 
+/* ===== AND THE WHOLE BLOCK IS QUIETER THAN THE ANSWER =====
+ *
+ * It shipped with no colour of its own at all, so every line in it inherited the
+ * answer's body colour and the two read as one thing: the steps looked like the first
+ * lines of the reply rather than an account of how the reply was got. Reported as
+ * exactly that — "the cot should have different colors (maybe greyish) and we need to
+ * deliberately differentiate it from the answer. currently, there is no difference."
+ *
+ * Two devices, both cheap. The greys this app already uses for its quiet text, so the
+ * block recedes without inventing a palette: `--text-secondary` for the verb, which is
+ * the word a reader scans for, and `--text-muted` for the tick, the argument and the
+ * time. Both clear AA as text — 4.83:1 for the muted one on white, which is why the
+ * token's own comment forbids putting opacity on top of it, and `render_check.py`
+ * holds every one of these selectors against a 4.5 floor.
+ *
+ * And a hairline down the left, so it is an aside rather than a paragraph. The answer
+ * begins at the column's edge; this is indented past a rule, which is the oldest
+ * signal in print for "this is about the text, not part of it". `--chip-border` rather
+ * than anything brand-coloured: a maroon rule here would make the block louder than
+ * the answer, which is the opposite of the ask.
+ *
+ * `.status-row` — the bare "Thinking" line a turn opens with, before any tool has been
+ * called — takes the rule too. It is never on screen at the same time as the steps, it
+ * is what they replace, and without it the text would shift 12px sideways the moment
+ * the first step landed. */
+.status-row,
+.status-block,
+.status-done {
+    color: var(--text-secondary);
+    border-left: 2px solid var(--chip-border);
+    padding-left: 10px;
+}
+
+/* The nested one, inside the folded `<details>`, is already inside a ruled box. Two
+ * rules 10px apart reads as a mistake, which it would be. */
+.status-done .status-block {
+    border-left: none;
+    padding-left: 0;
+}
+
+.status-mark,
+.status-arg,
+.status-time { color: var(--text-muted); }
+
+.status-summary { color: var(--text-secondary); }
+
 /* ===== NOTICE (e.g. provider failover) ===== */
 .notice {
     background: var(--chip-bg);

@@ -131,6 +131,29 @@ def call_step(view: View, call: dict) -> tuple[str, str]:
     arguments = call.get("input")
     key = view.public_arguments.get(name, "")
     value = arguments.get(key) if key and isinstance(arguments, dict) else None
+    if name in view.section_arguments:
+        # A section id is this repository's name for a file, not the documentation's.
+        # `docs/allocations.md#how-do-i-check-...` reached the page and was reported
+        # immediately — "docs/allocations.md shouldn't be disclosed in this way" — and
+        # it is the only place in the app where one did: the Sources strip resolves
+        # every id to `Chunk.label` first, and `links.fix_links` does it to the paths a
+        # model writes into an answer.
+        #
+        # So it is resolved to the section's own title, which is the same fact in the
+        # reader's terms. An id that does not resolve shows nothing rather than falling
+        # back to the string: a model that invented a path has told the reader nothing,
+        # and printing the invention is the disclosure this is here to prevent.
+        wanted = str(value or "")
+        found = view.corpus.chunk(wanted)
+        if found is not None:
+            value = found.label
+        else:
+            # A read with no anchor is a whole page, which is a legitimate call and has
+            # no chunk id — `Corpus.chunk` keys on `{source}/{path}#{anchor}`. The page
+            # still has a title, so it still has a reader-facing name. Without this the
+            # row said `read` and nothing at all for every page-level read.
+            page = view.corpus.document(wanted.split("#", 1)[0])
+            value = page.title if page is not None else ""
     return view.public_names.get(name) or view.copy.status_working, shown(value)
 
 

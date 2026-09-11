@@ -196,6 +196,12 @@ def _stash() -> None:
     conversation, and the list never fills with blanks, because the blank you are
     leaving goes as you leave it. (A reader pressing it twice on an empty chat sees no
     change, and there is none to see — both states are an empty conversation.)
+
+    This prunes on "has no messages", which is the right question. What made a chat the
+    reader was USING disappear was `abandon_turn` answering it wrongly: it dropped the
+    unanswered question, so a conversation that had been asked in looked identical to
+    one that never had. That is fixed where it was wrong rather than here — see
+    `abandon_turn`.
     """
     for index, record in enumerate(st.session_state.chats):
         if record["id"] != st.session_state.chat_id:
@@ -315,10 +321,23 @@ def abandon_turn(model_key: str, names: dict[str, str] | None = None) -> None:
     question with the bare word `Stopped` under it and no answer — reported with a
     screenshot of exactly that, and "this is certainly a bug".
 
-    So a turn that arrived empty is dropped whole, the question with it, and the
-    conversation is left as it was before it was asked. Nothing half-done, and — because
-    `_stash` drops a conversation with no messages — no empty chat left in the panel
-    either, which is where that screenshot's spare `Nothing asked yet` row came from.
+    So a turn that arrived empty leaves the QUESTION and appends nothing. That is the
+    one state all three reports about this path can hold at once:
+
+    * no bare `Stopped` under a question nobody stopped — nothing is appended, so there
+      is no empty assistant message to carry that word;
+    * no spare `Nothing asked yet` row in the panel — the conversation still has the
+      question in it, so it is not a blank and `_stash` has nothing to prune, which is
+      where that screenshot's extra row came from;
+    * and the conversation does not VANISH, which is what dropping the question caused.
+      Open a new chat, ask something, switch away before the answer starts: the question
+      went, `_stash` saw an empty conversation and pruned it, and the chat the reader had
+      just made and just typed into disappeared out of the list behind them — "the new
+      chat session will disappear. this is very confusing and annoying."
+
+    What the reader comes back to is their own question with nothing under it and a live
+    composer, in a chat the panel names after that question. Nothing claims to have
+    happened that did not.
     """
     if not st.session_state.processing:
         return
@@ -336,9 +355,7 @@ def abandon_turn(model_key: str, names: dict[str, str] | None = None) -> None:
     st.session_state.error = None
     st.session_state.error_detail = ""
     st.session_state.notice = ""
-    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-        st.session_state.messages.pop()
-    logger.info("Turn abandoned before it produced anything; the question goes with it")
+    logger.info("Turn abandoned before it produced anything; the question is kept")
 
 
 def new_chat() -> None:
