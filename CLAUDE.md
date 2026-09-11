@@ -158,21 +158,39 @@ failure mode if they drift breaks nothing and fails no bound: the reader picks d
 gets most of it, with one value still light on a near-black page.
 
 **The composer is TWO ROWS: the text, and a band of controls under it.** The paperclip,
-the model picker and the send button are absolutely positioned inside `--composer-band`,
+the Think pill and the send button are absolutely positioned inside `--composer-band`,
 which the box reserves as `padding-bottom`. That shape is not decoration — a control in
 the text's own row is a control the text runs underneath, which is what the reader
-photographed: a question disappearing behind the model picker. So the rule is that
-**nothing may be positioned in the textarea's row**, and `render_check.py` holds it from
-both sides: every control must be inside the box, level with the others, clear of its
-neighbours, and below the text.
+photographed: a question disappearing behind the control in that corner. So the rule is
+that **nothing may be positioned in the textarea's row**, and `render_check.py` holds it
+from both sides: every control must be inside the box, level with the others, clear of
+its neighbours, and below the text.
 
-Two things about that band are worth not rediscovering. The picker is anchored on the
-**left**, past the paperclip, because its width follows the name in it — and a
-left-anchored control that changes width moves nothing, while a right-anchored one moves
-itself. And its width follows the name rather than the longest name the lineup can
-offer, which is what it used to do to stop it resizing on selection: on the deployment
-that made a ~210px button to show the word "enigma", and it and the send button took a
-quarter of the box between them.
+**That corner has held three controls and the names of things around it are historical.**
+A 🗑️ that cleared the conversation, then the model picker, and now the Think pill.
+`.st-key-composer-strip`, `--pick-right`, `--pick-bottom` and the harness's `PICKER`
+selector all keep the picker's names on purpose: renaming them would touch a dozen
+stylesheet rules, the layout harness's fixture and its selector table to say nothing new.
+
+Right-anchoring is what outlived all three. Whatever sits there is pinned by its RIGHT
+edge, at a position app.js measures from Streamlit's own send button, so it grows leftward
+into empty band instead of pushing the send button around. The picker needed a width
+pinned to the longest model id the provider served, because its label changed with the
+selection — on the deployment that was a ~210px button to show one short word, and it and
+the send button took a quarter of the box between them. The pill needs no width rule at
+all: its label is one word from the profile and it is the SAME word in both states, so
+the box never changes size. **A label that grows on click moves the control out from
+under the cursor that just pressed it** — which is why the on state is a fill, not a
+different word.
+
+**The pill's state is carried by the container key** (`st-key-think-on`), not by the
+`aria-pressed` app.js writes. That was the first version and the paint was permanently one
+frame behind: `sync()` runs off a mutation observer, so the pass that set the attribute had
+read the state from before the click and no later pass came to correct it — measured in the
+running app, `data-on="1"` beside `aria-pressed="false"` five seconds later. Streamlit puts
+a container key on the node in the same run that changed it, which is why `sidebar._row`
+carries which conversation is open the same way. app.js still sets `aria-pressed`, because
+a screen reader needs telling and a frame costs nothing there.
 
 **Nothing of Streamlit's may appear in the theme toggle's corner, and one thing did.**
 Its running indicator (`[data-testid="stStatusWidget"]`) mounts and unmounts around every

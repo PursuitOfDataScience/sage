@@ -189,7 +189,7 @@ env -u MISTRAL_API_KEY python tools/agent_bench.py --models all --limit 8 --nega
 ```
 
 **One provider per run.** Unsetting the paid key means a benchmark cannot spend money,
-and it keeps the lineup to one row of the picker.
+and it keeps the lineup to one model.
 
 It is no longer what stops a row being scored on another model's answer, though: the app
 walks its whole lineup when a model fails in a way another model might not, so

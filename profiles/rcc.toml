@@ -354,6 +354,13 @@ models = [
 deny = [
     "deepseek-v4-flash-free",
     "muse-spark-1.2-contributor-free",
+    # Added by hand, and the way it got here is the point. `tools/lineup_check.py` had
+    # already found it and proposed it on the `lineup/auto` branch; that PR was closed
+    # unmerged on the reasoning that the deployment's default is the OpenRouter router
+    # now, so the Zen lineup is not what answers. It is what answers on a FAILOVER, and
+    # within the hour a reader got `HTTP 500 Internal server error` from this exact
+    # model on an error card. The automation was right and the close was wrong.
+    "muse-spark-1.3-contributor-free",
     "nemotron-3.5-lightning-free",
     "nemotron-3-ultra-free",
 ]
