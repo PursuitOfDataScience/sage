@@ -624,6 +624,24 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 
 .st-key-model-list button p { font-size: 0.82rem !important; margin: 0 !important; }
 
+/* The same wrapper-flattening the chat list needs, and for the same reason: Streamlit
+ * nests the label in two `display: flex; justify-content: center` boxes that fill the
+ * button's content box, so `justify-content: flex-start` on the button above has
+ * nothing left to move and the rule read as done while the panel rendered centred.
+ *
+ * What that cost is the column: measured at a 1440 viewport, four options in a 272px
+ * button had their labels start at x=1133, 1134, 1145 and 1151 — 18px of rag — so the
+ * ●/○ markers formed no column and finding the selected one meant reading every row.
+ * Left-aligned they all start at the button's padding edge and the filled dot is one
+ * glance. Structural, not by the emotion hash, and it fails back to centred. */
+.st-key-model-list button > div,
+.st-key-model-list button > div > span {
+    display: flex !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+    min-width: 0 !important;
+}
+
 .st-key-model-list button:hover {
     background: var(--control-bg-hover) !important;
     border-color: var(--brand-line) !important;
@@ -719,8 +737,8 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
  * `display: flex; justify-content: center; width: 100%`, which is what centres the
  * text of a full-width button — so `justify-content` on the button alone does nothing,
  * and a list of them reads as a stack of headings rather than as a list. (The model
- * picker's panel has the same rule and the same non-effect; it is left alone, because
- * how that control looks is not what was asked for here.)
+ * picker's panel had the same rule and the same non-effect, and was left alone until
+ * it was asked about; it now carries a copy of this rule beside its own styling.)
  *
  * Addressed structurally rather than by the class they carry, which is an emotion build
  * hash and would be a rule against a string that changes on a Streamlit upgrade.
@@ -1685,8 +1703,21 @@ body[data-sage-dropping] .stChatInput > div {
  * `!important` because the resets at the top of this file zero the padding of an
  * `.element-container`, and the keyed container is one — the harness caught that
  * immediately, with the button back over the text and the rule apparently doing
- * nothing at all. */
-[class*="st-key-answer-"] {
+ * nothing at all.
+ *
+ * `st-key-live-answer` is the SAME gutter around the answer while it is still
+ * streaming, and it is here so that nothing moves when the turn ends. The streaming
+ * answer had no keyed container at all, so it drew at the full content width and then
+ * narrowed by exactly this padding the moment the stored one replaced it: 660px to
+ * 624px at a 1440 viewport, every line re-wrapping and every code block shrinking, in
+ * the same frame as the final scroll to the bottom.
+ *
+ * A separate name rather than another `answer-…`, because app.js uses
+ * `[class*="st-key-answer-"]` as its test for a FINISHED answer in three places — the
+ * copy button, the quote-a-passage control, and the tail measurement. Only the gutter
+ * is wanted during a turn, so only this rule names both. */
+[class*="st-key-answer-"],
+[class*="st-key-live-answer"] {
     margin: 0 0 clamp(0.5rem, 1.2vw, 0.85rem) 0;
     padding-right: 2.25rem !important;
 }
@@ -1724,9 +1755,57 @@ body[data-sage-dropping] .stChatInput > div {
     overflow: hidden !important;
 }
 
-.stChatMessage h1 { font-size: 1.35rem !important; line-height: 1.35 !important; }
-.stChatMessage h2 { font-size: 1.18rem !important; }
-.stChatMessage h3 { font-size: 1.04rem !important; }
+/* The heading scale inside an answer.
+ *
+ * It used to be 1.35 / 1.18 / 1.04rem against a 16px body — so an `h3` drew at
+ * 16.64px, six tenths of a pixel larger than the paragraph under it, and an `h2` at
+ * 18.88px. Both rendered as a bold line of body text, which is indistinguishable from
+ * `**bold**`, and the answers this app gives are section-shaped: the RCC guide's own
+ * pages are headed, so a model summarising three of them emits two or three headings
+ * and none of them read as structure.
+ *
+ * 1.5 / 1.28 / 1.12rem is 24 / 20.5 / 17.9px — each level clearly apart from the next
+ * and from the body, on the same type ramp the welcome title already uses. Weight goes
+ * to 700 for the same reason: at these sizes 600 against a 400 body is a smaller step
+ * than the size change, and an `h3` needs both to carry.
+ *
+ * The margins are the other half. Streamlit gave these `margin: 0` and a 16px
+ * `padding-top`, so a heading sat 16px below the paragraph above and hard against the
+ * one below — bound to the wrong side. A heading belongs to what FOLLOWS it, so the
+ * space goes above: 1.35rem up, 0.4rem down.
+ *
+ * No `:first-child` exemption, though one was written and it silently zeroed every
+ * heading on the page. Streamlit wraps each heading in a
+ * `stHeadingWithActionElements` div of its own — the heading is that div's ONLY child,
+ * so `h2:first-child` matches all of them, not the one that opens an answer. What the
+ * exemption was for is an answer whose very first line is a heading, which then
+ * carries 21px of space above it. That is visible and harmless, and it is a shape no
+ * answer here has actually had: the models write a lead sentence first.
+ *
+ * `.stChatMessage p { margin-top: 0 }` further up is what makes the 0.4rem the whole
+ * gap rather than one of two stacked ones, and the `-1rem` note on
+ * `stMarkdownContainer` does not apply here: an answer is ONE markdown container, so
+ * these margins are between siblings inside it, not across containers. */
+.stChatMessage h1 {
+    font-size: 1.5rem !important;
+    line-height: 1.3 !important;
+    font-weight: 700 !important;
+    margin: 1.35rem 0 0.4rem !important;
+}
+
+.stChatMessage h2 {
+    font-size: 1.28rem !important;
+    line-height: 1.32 !important;
+    font-weight: 700 !important;
+    margin: 1.35rem 0 0.4rem !important;
+}
+
+.stChatMessage h3 {
+    font-size: 1.12rem !important;
+    line-height: 1.35 !important;
+    font-weight: 700 !important;
+    margin: 1.2rem 0 0.35rem !important;
+}
 
 .stChatMessage code:not(pre code) {
     background: var(--code-inline-bg) !important;
@@ -1762,6 +1841,22 @@ body[data-sage-dropping] .stChatInput > div {
     max-width: 100% !important;
 }
 
+/* No font-size rule here, and the reason is worth keeping: `getComputedStyle` on the
+ * `pre` reports 12px, which reads as code being four pixels smaller than the 16px body
+ * and two smaller than the inline chips. It is not. Streamlit puts an absolute 14px on
+ * the `code` element inside, and the highlighter's spans inherit from there, so the
+ * glyphs a reader actually sees are 14px — the same size as `code:not(pre code)` draws
+ * (`0.88em` of 16px = 14.08px). The `pre` box's own size styles nothing visible.
+ * Measure the `code`, not the `pre`.
+ *
+ * ⚠️ `stCodeBlock` does not exist on Streamlit 1.54 and these two rules match nothing.
+ * Counted in the running app: `div[data-testid="stCodeBlock"]` is 0 elements, and the
+ * chain over a code block's `pre` is `stCode` inside `stMarkdownPre`. So this is the
+ * silent-failure the note at the top of this file warns about, already happened — the
+ * width and overflow these rules mean to set are coming from somewhere else or not at
+ * all. Left as found rather than repointed, because making them live would change how
+ * code blocks lay out and nobody asked for that; whoever does ask should check what a
+ * long line does at a 500px viewport first. */
 .stChatMessage div[data-testid="stCodeBlock"] pre {
     max-width: 100% !important;
     overflow-x: auto !important;
@@ -1958,6 +2053,43 @@ body[data-sage-dropping] .stChatInput > div {
 
 .stChatMessage .stMarkdownColoredText a:hover {
     text-decoration: underline;
+}
+
+/* A documentation link inside an answer's prose.
+ *
+ * There was no rule here at all, so these inherited Streamlit's own link colour:
+ * #0054a3 on the light page and #3d9df3 on the dark one. Every other accent in this
+ * app is the maroon — the bubble, the send button, the focus ring, the inline code —
+ * and both strips under an answer deliberately paint their links in the greys
+ * (`--text-secondary`, `--text-muted`), so the blue was the only one on the page, on
+ * the most frequently clicked thing in an answer.
+ *
+ * `--brand-text` rather than a new token: it is already written for both themes
+ * (#800000 / #f0a8ac) and both are well clear of AA as text — 10.9:1 on white,
+ * 9.9:1 on the near-black. A new pair would be two more values to keep identical
+ * across the two dark blocks for no gain.
+ *
+ * The underline stays. Colour alone is not a link, and on a page where maroon is also
+ * the brand's decorative colour it is less of one than usual.
+ *
+ * Hover thickens that underline and does NOT change the colour. `--brand-deep` was the
+ * obvious second maroon and it is the one token here that is not written twice: it
+ * stays #a5122a under both dark blocks, which is 2.5:1 on #0e1117 — so hovering a link
+ * in dark mode would have dimmed it almost to the background. A thicker rule reads in
+ * both themes and needs no token that does not exist.
+ *
+ * Scoped to `.stChatMessage`, so the Sources and Related strips — siblings of the
+ * message, not children — keep their own greys, and the composer is untouched. The
+ * citation marker's rule above is one class more specific, so the numbers stay
+ * `--text-muted` whatever order these two are written in. */
+.stChatMessage a {
+    color: var(--brand-text);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}
+
+.stChatMessage a:hover {
+    text-decoration-thickness: 2px;
 }
 
 .source-kind {
