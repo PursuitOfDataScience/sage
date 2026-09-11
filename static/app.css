@@ -1117,8 +1117,20 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     transition: border-color var(--transition), box-shadow var(--transition);
 }
 
+/* The same red as the send arrow, which is `--brand` and is not overridden per theme —
+ * so the box you are typing in and the button that sends what you typed are one colour.
+ * It was `--brand-line`, which the dark palette lightens to #e08a94 so that a 1px line
+ * stays visible on a near-black page; against the arrow's deep red that read as a
+ * different colour altogether: "the textbox borders don't have the same red color, it's
+ * kind of like orange or something".
+ *
+ * The reason `--brand-line` exists still stands — #800000 on #0e1117 is 1.73:1, which is
+ * nothing as a hairline — so this is deliberately not a hairline. It is the 2px border
+ * the box already had, and the glow below carries the rest of the focus cue. Asked for
+ * directly; the arrow's colour is the one the reader likes and the border now matches it
+ * rather than the other way round. */
 .stChatInput > div:focus-within {
-    border-color: var(--brand-line) !important;
+    border-color: var(--brand) !important;
     box-shadow: 0 4px 20px rgba(128, 0, 0, 0.25) !important;
 }
 
