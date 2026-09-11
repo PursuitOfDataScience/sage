@@ -35,7 +35,7 @@ class FakeProvider:
     def models(self):
         return []
 
-    def stream(self, model, messages, tools):
+    def stream(self, model, messages, tools, thinking=False):
         self.calls += 1
         self.kwargs = {"model": model, "messages": messages, "tools": tools}
         if self.calls <= self.failures:

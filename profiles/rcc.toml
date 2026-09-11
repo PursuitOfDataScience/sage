@@ -221,6 +221,18 @@ models_env = "SAGE_OPENROUTER_MODELS"
 # router sailed through.
 free_marks = ["openrouter/free"]
 free_marks_env = "SAGE_OPENROUTER_FREE_MARKS"
+# This provider takes OpenRouter's `reasoning` request parameter, which is what the
+# Think toggle in the corner of the input box sends. Declared here rather than assumed
+# from `kind`, because `kind = "openai"` also covers OpenCode Zen, which has never
+# heard of the field — and it is what decides whether the toggle is drawn at all.
+#
+# Checked against `GET /models` rather than taken on trust: `supported_parameters` for
+# `openrouter/free` lists `reasoning`, and so does every one of the 19 `:free` models
+# it routes to. `reasoning_effort` — the low/medium/high dial — is on only 6 of those
+# 19, which is why the control is a switch: the router serves a different model every
+# turn, so an effort setting would be honoured on about a third of them with nothing
+# on screen able to say which.
+reasoning = true
 # What the picker calls it, because the served id is not a name — it is the billing
 # arrangement, and a reader choosing a row is not choosing a billing arrangement. The id
 # is untouched everywhere it counts: it is what goes upstream, what the feedback log and
