@@ -26,10 +26,10 @@ import html
 import streamlit as st
 
 from .state import (
+    abandon_turn,
     active_messages,
     chat_title,
     delete_chat,
-    finish_stopped_turn,
     new_chat,
     open_chat,
 )
@@ -47,16 +47,17 @@ def leave(view: View) -> None:
     the current session is generating the answer, which is problematic", and the same
     for switching.
 
-    So a click ends the turn the way the stop button does. `finish_stopped_turn` commits
-    whatever text had arrived to the conversation being left, marked `stopped`, so the
-    transcript shows a half answer with a note saying so rather than a question with
-    nothing under it. It ignores a call with no turn running, so this is a no-op the
-    rest of the time.
+    So a click ends the turn. `abandon_turn` keeps whatever text had arrived, marked
+    `stopped`, in the conversation being left — and drops the whole turn, question
+    included, when nothing had arrived at all. That second case is what a reader found
+    when they started a new chat a moment after asking: the old conversation held their
+    question with the bare word `Stopped` under it and no answer. It ignores a call with
+    no turn running, so this is a no-op the rest of the time.
 
     Called BEFORE the switch, because it appends to `messages` — the live list — and
     the switch is what stashes that list into the record it belongs to.
     """
-    finish_stopped_turn(view.model.key, view.public_names)
+    abandon_turn(view.model.key, view.public_names)
 
 
 def render(view: View) -> None:

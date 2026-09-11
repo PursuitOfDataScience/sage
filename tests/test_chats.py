@@ -121,22 +121,47 @@ class TestSwitchingChats:
             "kept"
         ]
 
-    def test_new_chat_on_an_empty_chat_does_nothing(self, monkeypatch):
-        """Not even a record. Ten presses would otherwise leave ten identical rows to
-        scroll past, and an empty chat is already what the button offers — so the
-        button says so by being inert, and the function refuses the case as well."""
+    def test_new_chat_always_opens_one(self, monkeypatch):
+        """It used to refuse on an empty conversation, so that ten presses could not
+        leave ten identical blank rows — and what that read as was a dead button: "when
+        clicking +new chat button, it doesn't work until a new prompt is entered in that
+        session". It always opens one now, and `_stash` drops the blank being left, so
+        the list still cannot fill up."""
         stub, _ = run_app(monkeypatch)
-        # Drawn and live, though. Hiding it on an empty conversation meant pressing it
-        # made it disappear — the chat it opens has no messages by definition — which
-        # is a control that vanishes as you use it.
-        assert "New chat" in stub.button_labels["new-chat"]
-        assert stub.disabled["new-chat"] is False
         state = _state()
-        opened = stub.session_state.chat_id
-        state.new_chat()            # no Rerun raised
-        state.new_chat()
+        first = stub.session_state.chat_id
+
+        with pytest.raises(stub_streamlit.Rerun):
+            state.new_chat()
+        assert stub.session_state.chat_id != first
+        assert len(stub.session_state.chats) == 1     # the blank one went with it
+
+        second = stub.session_state.chat_id
+        with pytest.raises(stub_streamlit.Rerun):
+            state.new_chat()
+        assert stub.session_state.chat_id != second
         assert len(stub.session_state.chats) == 1
-        assert stub.session_state.chat_id == opened
+
+    def test_leaving_an_empty_conversation_drops_it(self, monkeypatch):
+        """A conversation with nothing asked in it is not one, and a panel that keeps
+        them fills with `Nothing asked yet` rows — one of which is visible in the
+        reader's screenshot beside the chat they were actually in."""
+        stub, _ = run_app(
+            monkeypatch,
+            session={"messages": [{"role": "user", "text": "asked", "attachments": []}]},
+        )
+        state = _state()
+        with pytest.raises(stub_streamlit.Rerun):
+            state.new_chat()
+        assert len(stub.session_state.chats) == 2     # the asked one, and the new blank
+        blank = stub.session_state.chat_id
+
+        # Going back to the one with a question in it drops the blank.
+        target = next(r["id"] for r in stub.session_state.chats if r["id"] != blank)
+        with pytest.raises(stub_streamlit.Rerun):
+            state.open_chat(target)
+        assert [r["id"] for r in stub.session_state.chats] == [target]
+        assert [m["text"] for m in stub.session_state.messages] == ["asked"]
 
     def test_opening_a_chat_swaps_the_conversation_both_ways(self, monkeypatch):
         stub, _ = run_app(
@@ -323,6 +348,35 @@ class TestTheSidebar:
         assert len(live) == 5, live          # New chat, plus a name and a ✕ per row
         for key in live:
             assert stub.disabled[key] is False, key
+
+    def test_abandoning_a_turn_that_produced_nothing_leaves_nothing(self, monkeypatch):
+        """The bug in the reader's third screenshot: a conversation holding their
+        question with the bare word `Stopped` under it and no answer.
+
+        `finish_stopped_turn` appends that empty message on purpose — a reader who
+        pressed Stop has to see that something happened. A reader who has walked off to
+        another chat is not looking at that screen, so the turn is dropped whole, the
+        question with it, and the conversation is left as it was before it was asked.
+        """
+        stub, module = run_app(
+            monkeypatch,
+            session={"messages": [{"role": "user", "text": "the question",
+                                   "attachments": []}]},
+        )
+        from sage.ui import sidebar  # noqa: PLC0415
+
+        stub.session_state.processing = True
+        stub.session_state.partial = []          # not one token arrived
+        sidebar.leave(module.VIEW)
+
+        assert stub.session_state.messages == []
+        assert stub.session_state.processing is False
+        # And with the conversation now empty, leaving it drops it — which is where the
+        # spare `Nothing asked yet` row in that screenshot came from.
+        state = _state()
+        with pytest.raises(stub_streamlit.Rerun):
+            state.new_chat()
+        assert len(stub.session_state.chats) == 1
 
     def test_leaving_mid_answer_keeps_what_had_arrived(self, monkeypatch):
         """The half-written answer goes to the conversation it belongs to, marked

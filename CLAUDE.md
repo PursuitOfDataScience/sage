@@ -157,11 +157,40 @@ identical, token for token, and **a token added to one must be added to the othe
 failure mode if they drift breaks nothing and fails no bound: the reader picks dark and
 gets most of it, with one value still light on a near-black page.
 
+**The composer is TWO ROWS: the text, and a band of controls under it.** The paperclip,
+the model picker and the send button are absolutely positioned inside `--composer-band`,
+which the box reserves as `padding-bottom`. That shape is not decoration — a control in
+the text's own row is a control the text runs underneath, which is what the reader
+photographed: a question disappearing behind the model picker. So the rule is that
+**nothing may be positioned in the textarea's row**, and `render_check.py` holds it from
+both sides: every control must be inside the box, level with the others, clear of its
+neighbours, and below the text.
+
+Two things about that band are worth not rediscovering. The picker is anchored on the
+**left**, past the paperclip, because its width follows the name in it — and a
+left-anchored control that changes width moves nothing, while a right-anchored one moves
+itself. And its width follows the name rather than the longest name the lineup can
+offer, which is what it used to do to stop it resizing on selection: on the deployment
+that made a ~210px button to show the word "enigma", and it and the send button took a
+quarter of the box between them.
+
+**Every fallback position in the composer is computed, never a flat number.** The box is
+centred and `--input-max` is `min(880px, 92vw)`, so anything measured from a window edge
+depends on the viewport width; a flat fallback was 322px wrong at 1440. Fallbacks only
+render for one frame — the frame before app.js has measured — and the harness's
+`unmeasured` state is the only thing that looks at them. It has caught this twice, at
+294 and 360 renders.
+
 **A click on any widget aborts a streaming turn, so a control that must work during one
 has two honest options and only two:** be client-side and never reach the server (the
 theme toggle, the queued question), or end the turn well. The sidebar takes the second —
 `sidebar.leave` commits whatever text had arrived to the conversation being left, marked
-`stopped`, before the switch stashes that list. Refusing the click was the third option
+`stopped`, before the switch stashes that list — and drops the whole turn, question
+included, when NOTHING had arrived. That second case is `abandon_turn` rather than
+`finish_stopped_turn`, and the difference matters: the stop button appends an empty
+assistant message on purpose, so a reader who pressed Stop sees that something happened,
+but a reader who walked off to another chat comes back to a question with the bare word
+`Stopped` under it and no answer. Reported, with a screenshot, as "certainly a bug". Refusing the click was the third option
 and it was wrong: the panel was `disabled` for the length of every turn, and a reader
 could not start or open a chat exactly when they wanted to. **`leave` must be called
 before the state change**, because `_leave_conversation` empties `partial`.

@@ -1229,7 +1229,7 @@ SELECTORS = [
     ".stChatMessage code", '[data-testid="stBottomBlockContainer"]',
     ANSWER_COPY, ANSWER_TEXT, ANSWER_TABLE, ANSWER_MARKER,
     STRIP, INPUT, INPUT_BOX, SEND, STOP, EDIT, "last:" + EDIT, QCOPY, EDITOR,
-    CHIPS, ".st-key-attachments button",
+    CHIPS, ".st-key-attachments button", "#paperclip-btn",
     # A question waiting its turn: the block, the bubble, its label and the ✕ that
     # takes it back. All four, because the row is built by app.js rather than by a
     # stylesheet rule anybody reads, and a piece of it going missing would show up
@@ -1303,6 +1303,16 @@ MAX_TAIL_GAP = 64
 # Was 20, from a replica that gave the box no vertical padding at all. Every shape
 # measured 12px under the truth, so this is the same margin over a healthy box (22px
 # in the worst shape) and the same catch on the 46px the send button took.
+# The band of controls under the text, measured from the bottom of the textarea to the
+# bottom of the box. `--composer-band` is 46px and the textarea has 4px of padding below
+# its last line, so the drawn figure is around 50; the window either side is for the
+# rounding Streamlit's own wrappers introduce at different widths.
+MIN_CONTROL_BAND = 38
+MAX_CONTROL_BAND = 64
+# How far out of line with each other the three controls in that band may be, measured
+# on their bottom edges. They are pinned to the same offset, so anything here is a
+# control that has been given a different size rather than a different position.
+MAX_BAND_SPREAD = 8
 MAX_INPUT_DEAD_SPACE = 32
 # Room allowed between the attachment chips and the top of the input box. They are
 # pinned 0.35rem above it; this is that plus the bar's own top padding and rounding.
@@ -2663,12 +2673,20 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
                 f"{where}: the model picker is outside the input box — "
                 + ", ".join(out)
             )
-    # And it must not cover the send button it sits beside.
-    send_btn = els.get(SEND)
+    # And it must share the band with the other two controls rather than sit on either.
+    # It is at the band's left end now, past the paperclip, with the send button at the
+    # far end — the arrangement ChatGPT and Claude both use, and the one that stopped
+    # the picker and the arrow fighting for the same corner.
+    send_btn, clip = els.get(SEND), els.get("#paperclip-btn")
     if picker and send_btn and picker["right"] > send_btn["left"] + 1:
         problems.append(
             f"{where}: the model picker overlaps the send button by "
             f"{round(picker['right'] - send_btn['left'])}px"
+        )
+    if picker and clip and picker["left"] < clip["right"] - 1:
+        problems.append(
+            f"{where}: the model picker overlaps the paperclip by "
+            f"{round(clip['right'] - picker['left'])}px"
         )
 
     # The chips belong to the composer, immediately above the box. They used to render
@@ -2689,29 +2707,31 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
                 f"the composer, not of the page)"
             )
 
-    # The paperclip and the first character of the question are one row of one box, so
-    # they have to read as one thing. At 26px apart — the box's 50px inset plus the
-    # textarea's own 24px — they read as two controls that happen to share a border.
-    gap = data.get("cursorGap")
-    if gap is not None and not 0 <= gap <= MAX_CURSOR_GAP:
-        problems.append(
-            f"{where}: the text cursor sits {gap}px from the paperclip "
-            f"(want 0-{MAX_CURSOR_GAP} — they are the same row of the same box)"
-        )
-
-    # Same row, the other axis. Only meaningful on the screens where the box holds one
-    # line: with a paragraph in it the text runs on past the buttons and there is no
-    # single line for them to be level with.
-    if scenario not in TYPED_INPUT:
-        for what, drop in (("paperclip", data.get("clipDrop")),
-                           ("send button", data.get("sendDrop"))):
-            if drop is not None and abs(drop) > MAX_BUTTON_DROP:
-                below = "below" if drop > 0 else "above"
-                problems.append(
-                    f"{where}: the {what} sits {abs(drop)}px {below} the line of text "
-                    f"beside it (want within {MAX_BUTTON_DROP} — they are the same "
-                    f"row of the same box)"
-                )
+    # The composer is two rows: the text, and a band of controls under it. It used to be
+    # one — the text between the paperclip and the send button — and three bounds here
+    # held that: the cursor within 16px of the clip, and each button level with the line
+    # of text beside it. All three are gone, because the thing they described is gone.
+    # The model picker floated into that single row is what took them out: on the
+    # deployment it covered the reader's own question.
+    #
+    # What replaces them is the contract of a band. The three controls are level with
+    # EACH OTHER rather than with the text, they are all inside the box, and none of
+    # them is over the text — which is the property the old arrangement could not have
+    # and the reason for the change.
+    clip_el, send_el = els.get("#paperclip-btn"), els.get(SEND)
+    row = [(name, box_) for name, box_ in
+           (("paperclip", clip_el), ("model picker", picker), ("send button", send_el))
+           if box_ and box_["bottom"] - box_["top"] > 0]
+    if len(row) > 1:
+        floors = [box_["bottom"] for _, box_ in row]
+        spread = round(max(floors) - min(floors))
+        if spread > MAX_BAND_SPREAD:
+            names = ", ".join(name for name, _ in row)
+            problems.append(
+                f"{where}: the controls in the composer's band are {spread}px out of "
+                f"line with each other ({names}; want within {MAX_BAND_SPREAD} — they "
+                f"are one row)"
+            )
 
     # The popover panel must belong to the page it is drawn over. It is portalled to
     # the end of <body>, so it inherits nothing from the app — and when the stylesheet
@@ -2733,27 +2753,30 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
                     f"{where}: the popover panel is {panel_bg} on a light page"
                 )
 
-    # Inside the box: how much of it is neither text nor the room the text sits in.
-    # With the send button in the flow it is a flex item beside the textarea, and once
-    # the text passes one line it wraps onto a row of its own — leaving a band of
-    # nothing between the last line typed and the bottom of the box. Out of the flow,
-    # the box is as tall as its text and this is the padding, nothing more.
+    # Under the text is the band of controls, and it is bounded at both ends: too small
+    # and a control is on the text, too large and the box has a strip of nothing in it.
+    # This used to be "at most 32px of dead space", which was right when the controls
+    # shared the text's row and everything below it was padding.
     box, area = els.get(INPUT_BOX), els.get(INPUT)
     if box and area:
-        under = box["bottom"] - area["bottom"]
-        if under > MAX_INPUT_DEAD_SPACE:
+        under = round(box["bottom"] - area["bottom"])
+        if not MIN_CONTROL_BAND <= under <= MAX_CONTROL_BAND:
             problems.append(
-                f"{where}: {under}px of nothing between the end of the text and the "
-                f"bottom of the input box (want at most {MAX_INPUT_DEAD_SPACE})"
+                f"{where}: {under}px between the end of the text and the bottom of the "
+                f"input box (want {MIN_CONTROL_BAND}-{MAX_CONTROL_BAND} — that space "
+                f"is the band the paperclip, the picker and the send button sit in)"
             )
-    # And the button has to stay off the text it sits over now that it is out of the
-    # flow: an absolute corner is only right if the text stops before it.
-    send = els.get(SEND)
-    if send and area and send["left"] < area["right"] - 1 and area["lines"] > 0:
-        problems.append(
-            f"{where}: the send button overlaps the text by "
-            f"{area['right'] - send['left']}px"
-        )
+    # Nothing in the band may be over the text. This is what the whole two-row layout
+    # is for: the reader's screenshot showed a question running underneath the model
+    # picker, and the send button had the same exposure at every width.
+    for name, ctl in (("send button", send_el), ("model picker", picker),
+                      ("paperclip", clip_el)):
+        if ctl and area and ctl["top"] < area["bottom"] - 1 and area["lines"] > 0:
+            problems.append(
+                f"{where}: the {name} is over the text by "
+                f"{round(area['bottom'] - ctl['top'])}px — a long question would run "
+                f"underneath it"
+            )
 
     # The stop square, checked from both sides.
     #
@@ -2782,14 +2805,14 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
                 "way to call the turn off"
             )
         else:
-            if send:
-                drift = max(abs(stop["right"] - send["right"]),
-                            abs(stop["bottom"] - send["bottom"]))
+            if send_el:
+                drift = max(abs(stop["right"] - send_el["right"]),
+                            abs(stop["bottom"] - send_el["bottom"]))
                 if drift > MAX_SWAP_DRIFT:
                     problems.append(
                         f"{where}: the stop square is {drift}px off the send button's "
                         f"corner (square right/bottom {stop['right']},{stop['bottom']};"
-                        f" arrow {send['right']},{send['bottom']}) — the arrow is "
+                        f" arrow {send_el['right']},{send_el['bottom']}) — the arrow is "
                         "supposed to become the square, not be joined by it"
                     )
             side = min(stop["right"] - stop["left"], stop["bottom"] - stop["top"])
@@ -2798,10 +2821,13 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
                     f"{where}: the stop square's smallest side is {side}px "
                     f"(want at least {MIN_CONTROL_SIDE})"
                 )
-            if area and stop["left"] < area["right"] - 1 and area["lines"] > 0:
+            # Over the text, not merely to the left of it. The square is in the band
+            # under the text now, in the send button's place, so "its left edge is
+            # inside the text's width" is true by design and says nothing.
+            if area and stop["top"] < area["bottom"] - 1 and area["lines"] > 0:
                 problems.append(
                     f"{where}: the stop square overlaps the text by "
-                    f"{area['right'] - stop['left']}px"
+                    f"{round(area['bottom'] - stop['top'])}px"
                 )
     elif stop and stop["right"] - stop["left"] > 0:
         problems.append(
