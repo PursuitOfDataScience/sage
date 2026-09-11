@@ -6,7 +6,7 @@ import html
 
 import streamlit as st
 
-from .. import config, feedback, links
+from .. import config, feedback, links, progress
 from .state import may_start_turn, start_new_turn
 from .view import View
 
@@ -356,10 +356,44 @@ def _evidence(view: View, sources: list[dict]) -> dict[str, str]:
     return found
 
 
+def render_steps(steps: list[dict]) -> None:
+    """What the turn did, folded, above the answer it produced.
+
+    ABOVE the text, which is where the live block already sits — so the answer does
+    not move when the turn ends and the stored version replaces the painted one. That
+    is the same rule the copy button's gutter follows, and for the same reason: a
+    reader begins reading at the moment the turn finishes, and anything that reflows
+    then reflows under their eyes.
+
+    `turn.summary_html` builds the identical markup mid-turn from `Step` objects. This
+    takes the dicts a stored message carries, so the two cannot drift into two designs
+    for one control. Folded by default: the answer is what the reader came for, and
+    this is for the question they only sometimes have.
+    """
+    if not steps:
+        return
+    total = sum(step.get("seconds") or 0.0 for step in steps)
+    st.markdown(
+        progress.summary_html(
+            [
+                progress.Step(
+                    name=str(step.get("name", "")),
+                    detail=str(step.get("detail", "")),
+                    seconds=float(step.get("seconds") or 0.0),
+                )
+                for step in steps
+            ],
+            total,
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def render_assistant(view: View, position: int, message: dict) -> None:
     sources = message.get("sources", [])
     with st.container(key=f"answer-{position}"):
         with st.chat_message("assistant"):
+            render_steps(message.get("steps") or [])
             text = message.get("text", "")
             if text:
                 # Resolve the paths the model wrote, then number them against the

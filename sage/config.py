@@ -98,7 +98,25 @@ REQUEST_RETRIES = _env_int("SAGE_REQUEST_RETRIES", 2, minimum=0)
 # it is the same key CALL_BUDGET is there to protect — set that if the arithmetic
 # matters more than the answer. Set this to 1 to switch failover off entirely, which is
 # what `evals/harness.py` does so a per-model benchmark measures the model it asked.
-MAX_MODEL_ATTEMPTS = _env_int("SAGE_MAX_MODEL_ATTEMPTS", 0, minimum=0)
+# ONE, so a turn asks the model it was given and stops.
+#
+# It was 0, which means "no limit — walk the whole lineup", and the reasoning for that
+# was several free models spent at the same time: stopping early meant stopping while a
+# model that would have answered was still on the list. That reasoning belonged to a
+# deployment whose default was a single pinned free model.
+#
+# It does not survive a router. The default here is `openrouter/free`, which IS a
+# failover mechanism: OpenRouter picks a live free model per request, upstream, before
+# this app sees anything. A second walk on top of it does not add a safety net, it adds
+# a queue of models to fail through — reported from the running app as an error card
+# naming a Zen model, a notice reading "<model> is unavailable (it failed). Retrying
+# with …", and an `HTTP 500` from a model a daily job had already flagged as dead.
+# The owner's words: the router is the default, so trying other models that do not
+# work and ending up back at the router "makes no sense".
+#
+# A deployment that pins one model per provider and wants the old behaviour sets
+# `SAGE_MAX_MODEL_ATTEMPTS=0` and gets the full walk back.
+MAX_MODEL_ATTEMPTS = _env_int("SAGE_MAX_MODEL_ATTEMPTS", 1, minimum=0)
 
 # --- chunking --------------------------------------------------------------
 #

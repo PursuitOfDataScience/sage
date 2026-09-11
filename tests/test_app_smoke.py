@@ -1128,6 +1128,19 @@ class TestToollessModels:
 class TestQuotaFailover:
     """A spent quota on one provider should not dead-end the app."""
 
+    @pytest.fixture(autouse=True)
+    def _walk_the_whole_lineup(self, monkeypatch):
+        """The walk is opt-in now, so the tests for it opt in.
+
+        `config.MAX_MODEL_ATTEMPTS` defaults to 1 — one model per turn — because the
+        deployment's default model is a router that already fails over upstream, and a
+        second walk on top of it only queues up models to fail through. 0 is "no limit"
+        and is what a deployment pinning one model per provider sets. The machinery
+        below is unchanged and still has to work for them.
+        """
+        monkeypatch.setattr(config, "MAX_MODEL_ATTEMPTS", 0)
+
+
     def session(self):
         return {
             "messages": [{"role": "user", "text": "what can you do?",
@@ -1174,7 +1187,8 @@ class TestQuotaFailover:
         zen = ScriptedProvider([], name="opencode", models=("z1",))
         stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
                            session=self.session(), opencode=True)
-        assert "Retrying with z1" in stub.session_state["notice"]
+        assert "Retrying" in stub.session_state["notice"]
+        assert "z1" not in stub.session_state["notice"]
         assert "came from" not in stub.session_state["notice"]
         assert stub.session_state["switched_from"] == ("m1", "quota")
 
@@ -1193,10 +1207,17 @@ class TestQuotaFailover:
                            session=session, opencode=True)
         notice = stub.session_state["notice"]
         assert "was unavailable (out of credit)" in notice
-        assert "z1 answered instead" in notice
+        # No model names any more: with the picker gone a reader cannot act on
+        # them, so the notice keeps the fact and drops the two labels and the
+        # "pick a different one from the model button" that pointed at a control
+        # which no longer exists.
+        assert "so another answered" in notice
+        assert "z1" not in notice
         # And it points at where the picker actually is. It said "the button at
         # the top left" for as long as there was a top left to point at.
-        assert "under the input box" in notice
+        # The instruction is gone with the control it named. What has to stay is
+        # that the notice explains the wait rather than just reporting churn.
+        assert "took longer than usual" in notice
         assert "top left" not in notice
         assert stub.session_state["switched_from"] is None
         assert stub.session_state["error"] is None
@@ -1317,6 +1338,19 @@ class TestASpentFreeAllowance:
     retry." Waiting does not help — the allowance resets on the provider's schedule —
     and `nemotron-3-ultra-free` on the same key answered in under a second throughout.
     """
+
+    @pytest.fixture(autouse=True)
+    def _walk_the_whole_lineup(self, monkeypatch):
+        """The walk is opt-in now, so the tests for it opt in.
+
+        `config.MAX_MODEL_ATTEMPTS` defaults to 1 — one model per turn — because the
+        deployment's default model is a router that already fails over upstream, and a
+        second walk on top of it only queues up models to fail through. 0 is "no limit"
+        and is what a deployment pinning one model per provider sets. The machinery
+        below is unchanged and still has to work for them.
+        """
+        monkeypatch.setattr(config, "MAX_MODEL_ATTEMPTS", 0)
+
 
     @staticmethod
     def _free_limit_429():
@@ -1569,6 +1603,19 @@ class TestWalkingTheLineup:
     one that failed.
     """
 
+    @pytest.fixture(autouse=True)
+    def _walk_the_whole_lineup(self, monkeypatch):
+        """The walk is opt-in now, so the tests for it opt in.
+
+        `config.MAX_MODEL_ATTEMPTS` defaults to 1 — one model per turn — because the
+        deployment's default model is a router that already fails over upstream, and a
+        second walk on top of it only queues up models to fail through. 0 is "no limit"
+        and is what a deployment pinning one model per provider sets. The machinery
+        below is unchanged and still has to work for them.
+        """
+        monkeypatch.setattr(config, "MAX_MODEL_ATTEMPTS", 0)
+
+
     LINEUP = ("z1", "z2", "z3", "z4", "z5")
 
     class Lineup:
@@ -1645,7 +1692,7 @@ class TestWalkingTheLineup:
         notice = stub.session_state["notice"]
         assert "returned no answer" in notice
         assert "(empty)" not in notice
-        assert "Retrying with" in notice
+        assert "Retrying" in notice
 
     def test_every_reason_a_turn_can_fail_over_for_reads_as_english(self):
         """The two lists have to be held together, because the failover set is now
@@ -1686,7 +1733,7 @@ class TestWalkingTheLineup:
         assert reply["model"] == "opencode:z4"
         assert stub.session_state["error"] is None
         # Past tense only now, and about the model the reader actually left behind.
-        assert "z4 answered instead" in stub.session_state["notice"]
+        assert "so another answered" in stub.session_state["notice"]
         assert stub.session_state["tried"] == []
 
     def test_a_failure_that_is_not_about_the_model_is_walked_too(self, monkeypatch):

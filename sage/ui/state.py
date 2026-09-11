@@ -229,6 +229,25 @@ def _leave_conversation() -> None:
     st.session_state.notice = ""
     st.session_state.tried = []
     st.session_state.switched_from = None
+    # And the MODEL, which is the one thing this function used to leave behind.
+    #
+    # A failover is per-turn in its reasoning and was permanent in its effect: it sets
+    # `session_state.model`, nothing here put it back, and while the model picker
+    # existed that did not matter because a reader could move themselves. With the
+    # picker gone there was no way back at all. Reported from the running app as three
+    # symptoms of this one omission — an error card naming a Zen model on a deployment
+    # whose default is the OpenRouter router ("isn't our default openrouter free? why
+    # is this showing up?"), the Think pill missing from a brand-new chat because the
+    # provider it had been walked to does not take the parameter, and a notice about
+    # model churn the reader could do nothing about.
+    #
+    # Per conversation, not per turn: inside one conversation a failover has to stick,
+    # or the next question walks back into the model that just refused. Leaving a
+    # conversation is where the ledger is already being torn up, so it is where the
+    # default comes back. `app.current_model` validates it against what the providers
+    # actually served, so a default that is no longer available falls through exactly
+    # as it did before.
+    st.session_state.model = config.DEFAULT_MODEL
     # A failover in flight belongs to the turn being left. Left set, it fires on the
     # next run and `turn.run`'s `finally` sets `processing` again — a question from
     # the conversation that was just closed, answered into the one that replaced it.

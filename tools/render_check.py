@@ -624,10 +624,18 @@ def answer_block(index: int, question: bool = True) -> str:
   batch job on Midway3, and what partition should I use?</div></div>
 </div></div></div>
 """ if question else ""
+    # The progress block, folded, on a FINISHED answer. It used to die with the turn
+    # that drew it; a stored message carries its steps now and
+    # `transcript.render_steps` draws it again, above the text, where the live one
+    # already was — so nothing moves when the turn ends. Rendered here because that
+    # makes it part of every answer's geometry: it is inside the chat message, so the
+    # answer's own top edge, the copy button's corner and the gap to the question above
+    # are all measured with it present.
     return asked + f"""
 <div class="st-key-answer-{index} element-container"><div class="stChatMessage">
  <div></div>
  <div class="stMarkdown"><div data-testid="stMarkdownContainer">
+  {folded_block(2)}
   <h2>Requesting a GPU</h2>
   <p>Add <code>--gres=gpu:1</code> to your script and submit to the
   <code>gpu</code> partition.{MARKER}</p>
@@ -743,9 +751,8 @@ SHORT_ANSWER = f"""
              ["Checking job status in the terminal"])}
 </div>
 <div class="element-container"><div class="stMarkdown"><div data-testid="stMarkdownContainer">
-  <div class="notice">Mistral · small-latest was unavailable (out of credit), so Zen ·
-  deepseek-v4-flash-free answered instead. Pick a different one from the model button
-  under the input box.</div></div></div></div>"""
+  <div class="notice">The first model was unavailable (out of credit), so another
+  answered. This turn took longer than usual.</div></div></div></div>"""
 
 def landing(wrapped: bool = True) -> str:
     """The hero and the starter cards.
