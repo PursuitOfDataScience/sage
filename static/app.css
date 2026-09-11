@@ -139,10 +139,19 @@
      * text; the controls are pinned `--composer-ctl-bottom` off the bottom of the box,
      * which centres a 34px control in a 46px band. `--composer-min-h` is one line of
      * text plus that band, so an empty box is not taller than it needs to be. */
-    --composer-band: 46px;
-    --composer-ctl-bottom: 6px;
+    --composer-band: 52px;
+    /* 10px, not the 6px it was: at 6 the send arrow all but touched the box's own
+     * border — "the up arrow is almost abutting the text box borders, which is not
+     * good". The band is 52 so a 36px control at 10px off the floor still leaves 6px
+     * between it and the last line of text. */
+    --composer-ctl-bottom: 10px;
     --composer-pad: 14px;
-    --composer-min-h: 92px;
+    --composer-min-h: 98px;
+    /* How tall the box may grow as the prompt does, before the text starts scrolling
+     * inside it. app.js sizes the textarea to its own content up to this; the reader
+     * asked to be able to see a long prompt, and Streamlit does not autosize this
+     * textarea at all — measured at a fixed 44px against a scrollHeight of 704. */
+    --composer-max-text: 240px;
 
     /* Everything in the model picker's trigger that is not the model's name: 18px of
      * padding, 2px of border, and the 20px chevron Streamlit puts after the label with
@@ -302,6 +311,25 @@
  * are ours; see THE CHAT LIST below. */
 [data-testid="manage-app-button"] { display: none !important; }
 
+/* Streamlit's own running indicator — the spinner and the word `Stop` it puts in the
+ * header while a script runs. Hidden, and the reason is a collision rather than taste.
+ *
+ * It mounts and unmounts around every turn, in the header's right-hand group, directly
+ * left of the host's Share button. So it is the one thing that appears exactly where the
+ * theme toggle lives: the reader photographed the spinner drawn on top of the toggle,
+ * and the toggle sitting a long way left of Share the rest of the time, because app.js
+ * had reserved room for something that was no longer there. Anything parked in that
+ * corner either moves twice a turn or gets sat on.
+ *
+ * What it offered is already in the composer: the send arrow becomes a stop square for
+ * the length of a turn, and the status row says `Thinking` above the answer. The note in
+ * `.streamlit/config.toml` about `toolbarMode = "minimal"` keeping this deliberately
+ * pre-dates both of those.
+ *
+ * app.js still measures it, so if this test id is ever renamed the toggle steps aside
+ * rather than being drawn under it. */
+[data-testid="stStatusWidget"] { display: none !important; }
+
 /* Top padding clears Streamlit's header strip, so nothing lands in the band it
  * takes the clicks for. The previous stylesheet got this spacing by accident,
  * from padding on an empty .chat-container marker div; setting it to 0 here
@@ -383,23 +411,24 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
  * over this and the harness reported the picker unreachable at every width. */
 .st-key-composer-strip {
     position: fixed;
-    /* In the band under the text, at its left end just past the paperclip — where
-     * ChatGPT and Claude both put it, and the reason is the same: the right-hand end of
-     * that band belongs to the button that sends, and a picker next to it was two
-     * controls competing for one corner. On the deployment that pair took a quarter of
-     * the box's width between them.
+    /* In the band under the text, at its RIGHT end just left of the send button, which
+     * is where the reader asked for it. It spent one revision on the left, past the
+     * paperclip, because that is where ChatGPT and Claude put theirs — but the ask was
+     * specific and it is a preference, not a bug, so it goes on the right.
      *
-     * Anchored LEFT, which also fixes what the reader saw as the picker jumping: its
-     * width now follows the name in it, and a left-anchored control that changes width
-     * moves nothing, while a right-anchored one moves itself.
+     * Anchored on its right edge, so the send button never moves: the picker is sized
+     * by the name it is showing, and a control pinned by its right edge grows leftward
+     * into empty band rather than pushing its neighbour. That is the same reasoning
+     * that makes this safe now and made it unsafe before — what it used to share the
+     * right-hand end with was the reader's own text.
      *
      * The fallbacks are computed, not guessed, because a flat number cannot be right at
      * two widths: the box is centred and `--input-max` is `min(880px, 92vw)`, so its
-     * left edge is `(100vw - --input-max) / 2` from the window's. Add the paperclip and
-     * the gap beside it. A flat number was 322px wrong at 1440 when this was anchored
-     * right, and the harness reported the picker outside the box at every width in the
-     * one state where a fallback renders — the first frame, which the reader sees. */
-    left: var(--pick-left, calc((100vw - var(--input-max)) / 2 + 52px));
+     * right edge is `(100vw - --input-max) / 2` from the window's. Add the send button
+     * and the gap beside it. A flat number was 322px wrong at 1440, and the harness
+     * reported the picker outside the box at every width in the one state where a
+     * fallback renders — the first frame, which the reader sees. */
+    right: var(--pick-right, calc((100vw - var(--input-max)) / 2 + 56px));
     /* The fallback is the box's own floor, not a number: the bar pads 1rem below the
      * box, and the other two controls sit `--composer-ctl-bottom` inside it, so this is
      * where they all are. A flat 12px put the picker 4px below the box and 12px out of
@@ -1110,7 +1139,12 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     padding: 14px 2px 4px 2px !important;
     width: 100% !important;
     min-height: 24px !important;
-    height: auto !important;
+    /* No `height` here, and that is the point. It was `auto !important`, which a
+     * textarea reads as "however tall your `rows` attribute says" — one line — so a
+     * long prompt scrolled inside a 44px window however much of it there was.
+     * `app.js`'s `autosizeComposer` sets an inline height from the content instead,
+     * and an `!important` here would have beaten it. */
+    max-height: var(--composer-max-text) !important;
     resize: none !important;
     position: relative !important;
     z-index: 101 !important;
@@ -1139,7 +1173,7 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
  * rule would stack the two of them in the same corner. */
 .stChatInput button:not(#paperclip-btn) {
     position: absolute !important;
-    right: 10px !important;
+    right: 12px !important;
     bottom: var(--composer-ctl-bottom) !important;
     z-index: 102 !important;
 }
@@ -1185,7 +1219,7 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
  * padding at all. */
 #paperclip-btn {
     position: absolute;
-    left: 10px;
+    left: 12px;
     bottom: var(--composer-ctl-bottom);
     z-index: 1000;
     display: flex;

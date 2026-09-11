@@ -47,7 +47,11 @@ enableXsrfProtection = true
 gatherUsageStats = false
 
 [client]
-# Hides the Deploy button and hamburger, but keeps the running/stop indicator
-# so a long generation can still be cancelled.
+# Hides the Deploy button and hamburger. It also leaves Streamlit's running/stop
+# indicator in the header, which this note used to say was the point — a long generation
+# could still be cancelled from it. That is no longer why: the composer's send arrow
+# becomes a stop square for the length of a turn, and `static/app.css` hides the
+# indicator outright, because it mounts and unmounts in the same corner as the theme
+# toggle and was drawn on top of it.
 toolbarMode = "minimal"
 showErrorDetails = false
