@@ -104,6 +104,7 @@
     ".stChatMessage .stMarkdownColoredText a :: color": "var(--text-muted)",
     ".stChatMessage :: background": "transparent !important",
     ".stChatMessage :: border": "none !important",
+    ".stChatMessage a :: color": "var(--brand-text)",
     ".stChatMessage code:not(pre code) :: background": "var(--code-inline-bg) !important",
     ".stChatMessage code:not(pre code) :: color": "var(--code-inline-fg) !important",
     ".status-dot :: background": "var(--gradient)",

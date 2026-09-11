@@ -390,7 +390,31 @@ def run(view: View) -> None:
             # this round's text appended to a previous round's, which the reader has
             # not been able to see since the tool call that replaced it.
             st.session_state.partial = []
-            with answer.container(), st.chat_message("assistant"):
+            # `key="live-answer"` so the stylesheet can reserve the copy button's
+            # gutter while the answer is still arriving. Without it the streaming
+            # answer had the full content width and the stored one — which app.css
+            # pads by 2.25rem on `[class*="st-key-answer-"]` — was 36px narrower, so
+            # every line re-wrapped and every code block shrank at the instant the
+            # turn ended. Measured 660px → 624px at a 1440 viewport.
+            #
+            # NOT `answer-…`: three places in app.js use `[class*="st-key-answer-"]`
+            # as the test for "this is a finished answer" — the copy button, the
+            # quote-a-passage control, and the tail measurement. A live container
+            # under that name would put a copy button on a half-written answer and
+            # offer to quote a sentence still being typed. The name is different and
+            # only app.css's gutter rule matches both.
+            #
+            # Numbered by round, because a widget key has to be unique within a run
+            # and this block runs once per tool round. A flat `live-answer` raised
+            # `StreamlitDuplicateElementKey` on the second round and took the whole
+            # turn out with it — every question that searched before answering died
+            # on the error card, which is most of them. Plain answers have one round
+            # and never saw it.
+            with (
+                answer.container(),
+                st.container(key=f"live-answer-{round_number}"),
+                st.chat_message("assistant"),
+            ):
                 streamed = st.write_stream(
                     paced(recording(clearing(turn.deltas(), status)))
                 )
