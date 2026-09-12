@@ -224,7 +224,33 @@ base_url = "https://openrouter.ai/api/v1"
 base_url_env = "OPENROUTER_BASE_URL"
 # Discovery still runs — it is how the app learns the router is being served at all —
 # and `free_marks` below narrows all 387 models to this one.
-models = ["openrouter/free"]
+# TEMPORARY, and the first entry is the one a fresh session starts on — see
+# `openai_compat._order`, which puts this list ahead of everything discovered.
+#
+# `~deepseek/deepseek-v4-flash-latest` is PAID, which is why it needed a line of its own in
+# `free_marks` below. It is here because on 2026-09-12 the free lineup stopped being
+# able to answer at all, for two unrelated reasons on the same afternoon: OpenRouter's
+# free pool hit its account-wide cap of 1000 requests/day (`X-RateLimit-Remaining: 0`,
+# resetting at 00:00 UTC), and OpenCode Zen closed its free tier to third-party clients
+# (`HTTP 400 MissingSessionID`, "OpenCode's free tier can only be used in OpenCode").
+# Mistral answered `429` as well. Every provider refusing at once is not a state the
+# failover machinery can rescue.
+#
+# What it costs: $0.03 per million input tokens and $0.07 per million output, the
+# cheapest thing OpenRouter serves that is not free — a question of this app's shape
+# costs a small fraction of a cent. It takes tools, which this app requires, and its
+# context is 1.31M tokens.
+#
+# What it costs the READER: it is TEXT-ONLY (`input_modalities: ["text"]`), so an
+# attached screenshot will not be looked at and `composer.render_attachments` says so
+# in as many words. `openrouter/free` takes images and is still second in this list, so
+# a failover onto it restores that; `deepseek/deepseek-v4-flash-vision-exp` is the
+# variant that sees, at roughly 3x the price, if pictures matter more than pennies.
+#
+# TO REMOVE: delete it from this list and from `free_marks`, and put
+# `openrouter:openrouter/free` back as `config.DEFAULT_MODEL`'s fallback. Nothing else
+# knows about it.
+models = ["~deepseek/deepseek-v4-flash-latest", "openrouter/free"]
 models_env = "SAGE_OPENROUTER_MODELS"
 # The mark is the router's own id, so the rule reads "offer exactly this". Unusual, and
 # deliberate: OpenRouter fronts 387 models of which 18 are free and this key holds
@@ -233,7 +259,14 @@ models_env = "SAGE_OPENROUTER_MODELS"
 # every model carrying it is zero-priced — and that is the lineup this entry chose not
 # to have, because nine of the eighteen were rate-limited or dead on the same sweep the
 # router sailed through.
-free_marks = ["openrouter/free"]
+# The second mark is a literal id and it is NOT free — the same shape as `big-pickle`
+# in the Zen entry below, and for a different reason: that one is free and unmarked,
+# this one is paid and deliberate. `free_only` filters what is offered down to whatever
+# matches this list, so without the literal a paid id could not be offered, selected or
+# failed over to. See the note on `models` above for why it is here and how to remove
+# it. The name of this field is wrong for it, which is the honest price of not
+# inventing a second mechanism for a temporary state.
+free_marks = ["openrouter/free", "~deepseek/deepseek-v4-flash-latest"]
 free_marks_env = "SAGE_OPENROUTER_FREE_MARKS"
 # This provider takes OpenRouter's `reasoning` request parameter, which is what the
 # Think toggle in the corner of the input box sends. Declared here rather than assumed
@@ -274,7 +307,11 @@ routers_env = "SAGE_OPENROUTER_ROUTERS"
 #
 # "enigma" rather than a model name, because there is no one model to name: the row is a
 # different model every turn and any specific name would be wrong most of the time.
-labels = { "openrouter/free" = "enigma" }
+# The paid stand-in gets a name too, and unlike the router's it may say which
+# model it is: the row is one pinned model every turn, so naming it is the
+# honest thing rather than the misleading one. The `~` and the vendor path are
+# what a reader does not need.
+labels = { "openrouter/free" = "enigma", "~deepseek/deepseek-v4-flash-latest" = "deepseek v4 flash" }
 free_only = true
 free_only_env = "SAGE_OPENROUTER_FREE_ONLY"
 

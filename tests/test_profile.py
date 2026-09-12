@@ -127,11 +127,21 @@ class TestAProviderThatNeedsNoLineupMaintenance:
     working free model per request — so all three of those jobs happen on the provider's
     side and there is no list here to keep true.
 
-    That only holds while the entry stays a single self-selecting id. These tests are
-    what stops it quietly becoming a list again: widen `free_marks` to `:free` and the
-    picker offers eighteen models nothing is checking, which is exactly the state the
-    workflow exists to prevent for the other provider.
+    That only holds while the entry cannot admit anything it does not NAME. These tests
+    are what stops it quietly becoming a discovered list: widen `free_marks` to `:free`
+    and eighteen models nothing is checking become selectable, which is exactly the
+    state the workflow exists to prevent for the other provider.
+
+    The entry held exactly one id until 2026-09-12, and these tests said so. It holds
+    two now — the router plus one pinned PAID model, added because the whole free
+    lineup stopped answering on the same afternoon (see the note on `models` in the
+    profile). That is a widening of the list and not of the RULE: both ids are written
+    out, `free_marks` still matches the list exactly, and discovery is still a no-op. So
+    the count is no longer the thing to assert, and the two properties that made the
+    count worth asserting are.
     """
+
+    ROUTER = "openrouter/free"
 
     def router(self, profile):
         """The provider whose rule names its own models: no discovery can widen it."""
@@ -147,15 +157,25 @@ class TestAProviderThatNeedsNoLineupMaintenance:
             "router entry was widened, lineup.yml has to start checking it"
         )
 
-    def test_the_router_offers_exactly_one_model(self, profile):
-        assert len(self.router(profile).models) == 1
+    def test_every_id_it_offers_is_one_the_profile_writes_out(self, profile):
+        """Not "exactly one" any more — "exactly these". A mark that is a substring
+        rather than a whole id is what lets discovery add a model nothing checked."""
+        entry = self.router(profile)
+        assert entry.models, "the router entry offers nothing at all"
+        assert set(entry.free_marks) == set(entry.models), (
+            "a mark that is not one of the named ids means discovery can widen this "
+            "entry, and nothing is checking what it would admit"
+        )
+        assert self.ROUTER in entry.models, "the free router is no longer offered"
 
     def test_its_rule_cannot_admit_anything_the_list_does_not_name(self, profile):
         """`free_only` plus a mark that *is* the id is what makes discovery a
         no-op — the adapter filters 387 served models down to this one."""
         entry = self.router(profile)
         assert entry.free_only is True
-        assert entry.free_marks == entry.models
+        # Sets, not tuples: `models` is ordered — its first entry is the model a fresh
+        # session starts on — and `free_marks` is a filter, which has no order to it.
+        assert set(entry.free_marks) == set(entry.models)
 
     def test_it_has_no_denylist_because_it_has_nothing_to_deny(self, profile):
         """A denylist is for a name the provider serves and cannot run. With one id,
@@ -187,7 +207,11 @@ class TestAProviderThatNeedsNoLineupMaintenance:
         from sage.providers import Model
 
         entry = self.router(profile)
-        served = entry.models[0]
+        # The ROUTER's id, named rather than taken as `models[0]` — that was a shortcut
+        # from when the entry held one id, and the first entry is now whichever model
+        # the deployment starts on.
+        served = self.ROUTER
+        assert served in entry.models
         shown = Model(entry.name, served).label
         assert shown, "the router has no label at all"
         assert shown != served

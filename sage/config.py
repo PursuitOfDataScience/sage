@@ -31,7 +31,12 @@ from .env import text as _env_text
 # chunks too, so this is the model family and not the gateway. `openrouter/free` answered
 # six of six with a tool call, median 1.4s, by routing each request to whichever free
 # model is actually up. See `profiles/rcc.toml` for what that trades away.
-DEFAULT_MODEL = _env_text("SAGE_DEFAULT_MODEL", "openrouter:openrouter/free")
+# TEMPORARY: was `openrouter:openrouter/free` until 2026-09-12, when the whole free
+# lineup stopped being able to answer — OpenRouter's free pool capped for the day, Zen's
+# free tier closed to third-party clients, Mistral rate-limited. The reasoning, the
+# price and how to undo it are on the `models` entry in `profiles/rcc.toml`; the free
+# router is still offered and still the failover.
+DEFAULT_MODEL = _env_text("SAGE_DEFAULT_MODEL", "openrouter:~deepseek/deepseek-v4-flash-latest")
 
 # Substrings marking models that cannot call tools. Those answer from a single
 # retrieval pass instead of the search/read loop. The app also falls back
