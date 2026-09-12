@@ -221,18 +221,6 @@ models_env = "SAGE_OPENROUTER_MODELS"
 # router sailed through.
 free_marks = ["openrouter/free"]
 free_marks_env = "SAGE_OPENROUTER_FREE_MARKS"
-# This provider takes OpenRouter's `reasoning` request parameter, which is what the
-# Think toggle in the corner of the input box sends. Declared here rather than assumed
-# from `kind`, because `kind = "openai"` also covers OpenCode Zen, which has never
-# heard of the field — and it is what decides whether the toggle is drawn at all.
-#
-# Checked against `GET /models` rather than taken on trust: `supported_parameters` for
-# `openrouter/free` lists `reasoning`, and so does every one of the 19 `:free` models
-# it routes to. `reasoning_effort` — the low/medium/high dial — is on only 6 of those
-# 19, which is why the control is a switch: the router serves a different model every
-# turn, so an effort setting would be honoured on about a third of them with nothing
-# on screen able to say which.
-reasoning = true
 # What the picker calls it, because the served id is not a name — it is the billing
 # arrangement, and a reader choosing a row is not choosing a billing arrangement. The id
 # is untouched everywhere it counts: it is what goes upstream, what the feedback log and
@@ -354,13 +342,6 @@ models = [
 deny = [
     "deepseek-v4-flash-free",
     "muse-spark-1.2-contributor-free",
-    # Added by hand, and the way it got here is the point. `tools/lineup_check.py` had
-    # already found it and proposed it on the `lineup/auto` branch; that PR was closed
-    # unmerged on the reasoning that the deployment's default is the OpenRouter router
-    # now, so the Zen lineup is not what answers. It is what answers on a FAILOVER, and
-    # within the hour a reader got `HTTP 500 Internal server error` from this exact
-    # model on an error card. The automation was right and the close was wrong.
-    "muse-spark-1.3-contributor-free",
     "nemotron-3.5-lightning-free",
     "nemotron-3-ultra-free",
 ]

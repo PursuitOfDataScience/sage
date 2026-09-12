@@ -82,21 +82,12 @@
 name: lineup
 
 on:
-  # NO SCHEDULE. It ran daily at 10:20 UTC and the owner cleaned up after it three
-  # times in one afternoon — a closed PR (#73), a deleted branch (`lineup/auto`) and a
-  # closed issue (#66) — with the reasoning stated plainly each time: "we have
-  # openrouter, and i said it's default... who cares what that auto is", and "why is
-  # this shit still there? close it". A daily job whose output is three artifacts
-  # nobody wants is not maintenance, it is noise with a cron on it.
-  #
-  # What it was FOR still matters a little, and less than it did. It maintains the
-  # OpenCode Zen denylist, and Zen answers on a failover — but `MAX_MODEL_ATTEMPTS` is
-  # 1 now, so a turn asks the model it was given and stops. A dead Zen model is no
-  # longer something a reader can be walked into by a turn that started on the router;
-  # it can only be reached by a deployment that sets Zen as its default or turns the
-  # walk back on. Either of those wants this job, and can have it: the manual trigger
-  # below is untouched, so `gh workflow run lineup.yml` does the whole probe and opens
-  # the same PR.
+  # NO SCHEDULE, and this line survives a revert on purpose. It ran daily and the owner
+  # removed its output by hand three times in one afternoon — PR #73 closed, the
+  # `lineup/auto` branch deleted, issue #66 closed — because the deployment's default is
+  # the OpenRouter router and the OpenCode Zen lineup this maintains is not what answers.
+  # The rest of that day's work was reverted; this was asked for separately and is kept.
+  # `gh workflow run lineup.yml` still does the whole probe.
   workflow_dispatch:
     inputs:
       probe:

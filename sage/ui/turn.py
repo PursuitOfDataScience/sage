@@ -1,28 +1,14 @@
-"""One turn: the progress block, the tool loop, the answer, and every way it can end."""
+"""One turn: the status line, the tool loop, the answer, and every way it can end."""
 
 from __future__ import annotations
 
+import html
 import logging
 import time
 
 import streamlit as st
 
-from .. import (
-    config,
-    feedback,
-    history,
-    links,
-    llm,
-    normalize,
-    prompts,
-    redact,
-)
-from ..progress import (
-    Step,
-    shown,
-    status_html,
-    summary_html,
-)
+from .. import config, feedback, history, links, llm, normalize, prompts, redact
 from ..tools import READ_DOC, SEARCH_DOCS, gather_context
 from .access import get_provider
 from .state import get_limiter
@@ -74,123 +60,39 @@ CONTROL_FLOW_NAMES = frozenset(
     {"RerunException", "StopException", "Rerun", "Stop", "RerunError"}
 )
 
-# What the progress block says, and where each part of it comes from.
+# What the row says at each stage of a turn lives in the profile (`Copy`), because
+# every one of them is a fixed phrase and a deployment over something other than
+# documentation would word them differently.
 #
-# Two fixed phrases live in the profile (`Copy.status_thinking`, `Copy.status_working`),
-# because a deployment over something other than documentation would word them
-# differently. Everything else on the block belongs to the turn: one line per tool
-# call, named by `View.public_names` — the same reader-facing word `sage.redact` swaps
-# into an answer that mentions the tool — with the one argument that tool declared
-# worth showing (`View.public_arguments`) beside it, and how long it took after that.
+# Fixed, and that is the point: the line is progress, not a log. It used to name what
+# was being read — "Reading Batch jobs", or "Reading sbatch.md" when a model handed
+# over a path the index could not resolve. A filename is not something a reader can
+# place, and even the document's own title is the app narrating its internals to
+# someone who asked a question about GPUs. The search line quoted the model's query
+# back and had the same problem: it is the model's wording, not the reader's, and
+# watching it scroll past says nothing about whether an answer is coming.
 #
-# This REVERSES the rule the row shipped with, which was that nothing from inside the
-# machine could reach it: not the query, not the path, not the section's own title, on
-# the reasoning that a filename is not something a reader can place and that a model's
-# query is its wording rather than theirs. The owner asked for the opposite — "the user
-# needs to see the detailed status updates and which sections to read etc, this is more
-# precise" — so the specifics are on the block now, and the Sources strip under the
-# finished answer is no longer the only place they appear. The old reasoning is written
-# down here rather than deleted, because it was deliberate and it was about a real
-# complaint; what it got wrong was deciding for the reader how much they wanted to see.
-#
-# What that rule was right about is kept. The argument is whatever the model typed, so
-# nothing is trusted about it: `shown` coerces, collapses and clips it, and the row
-# ellipses whatever is still too wide (`.status-arg` in app.css) rather than wrapping.
-# And the block is progress rather than a log — it collapses to one summary line the
-# moment the answer starts arriving, and the steps go back behind a disclosure the
-# reader opens if they want them.
+# What the reader needs from this row is that something is happening and roughly what.
+# Everything specific is still in the Sources strip under the answer, where it is a
+# link next to the claim it supports — which is when a section's name is worth reading.
 
 
 def is_control_flow(exc: BaseException) -> bool:
     return type(exc).__name__ in CONTROL_FLOW_NAMES
 
 
-
-
-
-
-
-
-def call_step(view: View, call: dict) -> tuple[str, str]:
-    """What one tool call is called on the block, and the argument worth showing.
-
-    The name is the tool's reader-facing one, so the block and the answer call the same
-    thing by the same word — `sage.redact` swaps that word into an answer that names
-    the tool, and a row saying `search_docs` while the answer says `search` would be
-    two names for one thing. A tool that declares no name falls back to the profile's
-    fixed phrase rather than printing the identifier the provider API needs, which is
-    nobody's word for anything.
-
-    Which argument to show is the tool's own declaration (`tools.Tool.argument`) rather
-    than a branch here on `SEARCH_DOCS` / `READ_DOC`: a deployment that registers a
-    third tool gets a line for it by declaring one, and this function never learns its
-    name.
-    """
-    name = call.get("name") or ""
-    arguments = call.get("input")
-    key = view.public_arguments.get(name, "")
-    value = arguments.get(key) if key and isinstance(arguments, dict) else None
-    if name in view.section_arguments:
-        # A section id is this repository's name for a file, not the documentation's.
-        # `docs/allocations.md#how-do-i-check-...` reached the page and was reported
-        # immediately — "docs/allocations.md shouldn't be disclosed in this way" — and
-        # it is the only place in the app where one did: the Sources strip resolves
-        # every id to `Chunk.label` first, and `links.fix_links` does it to the paths a
-        # model writes into an answer.
-        #
-        # So it is resolved to the section's own title, which is the same fact in the
-        # reader's terms. An id that does not resolve shows nothing rather than falling
-        # back to the string: a model that invented a path has told the reader nothing,
-        # and printing the invention is the disclosure this is here to prevent.
-        wanted = str(value or "")
-        found = view.corpus.chunk(wanted)
-        if found is not None:
-            value = found.label
-        else:
-            # A read with no anchor is a whole page, which is a legitimate call and has
-            # no chunk id — `Corpus.chunk` keys on `{source}/{path}#{anchor}`. The page
-            # still has a title, so it still has a reader-facing name. Without this the
-            # row said `read` and nothing at all for every page-level read.
-            page = view.corpus.document(wanted.split("#", 1)[0])
-            value = page.title if page is not None else ""
-    return view.public_names.get(name) or view.copy.status_working, shown(value)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def stage_phrase(view: View, tool: str) -> str:
-    """The vague phrase for the stage a turn is in — what the sweeping row says.
-
-    Keyed on the tool's own name rather than on its reader-facing label, because this is
-    the machinery choosing a phrase for itself and the labels belong to `redact`. A tool
-    this does not know about gets `status_working`, the same fallback `call_step` uses
-    for a tool that declares no name: a third registered tool is one honest line rather
-    than a blank.
-
-    Deliberately says nothing about WHAT is being searched for or read. That is the
-    point of it. The detail — the section's title and the time it took — is in the
-    folded block after the answer, and the reason it is not on this row is that a title
-    per call, accumulating, is what the reader asked to be rid of.
-    """
-    return {
-        SEARCH_DOCS: view.copy.status_searching,
-        READ_DOC: view.copy.status_reading,
-    }.get(tool, view.copy.status_working)
-
+def status_html(text: str) -> str:
+    return (
+        '<div class="status-row" role="status" aria-live="polite">'
+        '<span class="status-dot" aria-hidden="true"></span>'
+        f'<span class="status-text">{html.escape(text)}</span>'
+        '<span class="status-dots" aria-hidden="true"><span></span><span></span>'
+        "<span></span></span></div>"
+    )
 
 
 class Status:
-    """The progress block: one line per thing the turn did, written in place.
+    """The one status row, written in place.
 
     Each change used to rebuild the row: `slot.empty()` threw the chat bubble away and
     the next line was drawn into a fresh one. Streamlit reconciles that as a removal
@@ -206,160 +108,40 @@ class Status:
     A reader sees that as the line twitching downward each time it changes, which
     reads as instability in the page rather than as progress.
 
-    So the bubble is created once and only what is inside it is replaced. A change is
-    then one markdown element rewritten in a node that never leaves the layout — which
-    is also why the whole block is a single element rather than one per step: another
-    step is a longer string in the same node, not a Streamlit element appended to a
-    container, so nothing above it can move and no widget key can collide.
+    So the bubble is created once and only the line inside it is replaced. A status
+    change is then a text swap in a node that never leaves the layout: nothing is
+    removed, nothing reflows, and the only thing that changes is the words.
 
-    Reopened lazily because the block is genuinely taken down — by a failure, and by
-    the end of a turn — and `st.empty()` cannot be written into again once its parent
-    has gone. The steps outlive that: a block taken down and reopened is the same list
-    of steps, because they are what the turn did rather than what is on the screen.
+    Reopened lazily because the row is genuinely taken down twice — when the first
+    token of an answer arrives, and between rounds — and `st.empty()` cannot be
+    written into again once its parent has gone.
     """
 
     def __init__(self, slot) -> None:
         self._slot = slot
         self._line = None
-        self._steps: list[Step] = []
-        #: The fixed phrase to show when nothing is running — "Thinking". Cleared by
-        #: the tool call that replaces it.
-        self._phrase = ""
-        self._collapsed = False
-        #: The clock the summary line reports. Wall time since the block appeared,
-        #: not the sum of the steps: the wait for the first word of the answer belongs
-        #: to no step, and it is part of what the reader sat through.
-        self._opened = time.monotonic()
-        #: Where the next step's clock starts: when the last one stopped.
-        #:
-        #: A step is therefore the WAIT for that call and not the call itself, and that
-        #: is the number worth printing. A search of an in-memory index takes 10-40ms,
-        #: so a step timed from the moment `runner.run` is entered reads `0.0s` on
-        #: every line of every turn — a column of zeroes, while the two seconds the
-        #: reader actually waited sit in the round trip that produced the call and are
-        #: attributed to nothing. Timed from the end of the previous step, the lines
-        #: add up to the turn.
-        self._mark = self._opened
-
-    # --- what happened --------------------------------------------------
 
     def show(self, text: str) -> None:
-        """Wait on a fixed phrase, with whatever has already been done above it."""
-        self._stop()
-        self._phrase = text
-        self._collapsed = False
-        self._paint()
-
-    def begin(self, name: str, detail: str) -> None:
-        """A tool call, starting now. Its own line, as it happens."""
-        self._stop()
-        self._phrase = ""
-        self._steps.append(Step(name, detail, self._mark))
-        self._collapsed = False
-        self._paint()
-
-    def collapse(self) -> None:
-        """Text has arrived: down to one quiet line the reader can open again.
-
-        A turn that called nothing has nothing to summarise, so it clears instead —
-        which is what every turn used to do at this point.
-        """
-        self._stop()
-        self._phrase = ""
-        if not self._steps:
-            self.clear()
-            return
-        self._collapsed = True
-        self._paint()
-
-    def record(self) -> list[dict]:
-        """What this turn did, as plain data for the stored message to carry.
-
-        The block itself dies with the turn — it is painted into an `st.empty()` that
-        belongs to the run — so a reader who looked away lost the account of which
-        sections were read. This is the same arrangement `sources` already has: the
-        turn produces it, the message keeps it, `transcript.render_assistant` draws it
-        again. Only finished steps: a step still running when the turn ended is a step
-        whose duration is unknown, and a line with no time on it in a settled answer
-        reads as a measurement that failed rather than one that was never taken.
-
-        Dicts and not `Step`, because this goes into `session_state` and out to
-        `feedback` — a dataclass would be one refactor away from a stored message that
-        cannot be read back by the version that reads it next.
-        """
-        return [
-            {"name": step.name, "detail": step.detail, "seconds": step.seconds}
-            for step in self._steps
-            if step.seconds is not None
-        ]
+        if self._line is None:
+            with self._slot.container(), st.chat_message("assistant"):
+                self._line = st.empty()
+        self._line.markdown(status_html(text), unsafe_allow_html=True)
 
     def clear(self) -> None:
         self._slot.empty()
         self._line = None
 
-    # --- and what that looks like ---------------------------------------
 
-    def _stop(self) -> None:
-        """Stop the clock on the running step, if there is one."""
-        live = self._live
-        if live is not None:
-            now = time.monotonic()
-            live.seconds = now - live.started
-            self._mark = now
-
-    @property
-    def _live(self) -> Step | None:
-        """The step still running: the last one, while it has no measurement."""
-        if self._steps and self._steps[-1].seconds is None:
-            return self._steps[-1]
-        return None
-
-    def _html(self) -> str:
-        if self._collapsed:
-            return summary_html(self._steps, time.monotonic() - self._opened)
-        # THE SWEEPING ROW, and nothing else, for the whole time a turn is in flight.
-        #
-        # It drew a step per tool call for a while, accumulating: by the third round
-        # that was six rows of history stacked over an empty answer, one of them a
-        # section title long enough to wrap. Reported twice — "it's everything showing,
-        # which looks bad", and then plainly: "it should be like what we had before with
-        # the cool status message with gradients."
-        #
-        # So the two jobs are split. This is the progress cue: one line, one phrase,
-        # the gradient crossing it, which is what a reader waiting on an empty answer
-        # needs and all they need. The record is `record()` and `summary_html` — every
-        # step with its section title and its time, folded under the answer the moment
-        # text arrives, where it can be opened against the thing it produced.
-        #
-        # `self._steps` is still filled by `begin()`. It is no longer PAINTED here.
-        return status_html(self._phrase)
-
-    def _paint(self) -> None:
-        if self._line is None:
-            with self._slot.container(), st.chat_message("assistant"):
-                self._line = st.empty()
-        self._line.markdown(self._html(), unsafe_allow_html=True)
-
-
-def collapsing(stream, status: Status):
-    """Yield deltas, collapsing the block as soon as text arrives.
-
-    Collapsing rather than clearing, which is what this did when the block was one
-    line: the steps are what the turn did, and taking them off the page at the moment
-    the answer starts is taking them away exactly when the reader has something to
-    check them against. What goes is the room they took, not the record.
-
-    A stream carrying no text at all leaves the block as it stands, for the round after
-    it to add to — or for the end of the turn to take down. It used to clear here too,
-    and with steps on the page that would be a removal and an insertion for every round
-    a model narrates nothing, which is the reflow this whole class is shaped to avoid.
-    """
-    collapsed = False
+def clearing(stream, status: Status):
+    """Yield deltas, dropping the status row as soon as text arrives."""
+    cleared = False
     for delta in stream:
-        if not collapsed:
-            status.collapse()
-            collapsed = True
+        if not cleared:
+            status.clear()
+            cleared = True
         yield delta
+    if not cleared:
+        status.clear()
 
 
 def recording(stream):
@@ -397,10 +179,10 @@ def paced(stream, interval_ms: int = -1):
     So the deltas are the same and the repaints are fewer. Three rules, and the first
     two are why nothing else in this file had to change:
 
-    * The first delta is always painted at once. `collapsing` folds the status block
-      when text arrives, so holding that text back would leave a collapsed summary
-      with nothing under it, and time-to-first-word is the one moment of a turn a
-      reader is actually watching.
+    * The first delta is always painted at once. `clearing` takes the status row down
+      when text arrives, so holding that text back would leave an empty bubble where
+      the row had been, and time-to-first-word is the one moment of a turn a reader is
+      actually watching.
     * A delta that arrives more than an interval after the last repaint is painted at
       once too. A stream slower than the repaint rate is therefore untouched — no
       added latency, and a turn whose deltas are far apart behaves exactly as before.
@@ -441,6 +223,28 @@ def paced(stream, interval_ms: int = -1):
         held.clear()
     if held:
         yield "".join(held)
+
+
+def describe(copy, calls: list[dict]) -> str:
+    """Which stage of the turn this round is, in words a reader can place.
+
+    Search before read, because a round that does both is on its way to reading and
+    the search is the thing that just started. A round calling neither is a model
+    doing something this app has no name for, which is what `Working` is for — never
+    an empty row, because a blank line where progress should be reads as a hang.
+
+    Nothing about the arguments reaches the screen. That is deliberate: see the
+    phrases above. It also means this cannot be tripped by whatever a model puts in
+    them — the previous version coerced every argument to a string for exactly that
+    reason, after a query typed as a number ended a turn with an error card blaming
+    the network.
+    """
+    names = {call.get("name") for call in calls}
+    if SEARCH_DOCS in names:
+        return copy.status_searching
+    if READ_DOC in names:
+        return copy.status_reading
+    return copy.status_working
 
 
 def attempts_allowed(view: View) -> int:
@@ -555,16 +359,7 @@ def run(view: View) -> None:
         # on success drifts loose exactly when things are going wrong and requests
         # are being retried.
         get_limiter().record_calls(1, time.monotonic())
-        # `thinking` read here rather than captured once at the top of the turn, so a
-        # failover that lands on a provider which does not take the field carries the
-        # flag the NEXT request should have and not the one the first request had.
-        # `composer.render_think_toggle` clears it on the run after such a hop, but
-        # the hop happens inside this turn, before that run exists — and the adapter
-        # is the second guard: it sends the field only where the profile declared it.
-        return llm.start(
-            provider, model.id, msgs, schemas,
-            thinking=bool(st.session_state.thinking),
-        )
+        return llm.start(provider, model.id, msgs, schemas)
 
     try:
         provider = get_provider(model.provider)
@@ -621,7 +416,7 @@ def run(view: View) -> None:
                 st.chat_message("assistant"),
             ):
                 streamed = st.write_stream(
-                    paced(recording(collapsing(turn.deltas(), status)))
+                    paced(recording(clearing(turn.deltas(), status)))
                 )
             # write_stream returns a list when chunks are not all strings.
             if isinstance(streamed, list):
@@ -662,22 +457,9 @@ def run(view: View) -> None:
                 break
 
             answer.empty()
+            status.show(describe(view.copy, turn.tool_calls))
             messages.append(turn.as_message())
             for call in turn.tool_calls:
-                # Before the call, not after it: the line is what is happening, and a
-                # read of a long section is a second or two in which the only thing on
-                # the page that could say so is this one. `status.begin` stops the
-                # clock on the line above it, so the times are per call rather than
-                # per round — a round of parallel calls runs them in this order and
-                # reports each one's own.
-                status.begin(*call_step(view, call))
-                # The vague phrase for the stage, in the sweeping row. The step the
-                # line above records is for the folded block after the answer; what is
-                # on screen now is "Searching the documentation" or "Reading the
-                # relevant sections" — the tool's own stage rather than its argument,
-                # which is the distinction the two were merged into one row for and
-                # then reported out of it again.
-                status.show(stage_phrase(view, call.get("name") or ""))
                 result = runner.run(call["name"], call["input"])
                 # The budget is cumulative across rounds, which is the whole point:
                 # each result is individually legal at MAX_DOC_CHARS and it is the
@@ -695,14 +477,6 @@ def run(view: View) -> None:
                     )
                 tool_chars += len(result)
                 messages.append(llm.tool_result_message(call, result))
-
-            # Every call is done and the next request has not gone out yet, so nothing
-            # is running: the block waits on the phrase it opened with, under the steps
-            # it has. Without this the last step would sit there with its clock stopped
-            # and no live line anywhere, which reads as a turn that has stalled — and
-            # this wait is most of what the reader is waiting for, because the model
-            # thinking about what it just read is the slow part of a round.
-            status.show(view.copy.status_thinking)
 
             # The last request of the turn goes out with the tools withdrawn.
             #
@@ -817,13 +591,6 @@ def run(view: View) -> None:
                     sources,
                 ),
                 "sources": sources,
-                # What the turn actually did, so the block survives the turn that drew
-                # it — asked for directly. The Sources strip says what was CITED; this
-                # says what was searched for, in the words the model chose, and what
-                # was read without being cited. On a wrong answer that is the
-                # difference between "this is wrong" and "it searched for the wrong
-                # thing", which is the one question the strip cannot answer.
-                "steps": status.record(),
                 "rating": None,
                 "model": model.key,
                 # What `redact.apply` took out, kept with the turn rather than only
@@ -838,22 +605,10 @@ def run(view: View) -> None:
         # has produced this answer. Any older notice belongs to an older turn.
         switched = st.session_state.switched_from
         st.session_state.switched_from = None
-        # No model names, and no instruction. This used to read "<name> was
-        # unavailable (<reason>), so <name> answered instead. Pick a different one
-        # from the model button under the input box" — and every clause of that is now
-        # wrong for a reader. There is no model button: the picker is gone, so the
-        # instruction sends them looking for a control that does not exist. And the
-        # names were only ever actionable BECAUSE of that control; without it they are
-        # operator information on a reader's screen, which is what was reported
-        # ("we don't have a model picker, why do we need this?").
-        #
-        # What survives is the one thing a reader can use: an explanation for why this
-        # answer took longer than the last one. The names are not lost — `model.key`
-        # goes to `feedback.record_turn` below and the error card's technical-details
-        # panel prints the real id, which is where an operator looks.
         st.session_state.notice = (
-            f"The first model was unavailable ({REASONS.get(switched[1], switched[1])})"
-            ", so another answered. This turn took longer than usual."
+            f"{switched[0]} was unavailable ({REASONS.get(switched[1], switched[1])}), "
+            f"so {model.label} answered instead. Pick a different one from the "
+            f"model button under the input box."
             if switched
             else ""
         )
@@ -901,12 +656,9 @@ def run(view: View) -> None:
             st.session_state.switched_from = (model.label, exc.kind)
             # Present tense: the retry has not happened yet. The past-tense
             # version is written only once an answer actually arrives.
-            # Same reasoning as the settled notice below: the fact, not the names.
-            # A reader watching a turn take eight seconds is owed an account of why,
-            # and can do nothing with which model it was.
             st.session_state.notice = (
-                f"That model is unavailable ({REASONS.get(exc.kind, exc.kind)}). "
-                "Retrying…"
+                f"{model.label} is unavailable ({REASONS.get(exc.kind, exc.kind)}). "
+                f"Retrying with {alternative.label}…"
             )
         else:
             # An "unknown" kind means classify() had nothing to go on, so log the

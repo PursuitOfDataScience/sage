@@ -135,7 +135,7 @@ class OpenAICompatProvider:
             families.setdefault(family_of(model_id), []).append(model_id)
         return [model_id for members in families.values() for model_id in members]
 
-    def stream(self, model, messages, tools, thinking=False) -> Iterator[Chunk]:
+    def stream(self, model, messages, tools) -> Iterator[Chunk]:
         import httpx  # noqa: PLC0415
 
         payload: dict[str, Any] = {
@@ -148,26 +148,6 @@ class OpenAICompatProvider:
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
-        # The Think toggle, and only where the provider has said it understands the
-        # field. `kind = "openai"` covers OpenRouter and OpenCode Zen alike, and an
-        # unknown key is a 400 from any endpoint entitled to be strict about its own
-        # wire format — so this is gated on the profile's declaration rather than on
-        # the shape of the URL.
-        #
-        # `exclude` as well as `enabled`, which is not a contradiction: `exclude`
-        # suppresses the reasoning TEXT, not the reasoning. The model still thinks
-        # before it answers; OpenRouter simply does not send the transcript back.
-        # That is the right default here for two reasons. Nothing in this app can
-        # display it — `parse_sse` reads `delta.content` and `delta.tool_calls` and
-        # `Chunk` has no third field — so without this the deployment pays to
-        # transmit text it drops on the floor. And the one place reasoning has ever
-        # reached a reader was a defect: one turn in 554 arrived as 34,645 characters
-        # of a model quoting its own instructions back, which is what
-        # `checks.reasoning_shape` classifies as `leaked-reasoning`. Asking for the
-        # transcript is a decision to display it, and displaying it is the progress
-        # block's job on the day someone wires `reasoning_details` through.
-        if thinking and self.entry.reasoning:
-            payload["reasoning"] = {"enabled": True, "exclude": True}
 
         with (
             httpx.Client(timeout=httpx.Timeout(120.0, connect=15.0)) as client,

@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from .. import providers
 from ..profile import Copy, Identity
 from ..providers import Model, family_of
 from ..runtime import Runtime
@@ -45,36 +44,6 @@ class View:
     def public_names(self) -> dict[str, str]:
         """What each tool is called in front of a reader — for `sage.redact`."""
         return self.runtime.toolset.public_names
-
-    @property
-    def public_arguments(self) -> dict[str, str]:
-        """Which argument of each tool the progress block shows — for `sage.ui.turn`."""
-        return self.runtime.toolset.public_arguments
-
-    @property
-    def section_arguments(self) -> frozenset[str]:
-        """Which tools' progress-row argument is a corpus id, not reader-facing text."""
-        return self.runtime.toolset.section_arguments
-
-    @property
-    def can_think(self) -> bool:
-        """Whether the model answering NOW takes a `reasoning` parameter.
-
-        Off the model in hand rather than off `config.DEFAULT_MODEL`, and that is the
-        whole point of the property. The model picker is gone — a reader cannot move
-        themselves to another provider any more — but an automatic failover still can,
-        and it does not ask: a spent allowance on the default provider walks the turn
-        to the next one in the lineup. So a session that opened on a provider taking
-        the field can be on one that does not by its third question, and the toggle
-        has to stop being drawn at that moment rather than sit there inert.
-
-        `composer.render_controls` reads this to decide whether to draw the pill at
-        all. Drawing a dead one is the failure this app has a rule about, and it would
-        be worse here than usual, because nothing else on the page says which provider
-        is answering now that the picker's label is not there to say it.
-        """
-        entry = providers.entry(self.model.provider)
-        return bool(entry and entry.reasoning)
 
     #: Failures whose remedy is a different model on the SAME provider, because the
     #: key is fine and only this model is unavailable. Each of these is the *model*

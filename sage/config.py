@@ -42,20 +42,7 @@ TOOLLESS_MODELS = _env_list("SAGE_TOOLLESS_MODELS", ())
 # conservative: an image sent to a text-only model is a 4xx, not a graceful refusal,
 # so anything not listed here gets told the file is attached and left unread rather
 # than gambling with the request. Extend it as a deployment learns its own lineup.
-#
-# `openrouter/free` is on the list on evidence rather than on the strength of its name.
-# `GET /models` gives it `modality: text+image->text`, and a probe with an 8x8 PNG came
-# back `200` — so the 4xx this list exists to avoid is not what sending it an image
-# costs. What it does cost is worth knowing: only 10 of the 19 `:free` models the
-# router serves accept image input, the router picks one per request, and the probe's
-# usage came back `image_tokens: 0`, so there is no evidence yet that the model which
-# answered actually looked at the picture. Attaching an image here is a request that
-# will be accepted and may be ignored, which is still better than the alternative it
-# replaces: the app told the model a file was attached and unreadable, and the model
-# asked the reader to type the screenshot out by hand.
-VISION_MODELS = _env_list(
-    "SAGE_VISION_MODELS", ("pixtral", "claude", "openrouter/free")
-)
+VISION_MODELS = _env_list("SAGE_VISION_MODELS", ("pixtral", "claude"))
 
 
 def sees_images(model: str) -> bool:
@@ -98,43 +85,6 @@ REQUEST_RETRIES = _env_int("SAGE_REQUEST_RETRIES", 2, minimum=0)
 # it is the same key CALL_BUDGET is there to protect — set that if the arithmetic
 # matters more than the answer. Set this to 1 to switch failover off entirely, which is
 # what `evals/harness.py` does so a per-model benchmark measures the model it asked.
-# BACK TO 0 — no limit, walk the lineup — after 1 broke the app.
-#
-# The reasoning for 1 is below and still reads well, and it was wrong about the thing
-# that matters: it treated the router as a failover mechanism that makes the app's own
-# walk redundant. The router picks a live model per request, but it does not pick a
-# WORKING one. Measured against it directly: one plain text request in three came back
-# from `nvidia/nemotron-3.5-content-safety:free` — a safety classifier — with `null`
-# content. That is the app's `empty` kind, and with one attempt allowed there is nothing
-# after it but the error card. A third of questions stopped being answerable: "the whole
-# app is totally fucked up by you. it doesn't even work now."
-#
-# The walk was the thing absorbing that, and the noise it makes — a notice about a model
-# that failed — is a far smaller cost than a third of turns failing. Restored first and
-# tuned later if at all.
-#
-# What is still true, and is the better fix when there is time for it: the right recovery
-# from a router is to ASK THE ROUTER AGAIN, because it routes somewhere different each
-# time. `View.alternative` cannot do that — it excludes everything in `tried`, so a hop
-# is always to a different model — and until it can, the whole-lineup walk is what stands
-# in for it.
-#
-# It was 0, which means "no limit — walk the whole lineup", and the reasoning for that
-# was several free models spent at the same time: stopping early meant stopping while a
-# model that would have answered was still on the list. That reasoning belonged to a
-# deployment whose default was a single pinned free model.
-#
-# It does not survive a router. The default here is `openrouter/free`, which IS a
-# failover mechanism: OpenRouter picks a live free model per request, upstream, before
-# this app sees anything. A second walk on top of it does not add a safety net, it adds
-# a queue of models to fail through — reported from the running app as an error card
-# naming a Zen model, a notice reading "<model> is unavailable (it failed). Retrying
-# with …", and an `HTTP 500` from a model a daily job had already flagged as dead.
-# The owner's words: the router is the default, so trying other models that do not
-# work and ending up back at the router "makes no sense".
-#
-# A deployment that pins one model per provider and wants the old behaviour sets
-# `SAGE_MAX_MODEL_ATTEMPTS=0` and gets the full walk back.
 MAX_MODEL_ATTEMPTS = _env_int("SAGE_MAX_MODEL_ATTEMPTS", 0, minimum=0)
 
 # --- chunking --------------------------------------------------------------
@@ -241,22 +191,6 @@ MAX_PROMPT_CHARS = _env_int("SAGE_MAX_PROMPT_CHARS", 8000, minimum=1)
 #
 # 0 restores a repaint per delta.
 STREAM_REPAINT_MS = _env_int("SAGE_STREAM_REPAINT_MS", 40, minimum=0)
-
-# How much of a tool's argument the progress block puts on the page — the query it
-# searched for, the path it read. Not a layout number: the row ellipses whatever does
-# not fit the width it has, at every width (`.status-arg` in static/app.css). This is
-# a ceiling on what a MODEL can put in the DOM, because the value is whatever it typed
-# and the block is rewritten in full on every step — a 4 KB query string would be 4 KB
-# of markup per repaint, for a line 40 characters of which are visible.
-#
-# 96 is about twice the widest line the block draws at a 1440 viewport, so the clip is
-# never the thing a reader notices; the ellipsis is.
-#
-# Here rather than in `sage/ui/turn.py` so `tools/render_check.py` can render the worst
-# case the app can actually produce. That harness runs in a CI job with no Streamlit
-# installed, so it cannot import the module that draws the block — and a worst case
-# written out twice is a worst case that goes stale on one side.
-STATUS_ARGUMENT_CHARS = _env_int("SAGE_STATUS_ARGUMENT_CHARS", 96, minimum=1)
 
 # --- uploads ---------------------------------------------------------------
 

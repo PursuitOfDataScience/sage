@@ -51,7 +51,7 @@ class Programmable:
     def models(self):
         return [providers.Model("mistral", "m1")]
 
-    def stream(self, model, messages, tools, thinking=False):
+    def stream(self, model, messages, tools):
         self.sent.append(messages)
         self.tools_seen.append(tools)
         if not self.turns:
@@ -659,7 +659,7 @@ class TestAStreamThatIsMostlyEmpty:
     carrying neither text nor a tool call. `tools/mock_provider.py` sent one, so nothing
     offline exercised the shape the live path gets on every turn — and two behaviours depend
     on it. `llm.start` pulls the first chunk so an auth failure surfaces where it can still
-    be retried, and `collapsing` folds the status block when a chunk with *text* arrives, not
+    be retried, and `clearing` holds the status row until a chunk with *text* arrives, not
     until the first chunk of any kind.
     """
 

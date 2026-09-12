@@ -109,61 +109,6 @@ class TestTheme:
         )
         assert "background: var(--brand)" in rule.group(1)
 
-    def test_the_typeface_is_stated_for_both_halves_of_the_page(self):
-        """One face, named in two files, because each reaches half the page.
-
-        `[theme] font` is the only thing that decides what Streamlit paints its own
-        widgets with — the composer, the buttons, the popover, the sidebar. app.css's
-        `--font-sans` is the only thing that reaches the markup this app writes
-        itself. Set one and not the other and the page renders in two typefaces,
-        which is how it looked with `font = "sans serif"` and a stylesheet that had
-        no opinion at all.
-
-        The names have to MATCH, and nothing else here can notice if they stop:
-        a stack whose first entry is a family no `[[theme.fontFaces]]` declares falls
-        through to `sans-serif` and renders a perfectly good page in the wrong face.
-        """
-        theme = settings().get("theme", {})
-        declared = {face["family"] for face in theme.get("fontFaces", [])}
-        assert declared, "no [[theme.fontFaces]]: nothing loads the faces at all"
-
-        css = stylesheet()
-        for token, key in (("--font-sans", "font"), ("--font-mono", "codeFont")):
-            stack = re.search(rf"{token}:\s*([^;]+);", css)
-            assert stack, f"app.css declares no {token}"
-            first = stack.group(1).split(",")[0].strip().strip('"')
-            assert first in declared, (
-                f"app.css asks for {first!r} and [[theme.fontFaces]] declares "
-                f"{sorted(declared)} — the stylesheet would fall through to the "
-                f"generic fallback"
-            )
-            configured = (theme.get(key) or "").split(",")[0].strip()
-            assert configured == first, (
-                f"[theme] {key} is {configured!r} and app.css's {token} starts with "
-                f"{first!r}; Streamlit's widgets and this app's own markup would be "
-                f"in different faces"
-            )
-
-    def test_every_face_it_asks_for_is_in_the_repo_and_served(self):
-        """A 404 here is not an error anywhere — it is the fallback face, silently.
-
-        The woff2 files are vendored rather than fetched from a CDN, so they are only
-        reachable if static serving is on: `url = "app/static/…"` is a path Streamlit
-        does not publish unless `server.enableStaticServing` says so. Nothing fails
-        when it is off. The page just renders in whatever the browser had.
-        """
-        config_settings = settings()
-        faces = config_settings.get("theme", {}).get("fontFaces", [])
-        hosted = [face for face in faces if face["url"].startswith("app/static/")]
-        assert hosted, "no self-hosted face: the app now depends on a third party"
-        assert config_settings.get("server", {}).get("enableStaticServing") is True, (
-            "[[theme.fontFaces]] serves fonts out of static/, which needs "
-            "server.enableStaticServing = true or every url 404s"
-        )
-        for face in hosted:
-            path = os.path.join(ROOT, face["url"].replace("app/static/", "static/", 1))
-            assert os.path.exists(path), f"{face['url']} is declared and not vendored"
-
     def test_the_brand_fill_is_the_same_maroon_in_both_schemes(self):
         """--brand is for fills, and white on #800000 reads in either theme.
 
