@@ -3,7 +3,7 @@
 
 There is no single number for "how is Sage doing". Any weighted average of what follows
 reads as healthy: retrieval is at 100% recall@5, the suite is green, the layout harness
-renders 684 states clean, the palette has not drifted. When this file was written one cell
+renders 708 states clean, the palette has not drifted. When this file was written one cell
 read 36.8% — the gate that decides whether the app declines to answer at all — and a
 scalar would have diluted it to invisibility. It is 86.7% now, and the point stands: the
 headline is the worst cell, whichever cell that turns out to be.
@@ -15,7 +15,7 @@ correct.
 
     python tools/scorecard.py                       # the model-independent card, seconds
     python tools/scorecard.py --with-suite           # + ruff and pytest
-    python tools/scorecard.py --with-layout          # + the 684-render layout harness
+    python tools/scorecard.py --with-layout          # + the 708-render layout harness
     python tools/scorecard.py --save report/card.json --against report/card-prev.json
 
 Axis B (per-model behaviour) is read from `report/agents.json` if `tools/agent_bench.py`

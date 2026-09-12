@@ -20,7 +20,7 @@ failure mode as running `palette_check.py --update` to silence a repaint.
 ```bash
 python tools/scorecard.py                     # seconds, no network
 python tools/scorecard.py --with-suite        # + ruff and pytest
-python tools/scorecard.py --with-layout       # + the 684-render harness (~8 min)
+python tools/scorecard.py --with-layout       # + the 708-render harness (~8 min)
 python tools/scorecard.py --save report/card.json --against report/card-prev.json
 ```
 
@@ -50,7 +50,7 @@ already worked this way and it is the right instinct.
 | `tools/agent_bench.py --toolless` | B | a key | the same phases down the grounded path |
 | `tools/agent_bench.py --meta` | B | a key | asked about itself: does it name its own machinery? |
 | `tools/scorecard.py` | all | — | the card, and the diff against the last one |
-| `tools/render_check.py` | UI | Chrome | 684 renders = 17 scenarios x 2 schemes x 6 widths, minus the states a scenario skips (predates this) |
+| `tools/render_check.py` | UI | Chrome | 708 renders = 18 scenarios x 2 schemes x 6 widths, minus the states a scenario skips (predates this) |
 | `tools/palette_check.py` | UI | — | declared colours against the baseline (predates this) |
 
 `tests/test_documented_numbers.py` closes the loop on this file: the set sizes and the

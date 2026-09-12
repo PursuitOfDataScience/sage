@@ -10,11 +10,12 @@ import streamlit as st
 from .. import config, feedback, history, links, llm, normalize, prompts, redact
 from ..progress import (
     Step,
+    live_html,
     shown,
     status_html,
     summary_html,
 )
-from ..tools import READ_DOC, SEARCH_DOCS, gather_context
+from ..tools import gather_context
 from .access import get_provider
 from .state import get_limiter
 from .transcript import citations, render_user
@@ -158,21 +159,12 @@ def call_step(view: View, call: dict) -> tuple[str, str]:
     return view.public_names.get(name) or view.copy.status_working, shown(value)
 
 
-def stage_phrase(view: View, tool: str) -> str:
-    """The vague phrase for the stage a turn is in — what the sweeping row says.
-
-    Keyed on the tool's own name rather than its reader-facing label, because this is
-    the machinery choosing a phrase for itself. A tool this does not know gets
-    `status_working`, the same fallback `call_step` uses for one that declares no name.
-
-    Says nothing about WHAT is being searched for or read, and that is the point: the
-    detail is in the folded block after the answer, and a title per call accumulating
-    on this row is what the reader asked to be rid of.
-    """
-    return {
-        SEARCH_DOCS: view.copy.status_searching,
-        READ_DOC: view.copy.status_reading,
-    }.get(tool, view.copy.status_working)
+# `stage_phrase` was here: it chose "Searching the documentation" or "Reading the
+# relevant sections" for the sweeping row, keyed on the tool's own name. The row names
+# the running step now — `progress.live_html` — so the function lost its only caller
+# and the two phrases lost their only reader. Both are gone rather than left for a
+# grep to find. `call_step` still falls back to `Copy.status_working` for a tool that
+# declares no reader-facing name, which is the one fixed phrase a step row can hold.
 
 
 
@@ -347,11 +339,17 @@ class Status:
         # showing, which looks bad", then "it should be like what we had before with
         # the cool status message with gradients."
         #
-        # So the jobs are split. This is the progress cue: one line, one phrase, the
-        # gradient crossing it. The record is `record()` plus `summary_html` — every
-        # step with its section title and its time, folded when text arrives and kept
-        # on the stored message afterwards. `self._steps` is still filled by `begin()`;
-        # it is no longer painted here.
+        # So one line, never a stack — and that line names the step that is running,
+        # because the accumulation was the fault and the detail never was: "it stills
+        # shows searching the relevant doc and things like that rather than very
+        # specific cot shown in the status message". `live_html` is the same row with
+        # the tool's name in place of the phrase and its argument beside it.
+        #
+        # The fixed phrase is still what shows when NOTHING is running: the wait at the
+        # top of a turn before the first call, which has no step to name yet.
+        live = self._live
+        if live is not None:
+            return live_html(live)
         return status_html(self._phrase)
 
     def _paint(self) -> None:
@@ -701,10 +699,22 @@ def run(view: View) -> None:
                 # clock on the line above it, so the times are per call rather than
                 # per round — a round of parallel calls runs them in this order and
                 # reports each one's own.
+                #
+                # And `begin` alone paints it now. It used to be followed by
+                # `status.show(stage_phrase(...))`, which replaced the specific line
+                # with a fixed phrase from the profile — "Searching the documentation"
+                # over a row that could have said which words were searched for.
+                # Reported: "it stills shows searching the relevant doc and things like
+                # that rather than very specific cot shown in the status message".
+                #
+                # Removing it also fixes the times. `show` called `_stop`, so a step's
+                # clock was stopped the instant after it started, and a round of
+                # PARALLEL calls reported the second one as `0.0s` — visible in the
+                # reader's own paste of a folded block: `search … 2.4s`, `search … 0.0s`,
+                # `read Python — Private 2.0s`, `read Python 0.0s`. The clock now runs
+                # until the next `begin` or the fold, so every row carries a real
+                # number.
                 status.begin(*call_step(view, call))
-                # The vague phrase for the stage, in the sweeping row. The step the
-                # line above records is for the folded block after the answer.
-                status.show(stage_phrase(view, call.get("name") or ""))
                 result = runner.run(call["name"], call["input"])
                 # The budget is cumulative across rounds, which is the whole point:
                 # each result is individually legal at MAX_DOC_CHARS and it is the

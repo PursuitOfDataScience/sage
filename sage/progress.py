@@ -79,6 +79,37 @@ def status_html(text: str) -> str:
     )
 
 
+def live_html(step: Step) -> str:
+    """The sweeping row, naming the step that is actually running.
+
+    Same one-line shape as `status_html` and the same gradient, with the tool's
+    reader-facing name where the fixed phrase was and its argument beside it. No ✓ and
+    no time: neither is true yet.
+
+    This is the third position this row has held, and the two before it were both
+    reported. It drew a step per call and KEPT them, which by the third round was six
+    rows of history stacked over an empty answer — "it's everything showing, which looks
+    bad", "it should be like what we had before with the cool status message with
+    gradients". So it became one line carrying a fixed phrase from the profile, and that
+    was too little: "it stills shows searching the relevant doc and things like that
+    rather than very specific cot shown in the status message". One line, specific, is
+    what both complaints leave — the accumulation was the fault, not the detail.
+
+    The argument is its own element rather than part of the text beside it, for the
+    reason `_argument_html` records: the live text is a gradient clipped to its glyphs,
+    so a child of it inherits `-webkit-text-fill-color: transparent` with no background
+    of its own and is invisible.
+    """
+    return (
+        '<div class="status-row" role="status" aria-live="polite">'
+        '<span class="status-dot" aria-hidden="true"></span>'
+        f'<span class="status-text">{html.escape(step.name)}</span>'
+        f"{_argument_html(step.detail)}"
+        '<span class="status-dots" aria-hidden="true"><span></span><span></span>'
+        "<span></span></span></div>"
+    )
+
+
 def _argument_html(detail: str) -> str:
     """The machine's half of a line: a path, a query. Monospace, and nothing else.
 

@@ -952,22 +952,27 @@ class TestStatusBlock:
     def test_only_the_sweeping_row_is_on_screen_while_a_turn_runs(self, monkeypatch):
         """One line, one phrase, the gradient crossing it — for the whole turn.
 
-        It drew a step per call and kept them, which by the third round was six rows of
+        It drew a step per call and KEPT them, which by the third round was six rows of
         history stacked over an empty answer: "it's everything showing, which looks
         bad", then "it should be like what we had before with the cool status message
-        with gradients". The steps are still recorded; they are not painted while the
-        reader is waiting.
+        with gradients". The accumulation was the fault — so one row, and it names the
+        step that is running, because a fixed phrase turned out to be too little: "it
+        stills shows searching the relevant doc and things like that rather than very
+        specific cot shown in the status message".
         """
         module = self.app(monkeypatch)
         status = self.block(module)
         status.show("Thinking")
         status.begin("search", "quota")
         status.begin("read", "Data Management FAQ — Quotas")
-        status.show(module.RUNTIME.copy.status_reading)
         drawn = module.st.markdown_html[-1]
+        # One row, and it is the one that is running.
         assert drawn.count('class="status-row"') == 1
-        assert "Reading the relevant sections" in drawn
-        for absent in ("status-step", "status-arg", ">quota<", "docs/storage"):
+        assert 'class="status-text">read<' in drawn
+        assert 'class="status-arg">Data Management FAQ — Quotas<' in drawn
+        # No history: the finished search is recorded, not painted.
+        assert ">quota<" not in drawn
+        for absent in ("status-step", "docs/storage"):
             assert absent not in drawn
 
     def test_the_steps_are_recorded_even_though_they_are_not_drawn(self, monkeypatch):
@@ -982,16 +987,18 @@ class TestStatusBlock:
             "quota", "Data Management FAQ — Quotas",
         ]
 
-    def test_the_phrase_names_the_stage_and_not_the_argument(self, monkeypatch):
-        """Vague on purpose: the row says which stage, the folded block says which
-        section. Merging the two put a repository path on the row."""
+    def test_a_tool_with_no_name_of_its_own_still_gets_a_word(self, monkeypatch):
+        """`turn.stage_phrase` was here, mapping a tool id to a stage phrase for the
+        row. The row names the step now, so the function and both phrases are gone —
+        and this is what is left of them: `call_step` needs a word for a tool that
+        declares no reader-facing name, or the row's name slot is blank."""
         module = self.app(monkeypatch)
         copy = module.RUNTIME.copy
-        assert module.turn.stage_phrase(
-            module.VIEW, tools.SEARCH_DOCS) == copy.status_searching
-        assert module.turn.stage_phrase(
-            module.VIEW, tools.READ_DOC) == copy.status_reading
-        assert module.turn.stage_phrase(module.VIEW, "other") == copy.status_working
+        name, detail = module.turn.call_step(
+            module.VIEW, {"name": "nameless_tool", "input": {"query": "quota"}}
+        )
+        assert name == copy.status_working
+        assert not hasattr(module.turn, "stage_phrase")
 
     def test_a_finished_step_carries_its_time_and_the_live_one_does_not(
         self, monkeypatch
@@ -1137,10 +1144,24 @@ class TestStatusBlock:
             "processing": True,
         })
         drawn = [html for html in stub.markdown_html if "status-" in html]
-        # The sweeping row carried each stage while the turn ran.
-        assert any("Searching the documentation" in html for html in drawn)
-        assert any("Reading the relevant sections" in html for html in drawn)
-        # And no corpus path anywhere on the page at any point in the turn.
+        # The sweeping row named each step as it ran, which is what the reader asked
+        # for: "it stills shows searching the relevant doc and things like that rather
+        # than very specific cot shown in the status message". One row at a time — the
+        # accumulation was the earlier complaint and is still fixed — but specific.
+        # `class="status-row"`, not `status-row`: `assets.inject` puts the whole of
+        # app.css on the page in a `<style>` block, and every selector in it contains
+        # the bare class name.
+        live = [html for html in drawn if 'class="status-row"' in html]
+        assert any('class="status-text">search<' in html for html in live)
+        assert any('class="status-arg">quota<' in html for html in live)
+        assert any('class="status-text">read<' in html for html in live)
+        # Never two steps in one live row.
+        assert all(html.count('class="status-text"') == 1 for html in live)
+        # The waiting phrase is still what shows before the first call, when there is
+        # no step to name.
+        assert any("Thinking" in html for html in live)
+        # And no corpus path anywhere on the page at any point in the turn — the read's
+        # live row carries the resolved section title, exactly as the folded one does.
         assert not any("docs/storage/main.md" in html for html in drawn)
         # The steps arrived folded, once the answer started, with their arguments.
         folded = [html for html in drawn if "status-done" in html]

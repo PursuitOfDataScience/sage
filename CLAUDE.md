@@ -77,7 +77,7 @@ httpx. Outbound HTTPS works. Chromium is at
   written down here: it went stale three times in a week, and the number the suite
   reports is the one that is true.
 - **Layout**: `SAGE_CHROME=~/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome
-  python tools/render_check.py` — ~8 minutes for 684 renders.
+  python tools/render_check.py` — ~8 minutes for 708 renders.
 - **Anchors**: `python tools/anchor_check.py` — network-bound, so not in the suite.
   Run it after touching `slugify`, `plain_heading` or a URL scheme.
 - **Palette**: `python tools/palette_check.py` — every declared colour and token

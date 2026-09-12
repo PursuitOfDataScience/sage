@@ -856,12 +856,16 @@ def live_row(name: str = "", argument: str = "") -> str:
 
     That second form is what this file rendered before there were steps, down to the
     byte, because that frame of a turn did not change. The live step differs from it in
-    two ways and both are deliberate: the argument is a sibling of `.status-text`
-    rather than inside it (the text is a gradient clipped to its own glyphs, so a child
-    of it is invisible), and the live line carries no `role`, because the block around
-    it is the one live region.
+    one way, and it is deliberate: the argument is a sibling of `.status-text` rather
+    than inside it, because the text is a gradient clipped to its own glyphs and a
+    child of it inherits a transparent fill with no background to show through.
+
+    Both forms carry the `role`, matching `progress.live_html` and `progress.status_html`
+    — this row IS the live region now. It used to be roleless when it named a step,
+    which was right while a BLOCK of steps surrounded it and wrong the moment one row
+    replaced the block.
     """
-    role = ' role="status" aria-live="polite"' if not name else ""
+    role = ' role="status" aria-live="polite"'
     return (
         f'<div class="status-row"{role}>'
         '<span class="status-dot" aria-hidden="true"></span>'
@@ -947,6 +951,12 @@ STREAMING_ANSWER = """
  </div></div></div></div>"""
 
 IN_FLIGHT = in_flight(live_row())
+# The same frame while a step is actually running, which is what the row says now: the
+# tool's name where the fixed phrase was and its argument beside it. Rendered with the
+# longest section title this corpus produces, because that string is the one that can
+# overflow the row — the fixed phrases are short by construction and were the only
+# thing measured here while the row carried them.
+IN_FLIGHT_STEP = in_flight(live_row(STEP_NAMES[1], STEP_PATH))
 # The same screen once the turn has done something: six finished steps, each naming a
 # tool and what it was given, and the live line under them. This is the one that grows
 # — 22px a step, measured — so it is where "does the newest thing on the page still
@@ -997,6 +1007,12 @@ SCENARIOS = {
     # and a 10px-wider box than the outlined version once the fill lands.
     "think-on": CHAT_MARKER + SHORT_ANSWER + strip(pressed=True),
     "in-flight": CHAT_MARKER + IN_FLIGHT + strip(wrapped=False),
+    # The same screen with the row naming a running step. Back after being cut as dead
+    # weight when the row carried only a phrase: it draws steps again — "it stills shows
+    # searching the relevant doc and things like that rather than very specific cot
+    # shown in the status message" — so the argument is on screen mid-turn and needs the
+    # same width bound the folded block's already has.
+    "in-flight-step": CHAT_MARKER + IN_FLIGHT_STEP + strip(wrapped=False),
     # The same turn, once it has done something. Three finished turns behind it for the
     # reason the `queued` screen has them: the bound that matters here — the newest
     # thing on the page is under the composer — can only fire on a page long enough to
@@ -1074,7 +1090,15 @@ NARROW_LINE_LIMITS: dict[str, int] = {
     # The status line, at a phone width too — this is the one place the general gate
     # would be wrong to let go. It is a progress cue over an empty answer, so a second
     # row is the page growing under a reader who is waiting and has nothing else to
-    # look at. The phrases it can hold are fixed, and `Copy.status_phrases` is the set.
+    # look at.
+    #
+    # `.status-text` now holds a TOOL'S NAME while a call runs and one of two short
+    # fixed phrases otherwise (`Copy.status_phrases`, down to "Thinking" and "Working"
+    # since the row stopped carrying a stage phrase), so this bound has got easy. The
+    # hard half moved next door: the argument beside that name is a query or a section
+    # title the model chose, up to `config.STATUS_ARGUMENT_CHARS`, and it is held by
+    # `.status-arg` below — on the `in-flight-step` screen, which exists to put one on
+    # the row mid-turn where nothing had measured one.
     ".status-text": 1,
     # And every step under it, which is where the same requirement got harder: the
     # argument on a step is a query or a path the MODEL chose, at up to
@@ -3357,7 +3381,13 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
     # below is what says. Two things are left, and the first is the one that keeps the
     # rest honest.
     step = els.get(".status-step")
-    if scenario.startswith("in-flight-") and not step:
+    # A screen that claims to show a step has to have one on it, or every bound below
+    # passes by having nothing to measure. Two shapes count: a FINISHED step, which is
+    # a `.status-step` row inside the folded block, and a RUNNING one, which is the
+    # live row with an argument beside its name — `progress.live_html`. The second was
+    # not a shape when this guard was written, and `in-flight-step` renders only that.
+    running = els.get(".status-arg") if els.get(".status-text") else None
+    if scenario.startswith("in-flight-") and not (step or running):
         problems.append(
             f"{where}: this screen models the progress block and no step rendered — "
             f"every check on the block passes here without having looked at anything"

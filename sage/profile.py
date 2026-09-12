@@ -168,20 +168,17 @@ class Copy:
     #: and those two stage phrases have nothing left to describe. The reversal is
     #: recorded rather than quietly applied: the phrases were deliberate, and the
     #: reasoning for them is in this file's history if a deployment wants it back.
-    #: `status_searching` and `status_reading` name the STAGE a turn is in, vaguely and
-    #: on purpose. They were removed when the row started naming each tool call with its
-    #: argument, and what that produced once several rounds had run was six rows of
-    #: history stacked over an empty answer, one of them a repository path. Both were
-    #: reported: "it's everything showing, which looks bad", and "it should be like what
-    #: we had before with the cool status message with gradients".
-    #:
-    #: So the two jobs are split rather than merged. WHILE a turn runs, one of these in
-    #: the sweeping row — a progress cue, which is what a reader waiting on an empty
-    #: answer needs. AFTER it, the detail: every step with its section title and its
-    #: time, folded under the answer where it can be opened against what it produced.
+    #: `status_searching` and `status_reading` were here, naming the STAGE a turn was in
+    #: — "Searching the documentation", "Reading the relevant sections" — and they are
+    #: gone for the third and last time. The row drew a step per call and KEPT them,
+    #: which by the third round was six rows of history over an empty answer ("it's
+    #: everything showing, which looks bad"); it became one line carrying one of those
+    #: phrases, and that was too little ("it stills shows searching the relevant doc and
+    #: things like that rather than very specific cot shown in the status message"). One
+    #: line, naming the running step, is what both complaints leave standing — so the
+    #: phrases had nothing left to describe. `status_working` survives because
+    #: `turn.call_step` still needs a word for a tool that declares no name.
     status_thinking: str = "Thinking"
-    status_searching: str = "Searching the documentation"
-    status_reading: str = "Reading the relevant sections"
     status_working: str = "Working"
     #: The toggle in the corner of the input box, where the model picker used to be.
     #:
@@ -210,8 +207,6 @@ class Copy:
         """
         return (
             self.status_thinking,
-            self.status_searching,
-            self.status_reading,
             self.status_working,
         )
 
