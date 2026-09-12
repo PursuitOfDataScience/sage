@@ -13,8 +13,84 @@
 # preference decides again and the two stylesheets agree. The dark primary is the
 # tint app.css already uses for brand text on a dark page; #800000 on near-black
 # reads at 1.73:1.
+#
+# The typeface is named HERE as well as in static/app.css, and it has to be. This
+# file is the only thing that decides what Streamlit paints its OWN widgets with —
+# the buttons, the popover, the composer's textarea, the sidebar — so a stylesheet
+# that changed the font alone would move the prose and leave half the page on
+# Streamlit's default. `font` was `"sans serif"`, which is Source Sans Pro: the face
+# every Streamlit app ships with, and the single loudest reason this one read as a
+# generic Streamlit app whatever colour it was painted.
 [theme]
-font = "sans serif"
+# A stack, not a name: `sans-serif` is what a reader gets for the one frame before
+# the woff2 below arrives, and for any glyph Plex's latin subset does not carry.
+font = "IBM Plex Sans, sans-serif"
+# Code blocks and inline code chips. Streamlit keeps this separate from `font`, and
+# so does app.css — see `--font-mono` there for what else is machine-shaped enough
+# to earn it.
+codeFont = "IBM Plex Mono, monospace"
+# `headingFont` is deliberately unset: it falls back to `font`, and one face for
+# headings and prose is the design. Stating it would be a second place to forget.
+
+# The faces themselves, served from this repo rather than from a CDN — see
+# `server.enableStaticServing` below for the switch that makes `app/static/` a URL.
+# Google's fonts.gstatic.com would be no files to carry and a third party between the
+# reader and the page: an outage, a blocked domain or an offline demo, and the app
+# silently falls back to `sans-serif`. Both families are OFL-1.1; the licence travels
+# with them in static/fonts/OFL.txt, which the licence requires.
+#
+# FIVE files, not thirty-two. The sans upright and the sans italic are variable fonts
+# carrying the whole 400–700 range in one file each, which is exactly the span app.css
+# asks for (400 prose, 500/600 labels, 700 headings) — `weight` takes a range, and
+# Streamlit passes it through to the `font-weight` descriptor. The sans italic is here
+# because Streamlit's own Source Sans has one and an answer's `*emphasis*` would
+# otherwise be a synthetic slant.
+#
+# Each is the `latin` subset (about 145 KB for the five). No `unicodeRange`, so the
+# browser falls back per glyph rather than per range: the 72 documents in docs/ have
+# no latin-ext character in them at all, measured, and an emoji or a ● was already
+# coming from the system font.
+#
+# Where they came from, since a woff2 says nothing about itself: the `latin` faces of
+# fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400..700;1,400..700 and
+# family=IBM+Plex+Mono:ital,wght@0,400;0,700;1,400 (Plex Sans v23, Plex Mono v20),
+# downloaded from the urls that stylesheet gives and renamed to say what each one is.
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-400-700.woff2"
+weight = "400 700"
+style = "normal"
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-italic-latin-400-700.woff2"
+weight = "400 700"
+style = "italic"
+
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url = "app/static/fonts/ibm-plex-mono-latin-400.woff2"
+weight = "400"
+style = "normal"
+
+# Mono italic and mono bold, both for the same reason and it is not emphasis:
+# Streamlit's syntax highlighter italicises comments and bolds keywords, so a code
+# block asks for both. Counted in the running app on one ordinary sbatch answer —
+# three italic spans (the `#SBATCH` directives) and one at weight 700 (the shebang).
+# Without these two files every one of them is a synthetic slant or smear, which at
+# 14px is visible. This is what "the weights actually used" means here: measured, not
+# guessed at, which is also why there is no mono 500 or 600.
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url = "app/static/fonts/ibm-plex-mono-italic-latin-400.woff2"
+weight = "400"
+style = "italic"
+
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url = "app/static/fonts/ibm-plex-mono-latin-700.woff2"
+weight = "700"
+style = "normal"
 
 [theme.light]
 primaryColor = "#800000"
@@ -42,6 +118,18 @@ primaryColor = "#f0a8ac"
 # tests/test_streamlit_config.py holds the two numbers in that order.
 maxUploadSize = 20
 enableXsrfProtection = true
+
+# What turns `static/` into `app/static/` over HTTP, and the only reason the
+# `[[theme.fontFaces]]` urls above resolve to anything. Without it the faces 404 —
+# on Community Cloud as well as here — and every one of them falls back to
+# `sans-serif` without failing anything: the page renders, in the wrong face.
+# `tests/test_streamlit_config.py` holds the switch against those urls for exactly
+# that reason.
+#
+# It also publishes static/app.css and static/app.js at those paths. Both are already
+# inlined verbatim into the page `sage/ui/assets.py` serves, so nothing becomes
+# readable that was not; `.streamlit/secrets.toml` is elsewhere and is not served.
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false

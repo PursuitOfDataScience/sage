@@ -133,12 +133,12 @@ class Recorder:
                 self._models = []
         return self._models
 
-    def stream(self, model, messages, tools):
+    def stream(self, model, messages, tools, thinking=False):
         _TRACE.calls += 1
         _TRACE.tools_offered.append(bool(tools))
         _TRACE.record_request(messages)
         try:
-            for chunk in self._inner.stream(model, messages, tools):
+            for chunk in self._inner.stream(model, messages, tools, thinking):
                 _TRACE.stamp("first_byte")
                 if getattr(chunk, "text", ""):
                     _TRACE.stamp("first_text")

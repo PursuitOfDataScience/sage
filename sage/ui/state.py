@@ -22,6 +22,13 @@ logger = logging.getLogger(__name__)
 SESSION_DEFAULTS: tuple[tuple[str, object], ...] = (
     ("messages", []),
     ("processing", False),
+    # The Think toggle in the corner of the input box. Off by default, and that is the
+    # safe default rather than a shy one: reasoning tokens are billed as output tokens,
+    # so on-by-default spends a free allowance on every turn whether the question
+    # needed the thinking or not. Cleared by `composer.render_think_toggle` whenever
+    # the model answering cannot take the parameter, which an automatic failover can
+    # bring about without anyone touching the control.
+    ("thinking", False),
     # A list, not one file. Holding one meant the guard in `uploads` dropped anything
     # offered while a file was already attached, and a second attachment looked from
     # the outside like a control that does nothing.

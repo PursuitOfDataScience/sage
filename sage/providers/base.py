@@ -104,8 +104,14 @@ class Provider(Protocol):
 
     def models(self) -> list[Model]: ...
 
+    #: `thinking` is the reader's Think toggle. Every adapter takes it and an
+    #: adapter whose wire format has no such field ignores it — the alternative was
+    #: `**kwargs` on the one method every provider must implement, which makes a typo
+    #: at a call site silent. Whether it is ever True is decided upstream by
+    #: `ProviderEntry.reasoning`, so an adapter that ignores it is never handed it.
     def stream(
-        self, model: str, messages: list[dict], tools: list[dict] | None
+        self, model: str, messages: list[dict], tools: list[dict] | None,
+        thinking: bool = False,
     ) -> Iterator[Chunk]: ...
 
 

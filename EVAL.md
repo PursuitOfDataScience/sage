@@ -428,7 +428,7 @@ Measured against `nemotron-3.5-lightning-free` on one tool round: **46 chunks, 4
 carrying neither text nor a tool call.** `tools/mock_provider.py` sent one, so nothing
 offline exercised the shape the live path gets on every single turn — and two behaviours
 depend on it. `llm.start` pulls the first chunk so an auth failure surfaces where it can
-still be retried, and `clearing` holds the status row until a chunk with *text* arrives
+still be retried, and `collapsing` folds the status block when a chunk with *text* arrives
 rather than the first chunk of any kind. `{"mode": "quiet"}` now models it, and four harness
 tests cover a mostly-empty stream that answers, one that never does, and the timing fields
 either side.

@@ -7,6 +7,7 @@ a typed, user-readable error instead of taking the page down.
 
 import ast
 import pathlib
+import re
 import time
 from types import SimpleNamespace
 
@@ -39,7 +40,7 @@ class ScriptedProvider:
     def models(self):
         return [providers.Model(self.name, model_id) for model_id in self._models]
 
-    def stream(self, model, messages, tools):
+    def stream(self, model, messages, tools, thinking=False):
         self.calls += 1
         self.sent.append(messages)
         self.tools_seen.append(tools)
@@ -67,15 +68,22 @@ def clear_provider_keys(monkeypatch):
 
 
 def run_app(monkeypatch, *, client=None, session=None, extra=None,
-            opencode=False, **stub_kwargs):
+            opencode=False, openrouter=False, **stub_kwargs):
     """Import app.py under the stub and return (stub, module-or-None).
 
-    `opencode=True` configures a second provider, so the model picker appears.
+    `opencode=True` configures a second provider, so more than one model is offered.
+    `openrouter=True` configures the one provider in the shipped profile that declares
+    `reasoning`, which is what draws the Think pill — set here rather than by a caller's
+    `setenv`, because `clear_provider_keys` below runs after the caller and would undo
+    it. That cost two rounds of a test asserting on a control the app was right not to
+    draw.
     """
     clear_provider_keys(monkeypatch)
     monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
     if opencode:
         monkeypatch.setenv("OPENCODE_API_KEY", "sk-zen-test")
+    if openrouter:
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     stub = stub_streamlit.install(**stub_kwargs)
     if session:
         stub.session_state.update(session)
@@ -328,10 +336,10 @@ class TestRepaintPacing:
         assert len(painted) == 2
 
     def test_the_first_word_is_never_held_back(self):
-        """`clearing` takes the status row down when text arrives. Hold that text and
-        the reader watches an empty bubble where the row was, which is the twitch the
-        `Status` class exists to prevent — and time to first word is the one moment of
-        a turn anybody is watching."""
+        """`collapsing` folds the status block when text arrives. Hold that text and
+        the reader watches a collapsed summary with nothing under it, which is the
+        twitch the `Status` class exists to prevent — and time to first word is the one
+        moment of a turn anybody is watching."""
         turn = self.turn_module()
         painted = list(turn.paced(iter(["Your /home quota is ", "30 GB."]),
                                   interval_ms=self.HELD))
@@ -544,121 +552,78 @@ class TestTheMachineryIsNotNamedToTheReader:
         assert stored["redacted"] == []
 
 
-class TestModelPicker:
-    """Switching provider mid-session is the way round a spent API quota."""
+class TestTheThinkToggle:
+    """The control in the corner of the input box, where the model picker stood.
 
-    def session(self):
-        return {"messages": [], "processing": False}
+    Removed by decision, not by accident: "we shouldn't have a model picker but rather
+    use the model picker position for the think toggle... we don't need users to pick a
+    model or anything like that." What these hold is the part of that swap which is not
+    geometry — `tools/render_check.py` has the geometry, and it cannot see whether the
+    pill is drawn for a provider that would reject the parameter it sends.
+    """
 
-    @staticmethod
-    def _offered(stub):
-        return {key: label for key, label in stub.button_labels.items()
-                if str(key).startswith("pick-")}
+    def session(self, **extra):
+        return {"messages": [], "processing": False, **extra}
 
-    def test_no_picker_when_only_one_model_is_available(self, monkeypatch):
-        provider = ScriptedProvider([], models=("only-one",))
-        stub, _m = run_app(monkeypatch, client=provider, session=self.session())
-        assert not self._offered(stub)
+    def _run(self, monkeypatch, session, name, model, **kwargs):
+        """Drive the app with ONE provider configured, from the shipped profile.
 
-    def test_picker_lists_every_model_from_every_configured_provider(self, monkeypatch):
-        mistral = ScriptedProvider([], name="mistral", models=("mistral-small-latest",))
-        zen = ScriptedProvider([], name="opencode",
-                               models=("deepseek-v4-flash-free", "big-pickle"))
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=self.session(), opencode=True)
-        offered = " | ".join(self._offered(stub).values())
-        assert offered, "expected a model picker"
-        assert "mistral-small-latest" in offered
-        assert "deepseek-v4-flash" in offered
-        assert "big-pickle" in offered
-
-    def test_the_trigger_names_the_model_in_use(self, monkeypatch):
-        """Otherwise the only way to see which model answers is to open the menu.
-
-        The default is pinned to a model this test's own provider serves, rather than
-        borrowed from `config`. Borrowed, it broke the day the shipped default moved to a
-        provider the test does not configure: the app fell through to the first available
-        model and the assertion named one nothing was serving.
+        The profile is what declares `reasoning`, so this reads it rather than
+        inventing a provider table: `openrouter` carries the flag there and
+        `opencode` does not, and a test that built its own entries would go on
+        passing on the day the profile stopped saying so.
         """
-        monkeypatch.setattr(config, "DEFAULT_MODEL",
-                            "opencode:nemotron-3.5-lightning-free")
-        mistral = ScriptedProvider([], name="mistral", models=("mistral-small-latest",))
-        zen = ScriptedProvider([], name="opencode",
-                               models=("nemotron-3.5-lightning-free",))
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=self.session(), opencode=True)
-        assert ("popover", "nemotron-3.5-lightning") in stub.events
+        provider = ScriptedProvider([], name=name, models=(model,))
+        monkeypatch.setattr(config, "DEFAULT_MODEL", f"{name}:{model}")
+        # `run_app` always sets a Mistral key, so that provider is configured whatever
+        # this test wants. Served empty rather than unset: an unbuildable provider logs
+        # "could not list models" and falls through to the profile's own list, which put
+        # a Mistral model first in the lineup and made it the one answering.
+        return run_app(
+            monkeypatch, client=provider, session=session,
+            extra={"mistral": ScriptedProvider([], name="mistral", models=())},
+            **kwargs)
 
-    def test_a_fresh_session_starts_on_the_configured_default(self, monkeypatch):
-        """Not on whichever provider happens to be listed first.
+    def openrouter(self, monkeypatch, session, **kwargs):
+        """A provider that declares `reasoning`, which is what draws the pill."""
+        return self._run(monkeypatch, session, "openrouter", "openrouter/free",
+                         openrouter=True, **kwargs)
 
-        The default is pointed at the provider that is *not* at the head of
-        `configured_providers` here, which is the only arrangement that can tell the two
-        apart. It used to rely on the shipped profile ranking Mistral first and the
-        shipped default naming Zen — true when it was written, and then the default moved
-        to `openrouter:openrouter/free` and the profile ranked OpenRouter first, so the
-        two orders agreed and a default being quietly ignored would have passed.
-        """
-        monkeypatch.setattr(config, "DEFAULT_MODEL",
-                            "opencode:nemotron-3.5-lightning-free")
-        mistral = ScriptedProvider([], name="mistral", models=("mistral-small-latest",))
-        zen = ScriptedProvider([], name="opencode",
-                               models=("nemotron-3.5-lightning-free",))
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=self.session(), opencode=True)
-        assert stub.session_state["model"] == "opencode:nemotron-3.5-lightning-free"
-        assert stub.session_state["model"] == "opencode:nemotron-3.5-lightning-free"
+    def zen(self, monkeypatch, session, **kwargs):
+        """And one that does not. Same wire format, no `reasoning` field."""
+        return self._run(monkeypatch, session, "opencode", "big-pickle",
+                         opencode=True, **kwargs)
 
-    def test_it_is_not_a_selectbox(self, monkeypatch):
-        """A selectbox kept its own value and clobbered an automatic failover on
-        the very next rerun; it also had no intrinsic width, so in a row that
-        sizes its children to their labels it rendered invisible. Buttons have
-        neither problem."""
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
-        zen = ScriptedProvider([], name="opencode", models=("z1",))
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=self.session(), opencode=True)
-        assert not [e for e in stub.events if e[0] == "selectbox"]
+    def test_the_pill_is_drawn_where_the_provider_takes_the_parameter(self, monkeypatch):
+        stub, _m = self.openrouter(monkeypatch, self.session())
+        assert "think-toggle" in stub.button_labels
 
-    def test_choosing_a_model_switches_to_it(self, monkeypatch):
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
-        zen = ScriptedProvider([], name="opencode", models=("z1",))
-        session = self.session() | {"tried": ["mistral:m1"], "notice": "stale"}
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=session, opencode=True, buttons={"pick-1": True})
-        assert stub.session_state["model"] == "opencode:z1"
-        # A deliberate choice re-arms the automatic one and drops its message.
-        assert stub.session_state["tried"] == []
-        assert stub.session_state["notice"] == ""
+    def test_and_not_drawn_where_it_does_not(self, monkeypatch):
+        """`kind = "openai"` covers both, so the switch cannot be inferred from the
+        adapter — only the profile knows. A pill drawn here would be a control that
+        does nothing, which this app has a standing rule against, and it would send a
+        field the endpoint is entitled to reject."""
+        stub, _m = self.zen(monkeypatch, self.session())
+        assert "think-toggle" not in stub.button_labels
 
-    def test_the_selected_model_is_the_one_used(self, monkeypatch):
-        mistral = ScriptedProvider([], name="mistral", models=("mistral-small-latest",))
-        zen = ScriptedProvider([[event("Zen answered.")]], name="opencode",
-                               models=("deepseek-v4-flash-free",))
-        session = {
-            "messages": [{"role": "user", "text": "hi", "attachments": []}],
-            "processing": True,
-            "model": "opencode:deepseek-v4-flash-free",
-        }
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=session, opencode=True)
-        assert zen.calls == 1
-        assert mistral.calls == 0
-        assert stub.session_state["messages"][-1]["text"] == "Zen answered."
-        assert stub.session_state["messages"][-1]["model"] == (
-            "opencode:deepseek-v4-flash-free"
-        )
+    def test_the_flag_is_cleared_when_the_pill_goes(self, monkeypatch):
+        """An automatic failover can move a session onto a provider without reasoning
+        without anyone touching the control. Leaving the flag set there would have the
+        next turn quietly ask for a field that provider will refuse — so the flag goes
+        when the control does, on the run that stops drawing it."""
+        stub, _m = self.zen(monkeypatch, self.session(thinking=True))
+        assert stub.session_state["thinking"] is False
 
-    def test_an_unknown_saved_model_falls_back_instead_of_crashing(self, monkeypatch):
-        provider = ScriptedProvider([[event("ok")]], models=("m1",))
-        session = {
-            "messages": [{"role": "user", "text": "hi", "attachments": []}],
-            "processing": True,
-            "model": "opencode:retired-model",
-        }
-        stub, _m = run_app(monkeypatch, client=provider, session=session)
-        assert stub.session_state["model"] == "mistral:m1"
-        assert stub.session_state["error"] is None
+    def test_the_flag_survives_on_a_provider_that_takes_it(self, monkeypatch):
+        stub, _m = self.openrouter(monkeypatch, self.session(thinking=True))
+        assert stub.session_state["thinking"] is True
+
+    def test_it_is_off_for_a_session_that_has_not_asked(self, monkeypatch):
+        """Off by default, and that is the safe default rather than a shy one:
+        reasoning tokens are billed as output tokens, so on-by-default spends a free
+        allowance on every turn whether the question needed the thinking or not."""
+        stub, _m = self.openrouter(monkeypatch, self.session())
+        assert stub.session_state["thinking"] is False
 
 
 class TestComposerStrip:
@@ -712,20 +677,16 @@ class TestComposerStrip:
         assert (self._index(stub, "container", "composer-strip")
                 > self._index(stub, "chat_input"))
 
-    def test_the_picker_is_there_before_the_first_question(self, monkeypatch):
-        """Reported from the running app: the picker did not show up on the
-        landing page at all — not until a prompt had been entered."""
+    def test_there_is_no_popover_anywhere(self, monkeypatch):
+        """The model picker was the only `st.popover` in the app, and it took a panel
+        portalled to the end of <body> with it: its own background and border tokens,
+        an Escape sent from app.js after every pick because Streamlit left it open
+        across the rerun, and two selector shapes in the layout harness for the two
+        Streamlit versions that render it differently. None of that has anything left
+        to act on, and a popover appearing here again would mean one of them came back
+        without the rest."""
         stub, _m = self.two_providers(monkeypatch, {"messages": [], "processing": False})
-        assert ("popover", "nemotron-3.5-lightning") in stub.events
-        assert [key for key in stub.button_labels if str(key).startswith("pick-")]
-
-    def test_the_picker_is_still_there_mid_conversation(self, monkeypatch):
-        session = {
-            "messages": [{"role": "user", "text": "hi", "attachments": []}],
-            "processing": False,
-        }
-        stub, _m = self.two_providers(monkeypatch, session)
-        assert ("popover", "nemotron-3.5-lightning") in stub.events
+        assert [event for event in stub.events if event[0] == "popover"] == []
 
     def test_there_is_no_trash_can(self, monkeypatch):
         """It emptied the open conversation, and the panel of chats made it the third
@@ -806,76 +767,277 @@ class TestComposerStrip:
         assert self._placeholder(stub) == "Ask any question about the RCC…"
 
 
-class TestStatusLine:
-    """What the row over an empty answer says while a reader waits for it.
+class TestStatusBlock:
+    """What the block over an empty answer says while a reader waits for it.
 
-    Fixed phrases, and nothing from inside the machine. It used to name the document
-    being read — "Reading Batch jobs", or "Reading sbatch.md" when a model handed over
-    a path the index could not resolve — and quote the model's search query back. A
-    filename is not something a reader can place, and the query is the model's wording
-    rather than theirs. What is specific is still in the Sources strip under the
-    answer, where it is a link next to the claim it supports.
+    One line per tool call, named the way an answer would name the tool, with the
+    argument that says which one — the query for a search, the path and anchor for a
+    read — and how long the wait for it was. Finished lines stay, and the block folds
+    into one summary line the moment the answer starts arriving.
+
+    This REVERSES what the row used to do, which was one fixed phrase per round and
+    nothing from inside the machine on screen: not the query, not the path, not the
+    section's own title. The reversal was asked for — "the user needs to see the
+    detailed status updates and which sections to read etc, this is more precise" —
+    and the tests for the old rule are gone with it rather than left passing against
+    something nobody wants.
+
+    What survives is the reason that rule was safe: the argument is whatever the model
+    typed, and a query typed as a number once ended a turn with an AttributeError
+    dressed up as a network failure. So half of this class is still about arguments no
+    sensible model would send.
     """
+
+    SEARCH = [event(tool_calls=[tool_call(0, "c1", "search_docs", '{"query":"quota"}')])]
+    READ = [
+        event(tool_calls=[
+            tool_call(0, "c2", "read_doc", '{"path":"docs/storage/main.md#quotas"}')
+        ])
+    ]
+    ANSWER = [event("Your /home quota is "), event("30 GB.")]
 
     def app(self, monkeypatch):
         _stub, module = run_app(monkeypatch, client=ScriptedProvider([], models=("m1",)),
                                 session={"messages": [], "processing": False})
         return module
 
-    def test_reading_does_not_name_the_document(self, monkeypatch):
+    def block(self, module):
+        """A `Status` writing into a slot whose HTML the stub keeps."""
+        return module.turn.Status(module.st.empty())
+
+    # --- what one line says ---------------------------------------------
+
+    def test_a_search_names_the_tool_and_quotes_its_query(self, monkeypatch):
         module = self.app(monkeypatch)
-        chunk = module.RUNTIME.corpus.chunks[0]
-        said = module.turn.describe(
-            module.RUNTIME.copy,
-            [{"name": tools.READ_DOC, "input": {"path": chunk.id}}],
+        assert module.turn.call_step(
+            module.VIEW, {"name": tools.SEARCH_DOCS, "input": {"query": "gpu jobs"}}
+        ) == ("search", "gpu jobs")
+
+    def test_a_read_shows_the_path_and_the_anchor(self, monkeypatch):
+        """The anchor especially: it is the difference between a page and the section
+        of it this turn actually opened."""
+        module = self.app(monkeypatch)
+        name, detail = module.turn.call_step(
+            module.VIEW,
+            {"name": tools.READ_DOC, "input": {"path": "docs/storage/main.md#quotas"}},
         )
-        assert said == "Reading the relevant sections"
-        for leak in (chunk.doc_title, chunk.path, ".md", "—"):
-            assert leak not in said
+        assert (name, detail) == ("read", "docs/storage/main.md#quotas")
 
-    def test_a_path_the_index_cannot_resolve_leaks_no_filename(self, monkeypatch):
-        """The case the reader actually hit: a model naming a page that is not
-        indexed used to put the bare filename on screen."""
+    def test_the_name_is_the_one_an_answer_would_use(self, monkeypatch):
+        """`sage.redact` swaps these words into an answer that names a tool. The block
+        and the answer calling one thing by two names is the confusion this reads the
+        same mapping to avoid, rather than keeping a second copy of it."""
         module = self.app(monkeypatch)
-        said = module.turn.describe(
-            module.RUNTIME.copy,
-            [{"name": tools.READ_DOC, "input": {"path": "docs/slurm/sbatch.md"}}],
+        for internal, public in module.VIEW.public_names.items():
+            assert module.turn.call_step(
+                module.VIEW, {"name": internal, "input": {}}
+            )[0] == public
+        assert "_" not in "".join(module.VIEW.public_names.values())
+
+    def test_which_argument_to_show_is_the_tools_own_declaration(self, monkeypatch):
+        """Not a branch in the row on the two names that ship. A deployment that
+        registers a third tool declares `argument` and gets a line for it."""
+        module = self.app(monkeypatch)
+        assert module.VIEW.public_arguments == {
+            tools.SEARCH_DOCS: "query", tools.READ_DOC: "path",
+        }
+
+    def test_a_tool_with_no_public_name_is_still_one_honest_line(self, monkeypatch):
+        """The identifier the provider API needs is nobody's word for anything, so an
+        unnamed tool gets the fixed phrase — never a blank, which reads as a hang."""
+        module = self.app(monkeypatch)
+        name, detail = module.turn.call_step(
+            module.VIEW, {"name": "glossary_lookup", "input": {"term": "SU"}}
         )
-        assert said == "Reading the relevant sections"
-        assert "sbatch" not in said
+        assert name == module.RUNTIME.copy.status_working
+        assert detail == ""
+        assert "glossary" not in name
 
-    def test_searching_does_not_quote_the_query(self, monkeypatch):
-        module = self.app(monkeypatch)
-        said = module.turn.describe(module.RUNTIME.copy, [
-            {"name": tools.SEARCH_DOCS,
-             "input": {"query": "how do I check the number of service units my "
-                                "allocation has left on midway3"}}
-        ])
-        assert said == "Searching the documentation"
-        assert "“" not in said and "…" not in said
+    # --- and what no argument can do to it -------------------------------
 
-    def test_search_wins_over_read_and_neither_leaves_it_blank(self, monkeypatch):
+    def test_no_argument_can_end_a_turn(self, monkeypatch):
+        """A model puts whatever it likes in there — a number, a list, nothing at all,
+        not even a dict."""
         module = self.app(monkeypatch)
-        both = [{"name": tools.READ_DOC, "input": {"path": "docs/a.md"}},
-                {"name": tools.SEARCH_DOCS, "input": {"query": "gpu"}}]
-        copy = module.RUNTIME.copy
-        assert module.turn.describe(copy, both) == "Searching the documentation"
-        assert module.turn.describe(copy, []) == "Working"
-
-    def test_no_argument_can_reach_the_screen(self, monkeypatch):
-        """A model puts whatever it likes in there — a number, a list, nothing at
-        all. None of it is read now, so none of it can end a turn."""
-        module = self.app(monkeypatch)
-        for arguments in ({}, {"query": 123}, {"query": ["a"]}, {"path": None}):
-            said = module.turn.describe(
-                module.RUNTIME.copy,
-                [{"name": tools.SEARCH_DOCS, "input": arguments}],
+        for arguments in ({}, {"query": 123}, {"query": ["a"]}, {"path": None},
+                          None, "query=quota", []):
+            name, detail = module.turn.call_step(
+                module.VIEW, {"name": tools.SEARCH_DOCS, "input": arguments}
             )
-            assert said == "Searching the documentation"
+            assert name == "search"
+            assert isinstance(detail, str)
 
-    def test_every_phrase_fits_the_line_it_is_drawn_on(self, monkeypatch):
-        """The row is one line at 500px. Fixed phrases mean this is checkable once
-        rather than being a cap on something variable."""
+    def test_a_long_query_is_clipped_rather_than_shipped_whole(self, monkeypatch):
+        module = self.app(monkeypatch)
+        _name, detail = module.turn.call_step(
+            module.VIEW, {"name": tools.SEARCH_DOCS, "input": {"query": "x" * 4000}}
+        )
+        assert len(detail) == config.STATUS_ARGUMENT_CHARS
+        assert detail.endswith("…")
+
+    def test_an_argument_over_two_lines_is_drawn_on_one(self, monkeypatch):
+        """The row is one line tall. A newline in a value would be a newline in the
+        middle of it, and the ellipsis that holds the width cannot hold a height."""
+        module = self.app(monkeypatch)
+        _name, detail = module.turn.call_step(
+            module.VIEW,
+            {"name": tools.SEARCH_DOCS, "input": {"query": "one\ntwo   three\r\n"}},
+        )
+        assert detail == "one two three"
+
+    def test_markup_in_an_argument_is_escaped(self, monkeypatch):
+        """It reaches the page through `unsafe_allow_html`, so this is the only thing
+        between a model's query and the DOM."""
+        module = self.app(monkeypatch)
+        status = self.block(module)
+        status.begin(*module.turn.call_step(
+            module.VIEW,
+            {"name": tools.SEARCH_DOCS, "input": {"query": "<img src=x onerror=1>"}},
+        ))
+        drawn = module.st.markdown_html[-1]
+        assert "<img" not in drawn
+        assert "&lt;img" in drawn
+
+    # --- the block over a turn -------------------------------------------
+
+    def test_the_first_frame_is_the_row_this_app_has_always_drawn(self, monkeypatch):
+        """Before anything has been called there is nothing to list, so the block is
+        the single row, unchanged — the frame every turn opens on."""
+        module = self.app(monkeypatch)
+        status = self.block(module)
+        status.show(module.RUNTIME.copy.status_thinking)
+        drawn = module.st.markdown_html[-1]
+        assert 'class="status-row" role="status"' in drawn
+        assert 'class="status-dot"' in drawn and 'class="status-dots"' in drawn
+        assert "Thinking" in drawn
+        for added in ("status-block", "status-step", "status-arg", "details"):
+            assert added not in drawn
+
+    def test_a_line_per_call_and_the_finished_ones_stay(self, monkeypatch):
+        module = self.app(monkeypatch)
+        status = self.block(module)
+        status.show("Thinking")
+        status.begin("search", "quota")
+        status.begin("read", "docs/storage/main.md#quotas")
+        status.show("Thinking")
+        drawn = module.st.markdown_html[-1]
+        # Both calls, both still on the page, each with its own argument.
+        assert drawn.count('class="status-step"') == 2
+        assert ">quota<" in drawn and ">docs/storage/main.md#quotas<" in drawn
+        # And one live line under them: the wait for the next request.
+        assert drawn.count('class="status-row"') == 1
+
+    def test_a_finished_step_carries_its_time_and_the_live_one_does_not(
+        self, monkeypatch
+    ):
+        module = self.app(monkeypatch)
+        status = self.block(module)
+        status.begin("search", "quota")
+        assert "status-time" not in module.st.markdown_html[-1]
+        status.begin("read", "docs/storage/main.md#quotas")
+        drawn = module.st.markdown_html[-1]
+        assert re.search(r'class="status-time">\d+\.\ds<', drawn)
+        assert drawn.count("status-time") == 1
+
+    def test_the_time_is_the_wait_and_not_the_call(self, monkeypatch):
+        """A search of an in-memory index is 10-40ms, so a step timed from the call
+        itself would read 0.0s on every line of every turn while the seconds the reader
+        actually waited sat in the round trip that produced the call, attributed to
+        nothing. Each step's clock starts where the previous one stopped."""
+        module = self.app(monkeypatch)
+        ticks = iter([100.0, 102.5])
+        monkeypatch.setattr(module.turn.time, "monotonic", lambda: next(ticks, 102.5))
+        status = self.block(module)          # opened at 100.0
+        status.begin("search", "quota")      # the wait for it started there too
+        status.show("Thinking")              # and ended at 102.5
+        assert ">2.5s<" in module.st.markdown_html[-1]
+
+    def test_it_folds_into_one_line_the_reader_can_open_again(self, monkeypatch):
+        module = self.app(monkeypatch)
+        status = self.block(module)
+        status.begin("search", "quota")
+        status.begin("read", "docs/storage/main.md#quotas")
+        status.collapse()
+        drawn = module.st.markdown_html[-1]
+        assert drawn.startswith("<details")
+        assert re.search(r"<summary[^>]*>2 steps · \d+\.\ds</summary>", drawn)
+        # Folded, not thrown away: the steps are inside the disclosure.
+        assert drawn.count('class="status-step"') == 2
+        assert ">docs/storage/main.md#quotas<" in drawn
+
+    def test_one_step_is_one_step(self, monkeypatch):
+        module = self.app(monkeypatch)
+        status = self.block(module)
+        status.begin("search", "quota")
+        status.collapse()
+        assert "1 step ·" in module.st.markdown_html[-1]
+
+    def test_a_turn_that_called_nothing_folds_into_nothing(self, monkeypatch):
+        """A plain answer has no steps to summarise, so the row goes when the text
+        arrives — which is what every turn used to do at this point."""
+        module = self.app(monkeypatch)
+        status = self.block(module)
+        status.show("Thinking")
+        painted = len(module.st.markdown_html)
+        status.collapse()
+        assert len(module.st.markdown_html) == painted
+        assert module.st.events[-1] == ("empty", None)
+
+    # --- the generator that drives it ------------------------------------
+
+    class Spy:
+        def __init__(self):
+            self.collapsed = self.cleared = 0
+
+        def collapse(self):
+            self.collapsed += 1
+
+        def clear(self):
+            self.cleared += 1
+
+    def test_every_delta_survives_and_the_block_folds_once(self, monkeypatch):
+        module = self.app(monkeypatch)
+        spy = self.Spy()
+        assert list(module.turn.collapsing(iter("abc"), spy)) == ["a", "b", "c"]
+        assert spy.collapsed == 1
+
+    def test_a_round_with_no_text_leaves_the_block_standing(self, monkeypatch):
+        """The round after a search often says nothing at all. This used to clear the
+        row; with steps on the page that is a removal and an insertion per silent
+        round, which is the reflow `Status` exists to avoid. The end of the turn takes
+        it down instead."""
+        module = self.app(monkeypatch)
+        spy = self.Spy()
+        assert list(module.turn.collapsing(iter([]), spy)) == []
+        assert (spy.collapsed, spy.cleared) == (0, 0)
+
+    # --- and the whole thing, driven -------------------------------------
+
+    def test_a_real_turn_shows_what_it_searched_and_what_it_read(self, monkeypatch):
+        """The wiring. Every test above holds one piece of this in isolation, and a
+        call site that stopped calling `begin` would leave all of them passing while
+        the reader watched one unchanging line again."""
+        client = ScriptedProvider([self.SEARCH, self.READ, self.ANSWER])
+        stub, _module = run_app(monkeypatch, client=client, session={
+            "messages": [{"role": "user", "text": "what is my storage quota",
+                          "attachments": []}],
+            "processing": True,
+        })
+        drawn = [html for html in stub.markdown_html if "status-" in html]
+        assert any('class="status-arg">quota<' in html for html in drawn)
+        assert any('class="status-arg">docs/storage/main.md#quotas<' in html
+                   for html in drawn)
+        # Two calls, in the order they were made, on lines of their own.
+        widest = max(drawn, key=lambda html: html.count("status-step"))
+        assert widest.count('class="status-step"') == 2
+        assert widest.index(">quota<") < widest.index(">docs/storage/main.md#quotas<")
+        # And it folded when the answer began.
+        assert any(html.startswith("<details") and "2 steps" in html for html in drawn)
+
+    def test_every_fixed_phrase_fits_the_line_it_is_drawn_on(self, monkeypatch):
+        """The row is one line at 500px. The fixed phrases are checkable once; a tool's
+        line is an argument the model chose, which `tools/render_check.py` holds with a
+        width bound instead."""
         module = self.app(monkeypatch)
         for phrase in module.RUNTIME.copy.status_phrases:
             assert len(phrase) <= 40, phrase
@@ -946,7 +1108,7 @@ class TestToollessModels:
         monkeypatch.setattr(config, "TOOLLESS_MODELS", ())
 
         class RejectsTools(ScriptedProvider):
-            def stream(self, model, messages, tools):
+            def stream(self, model, messages, tools, thinking=False):
                 self.calls += 1
                 self.sent.append(messages)
                 self.tools_seen.append(tools)
@@ -1427,7 +1589,7 @@ class TestWalkingTheLineup:
         def models(self):
             return [providers.Model(self.name, name) for name in self._ids]
 
-        def stream(self, model, messages, tools):
+        def stream(self, model, messages, tools, thinking=False):
             self.asked.append(model)
             if self._error is not None and model not in self._answers:
                 raise self._error
