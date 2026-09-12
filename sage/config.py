@@ -42,7 +42,20 @@ TOOLLESS_MODELS = _env_list("SAGE_TOOLLESS_MODELS", ())
 # conservative: an image sent to a text-only model is a 4xx, not a graceful refusal,
 # so anything not listed here gets told the file is attached and left unread rather
 # than gambling with the request. Extend it as a deployment learns its own lineup.
-VISION_MODELS = _env_list("SAGE_VISION_MODELS", ("pixtral", "claude"))
+#
+# `openrouter/free` is on the list on evidence rather than on the strength of its name.
+# `GET /models` gives it `modality: text+image->text`, and a probe with an 8x8 PNG came
+# back `200` — so the 4xx this list exists to avoid is not what sending it an image
+# costs. What it does cost is worth knowing: only 10 of the 19 `:free` models the
+# router serves accept image input, the router picks one per request, and the probe's
+# usage came back `image_tokens: 0`, so there is no evidence yet that the model which
+# answered actually looked at the picture. Attaching an image here is a request that
+# will be accepted and may be ignored, which is still better than the alternative it
+# replaces: the app told the model a file was attached and unreadable, and the model
+# asked the reader to type the screenshot out by hand.
+VISION_MODELS = _env_list(
+    "SAGE_VISION_MODELS", ("pixtral", "claude", "openrouter/free")
+)
 
 
 def sees_images(model: str) -> bool:
@@ -191,6 +204,22 @@ MAX_PROMPT_CHARS = _env_int("SAGE_MAX_PROMPT_CHARS", 8000, minimum=1)
 #
 # 0 restores a repaint per delta.
 STREAM_REPAINT_MS = _env_int("SAGE_STREAM_REPAINT_MS", 40, minimum=0)
+
+# How much of a tool's argument the progress block puts on the page — the query it
+# searched for, the path it read. Not a layout number: the row ellipses whatever does
+# not fit the width it has, at every width (`.status-arg` in static/app.css). This is
+# a ceiling on what a MODEL can put in the DOM, because the value is whatever it typed
+# and the block is rewritten in full on every step — a 4 KB query string would be 4 KB
+# of markup per repaint, for a line 40 characters of which are visible.
+#
+# 96 is about twice the widest line the block draws at a 1440 viewport, so the clip is
+# never the thing a reader notices; the ellipsis is.
+#
+# Here rather than in `sage/ui/turn.py` so `tools/render_check.py` can render the worst
+# case the app can actually produce. That harness runs in a CI job with no Streamlit
+# installed, so it cannot import the module that draws the block — and a worst case
+# written out twice is a worst case that goes stale on one side.
+STATUS_ARGUMENT_CHARS = _env_int("SAGE_STATUS_ARGUMENT_CHARS", 96, minimum=1)
 
 # --- uploads ---------------------------------------------------------------
 

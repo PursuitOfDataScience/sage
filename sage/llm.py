@@ -241,14 +241,14 @@ def _parse(arguments: str) -> dict:
 
 
 def start(provider, model: str, messages: list[dict],
-          tools: list[dict] | None = None) -> Turn:
+          tools: list[dict] | None = None, thinking: bool = False) -> Turn:
     """Open a streaming turn, retrying transient failures before any output."""
     attempts = max(config.REQUEST_RETRIES, 0) + 1
     last: AssistantError | None = None
 
     for attempt in range(attempts):
         try:
-            stream = provider.stream(model, messages, tools)
+            stream = provider.stream(model, messages, tools, thinking)
             # `stream` is a generator, so the request has not been made yet. Pull
             # the first chunk here so connection and auth failures surface where
             # they can still be retried, rather than mid-render.

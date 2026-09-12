@@ -82,12 +82,12 @@
 name: lineup
 
 on:
-  # NO SCHEDULE, and this line survives a revert on purpose. It ran daily and the owner
-  # removed its output by hand three times in one afternoon — PR #73 closed, the
-  # `lineup/auto` branch deleted, issue #66 closed — because the deployment's default is
-  # the OpenRouter router and the OpenCode Zen lineup this maintains is not what answers.
-  # The rest of that day's work was reverted; this was asked for separately and is kept.
-  # `gh workflow run lineup.yml` still does the whole probe.
+  # NO SCHEDULE, and this survives the revert on purpose. It ran daily and the owner
+  # cleared its output by hand three times in one afternoon — PR #73 closed, the
+  # `lineup/auto` branch deleted, issue #66 closed — because the default model is the
+  # OpenRouter router and the OpenCode Zen lineup this maintains is not what answers.
+  # That was asked for separately from the UI work, so it is kept while the UI work is
+  # rolled back. `gh workflow run lineup.yml` still runs the whole probe.
   workflow_dispatch:
     inputs:
       probe:

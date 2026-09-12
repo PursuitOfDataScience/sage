@@ -308,9 +308,13 @@
     // the other end of the band, past the paperclip, which is where ChatGPT and Claude
     // put theirs — the ask was specific, so it is on the right.
     //
-    // Its RIGHT edge is what is pinned. The picker is sized by the name it is showing,
-    // and a control pinned by its right edge grows leftward into empty band rather than
-    // pushing the button beside it around.
+    // Its RIGHT edge is what is pinned, so the send button never moves. The control
+    // in this corner has changed twice — a trash can, then the model picker, now the
+    // Think pill — and the names `--pick-right`/`--pick-bottom` are historical for
+    // the same reason `.st-key-composer-strip` is: renaming them would touch the
+    // stylesheet, the layout harness's fixture and its selector table to say nothing
+    // new. Right-anchoring outlives all three: whatever sits here grows leftward into
+    // empty band instead of pushing the button beside it around.
     function publishPickerSpot() {
         var send = sendButton();
         if (!send) return;
@@ -375,9 +379,9 @@
         var bar = doc.querySelector('[data-testid="stBottomBlockContainer"]');
         var chips = doc.querySelector('.st-key-attachments');
         // `--strip-h` is gone with the row it measured. The controls under the input
-        // were a band the bar had to pad itself by; what is left is the model picker,
-        // and it sits inside the box beside the send button, so there is nothing below
-        // the input to reserve — which is the ~4rem of vertical space this bought back.
+        // were a band the bar had to pad itself by; what is left is one pill inside the
+        // box beside the send button, so there is nothing below the input to reserve —
+        // which is the ~4rem of vertical space this bought back.
         publishPickerSpot();
         if (bar) {
             // Two numbers, and the difference between them matters.
@@ -1618,57 +1622,54 @@
         view.__sageDraftHold = null;
     }
 
-    // Close the model picker once a model has been picked.
-    //
-    // Streamlit leaves the popover open across the rerun, so the panel stayed up over
-    // the conversation and had to be dismissed by clicking somewhere else — after
-    // choosing, which is the one moment there is nothing left to choose. Base Web
-    // closes its popover on Escape, so that is what this sends.
-    //
-    // Delegated from the document, because the panel is rendered in a portal that
-    // Streamlit rebuilds on every rerun: a listener bound to the panel itself would
-    // be attached to a node that no longer exists by the time it is needed.
-    //
-    // Two selectors, because Streamlit moved the panel. Up to 1.58 it was a Base Web
-    // popover; 1.59 removed Base Web and renders the body into a floating-ui portal
-    // on `document.body` instead. This shipped matching only `[data-baseweb=popover]`,
-    // which on a current Streamlit matches nothing at all — so the Escape was never
-    // sent and the picker went on staying open, the exact bug it was added to fix.
-    // requirements.txt allows >=1.42, so both shapes are live and both are named.
-    var PANEL = '[data-testid="stPopoverBody"], [data-baseweb="popover"]';
+    /* --- the Think pill ---------------------------------------------------
+     *
+     * Streamlit draws the button and carries the click back to Python; this gives it
+     * the three things Streamlit will not. The brain, because an inline stroke SVG is
+     * what every other icon in this band is and an emoji is a different typeface on
+     * every reader's machine. `aria-pressed`, which is both the announcement to a
+     * screen reader and the hook app.css paints the "on" fill off — one source for
+     * the state, so the fill and the announcement cannot disagree. And a native
+     * `title`, rather than Streamlit's `help=`: that draws a black panel beside the
+     * cursor (on the 240px chat rows it covered the row above, which is why the ✕
+     * has none) and it wraps the control in a second, zero-sized copy of the button,
+     * which the composer's geometry bounds would then be measuring.
+     *
+     * Re-run every pass, like every other listener-free decoration in this file. The
+     * button is a node Streamlit rebuilds, so the icon has to be re-checked rather
+     * than added once; `dataset.sageThink` is what keeps one brain per button.
+     *
+     * What replaced what: this corner held the model picker, whose popover needed an
+     * Escape sent after every pick because Streamlit left the panel open across the
+     * rerun. That block is gone with it — `st.popover` is no longer used anywhere in
+     * the app, so nothing is left to close. */
+    var BRAIN_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-1 5.8V16a3 3 0 0 0 4 2.8V5Z"></path><path d="M12 5a3 3 0 0 1 3 3 3 3 0 0 1 1 5.8V16a3 3 0 0 1-4 2.8V5Z"></path></svg>';
 
-    function closePickerOnPick() {
-        if (view.__sagePickerOff) {
-            try { view.__sagePickerOff(); } catch (err) { /* realm gone */ }
+    function dressThinkToggle() {
+        var marker = doc.querySelector('#think-state');
+        var strip = doc.querySelector('.st-key-composer-strip');
+        var button = strip ? strip.querySelector('button') : null;
+        if (!button) return;
+        // State off the CONTAINER KEY, not off the marker's `data-on`. Both say the
+        // same thing, but this function runs from a mutation observer and the marker
+        // version was read a pass too early every time: measured in the running app,
+        // `data-on="1"` sat beside `aria-pressed="false"` five seconds after the
+        // click, because no later pass came to correct it. The key is on an ancestor
+        // of the button in the same DOM this pass is already looking at, so it cannot
+        // disagree with what the reader sees. app.css paints off the same key.
+        var on = !!button.closest('.st-key-think-on');
+        // The marker carries only the words now — the deployment's own hint text,
+        // which app.css cannot hold and this file must not hardcode.
+        var hint = marker ? (marker.getAttribute('data-hint') || '') : '';
+        button.setAttribute('aria-pressed', on ? 'true' : 'false');
+        if (hint) {
+            button.setAttribute('title', hint);
+            button.setAttribute('aria-label', (button.textContent || '').trim() + ' — ' + hint);
         }
-        var onClick = function (event) {
-            var button = event.target && event.target.closest
-                ? event.target.closest('button')
-                : null;
-            // Scoped to the model list, not to "any button in any popover". The wider
-            // rule was harmless only because the picker is currently the one popover
-            // in the app with buttons in it; a date picker or a multiselect added later
-            // would have inherited an Escape nobody asked for.
-            if (!button || !button.closest('.st-key-model-list')) return;
-            if (!button.closest(PANEL)) return;
-            // After the click has been delivered, not instead of it.
-            view.setTimeout(function () {
-                // Both events, with the same init. Base Web's popover has bound its
-                // dismissal to `keyup` in some versions and `keydown` in others, and
-                // which one is installed is not visible from this repo — sending one
-                // and hoping is how a feature becomes a silent no-op.
-                ['keydown', 'keyup'].forEach(function (kind) {
-                    doc.dispatchEvent(new view.KeyboardEvent(kind, {
-                        key: 'Escape', code: 'Escape', keyCode: 27, which: 27,
-                        bubbles: true, cancelable: true
-                    }));
-                });
-            }, 0);
-        };
-        doc.addEventListener('click', onClick, true);
-        view.__sagePickerOff = function () {
-            doc.removeEventListener('click', onClick, true);
-        };
+        if (button.dataset.sageThink === 'true') return;
+        var label = button.querySelector('p') || button;
+        label.insertAdjacentHTML('afterbegin', BRAIN_SVG);
+        button.dataset.sageThink = 'true';
     }
 
     function copyText(text) {
@@ -2489,7 +2490,7 @@
         addPromptHistory();
         growComposer();
         resetComposerOnClear();
-        closePickerOnPick();
+        dressThinkToggle();
         addCodeCopyButtons();
         addAnswerCopyButtons();
         addEditButtons();
