@@ -250,7 +250,7 @@ base_url_env = "OPENROUTER_BASE_URL"
 # TO REMOVE: delete it from this list and from `free_marks`, and put
 # `openrouter:openrouter/free` back as `config.DEFAULT_MODEL`'s fallback. Nothing else
 # knows about it.
-models = ["~deepseek/deepseek-v4-flash-latest", "openrouter/free"]
+models = ["openrouter/free", "~deepseek/deepseek-v4-flash-latest"]
 models_env = "SAGE_OPENROUTER_MODELS"
 # The mark is the router's own id, so the rule reads "offer exactly this". Unusual, and
 # deliberate: OpenRouter fronts 387 models of which 18 are free and this key holds

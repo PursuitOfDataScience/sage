@@ -475,7 +475,15 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
      * used to do against a live measurement, done once here against numbers this file
      * already owns. */
     right: 52px;
-    bottom: var(--composer-ctl-bottom);
+    /* `+ 2px` for the box's own border, and it is not a fudge: this pill is parented to
+     * `[data-testid="stChatInput"]` by app.js, while Streamlit's send button lives one
+     * level in, inside `.stChatInput > div` — which carries `border: 2px solid
+     * var(--input-border)`. Two elements pinned `bottom: 10px` against containing
+     * blocks 2px apart do not line up, and they did not: measured at 1440, the pill's
+     * bottom sat at 934 and the arrow's at 932. Reported as "the think toggle and the
+     * up arrow box they have different heights", which was two faults at once — this
+     * one and the height below. */
+    bottom: calc(var(--composer-ctl-bottom) + 2px);
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -495,7 +503,11 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
      * paperclip has been at 1000 since it was injected, for the same reason. */
     z-index: 1000;
     padding: 4px 10px;
-    min-height: 30px;
+    /* The send button's own height, so the pair reads as a pair. Streamlit draws that
+     * button 32x32 and this was 30 — the difference the reader saw. Written as 32
+     * rather than as a token because 32 is Streamlit's number for its own control, and
+     * this is the one following it. */
+    min-height: 32px;
     border-radius: var(--radius-sm);
     border: 1px solid transparent;
     background: var(--control-bg);
