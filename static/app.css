@@ -2228,8 +2228,17 @@ body[data-sage-dropping] .stChatInput > div {
     display: flex;
     align-items: baseline;
     gap: 8px;
+    /* Shrinkable but NOT growable, and the second half is the bug the first half
+     * caused. `flex: 1 1 auto` made this fill the row, which pushed the animated
+     * ellipsis to the far right edge of the page — "the three dots are on the right
+     * side of the ui, which is so weird". The row is `dot · message · ellipsis` read
+     * left to right and nothing in it wants to grow.
+     *
+     * `min-width: 0` stays: a flex item will not shrink below its content without it,
+     * and shrinking is what lets `.status-arg` ellipse a long section title instead of
+     * pushing the ellipsis off the line. Same reason the chat rows carry it. */
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
 }
 
 .status-text {

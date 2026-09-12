@@ -1493,6 +1493,13 @@ SELECTORS = [
     # here as a selector nothing rendered.
     QUEUED_NOTE, ".queued-bubble", ".queued-label", ".queued-drop",
     ".status-text",
+    # The live message as one box, and the animated ellipsis after it. Both measured
+    # because the row is read left to right — dot, message, ellipsis — and the ellipsis
+    # drifting away from the message is a bug nothing else here could see: giving
+    # `.status-live` `flex: 1 1 auto` made it fill the row and put the ellipsis against
+    # the far edge of the page, reported as "the three dots are on the right side of the
+    # ui, which is so weird".
+    ".status-live", ".status-dots",
     # A step on the progress block, and the machine data on it. Both ends of the
     # column, because the block grows downwards and the last line is the one with the
     # composer under it. `.status-arg` is measured for its own sake: it is the only
@@ -2937,6 +2944,29 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
                 problems.append(
                     f"{where}: {sel} contrast {b['contrast']}:1 (needs {need}:1)"
                 )
+
+    # The animated ellipsis belongs to the message, not to the right-hand margin. The
+    # row is `dot · message · ellipsis` read left to right, and the one thing that can
+    # separate them is a flex child that grows — which is what happened: the wrapper
+    # carrying the sweep was given `flex: 1 1 auto`, filled the row, and left the
+    # ellipsis against the far edge of the page. "the three dots are on the right side
+    # of the ui, which is so weird."
+    #
+    # Measured against the last TEXT in the row rather than against the wrapper around
+    # it, and that distinction is the whole check. The first version of this compared
+    # the ellipsis with `.status-live`'s right edge — which the growing wrapper takes
+    # with it, so the gap stayed 8px while both slid 264px to the right and the bound
+    # passed on the very bug it was written for. Against the words: 272px, caught.
+    dots = els.get(".status-dots")
+    words = els.get(".status-arg") or els.get(".status-text")
+    if dots and words:
+        drift = dots["left"] - words["right"]
+        if drift > 24:
+            problems.append(
+                f"{where}: the status line's ellipsis sits {round(drift)}px after the "
+                f"words it belongs to (the row's gap is 8px) — something in the row is "
+                f"growing and has carried it to the margin"
+            )
 
     # Every stop of the status line's sweep, not the colour it claims. The highlight
     # end is the lowest-contrast text the app ever paints, and it is on screen for
