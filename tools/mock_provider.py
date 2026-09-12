@@ -200,7 +200,7 @@ class Handler(BaseHTTPRequestHandler):
             # neither text nor a tool call. This mock sent one, so nothing offline ever
             # exercised the shape the live path gets on every turn — and two things depend
             # on it: `llm.start` pulls the first chunk to surface auth failures early, and
-            # `collapsing` folds the status block at the first chunk with *text* in it.
+            # `clearing` holds the status row until the first chunk with *text* in it.
             for _ in range(int(settings.get("quiet_deltas", 40))):
                 yield sse(delta())
             for word in (settings.get("text") or ANSWER).split(" "):

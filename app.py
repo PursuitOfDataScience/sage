@@ -95,6 +95,8 @@ MODELS: list[providers.Model] = []
 for name in READY:
     MODELS.extend(access.available_models(name))
 
+assets.size_model_picker(MODELS)
+
 MODEL = current_model(MODELS)
 st.session_state.model = MODEL.key
 VIEW = View(runtime=RUNTIME, models=tuple(MODELS), model=MODEL)
@@ -132,7 +134,7 @@ else:
 uploads.render()
 prompt = composer.ask(VIEW)
 composer.render_attachments(VIEW)
-composer.render_controls(VIEW)
+composer.render_controls(VIEW, has_messages)
 composer.render_stop_hook()
 
 if prompt and prompt.strip():

@@ -1,4 +1,4 @@
-"""The stylesheet and the script, onto the page.
+"""The stylesheet, the script, and the one measurement CSS cannot make.
 
 Nothing here decides how the app looks — `static/app.css` does, and it is guarded by
 `.claude/hooks/ui-guard.sh`, `tools/palette_check.py` and `tests/test_palette.py`.
@@ -35,3 +35,25 @@ def load(name: str) -> str:
 def inject() -> None:
     st.markdown(f"<style>{load('app.css')}</style>", unsafe_allow_html=True)
     components.html(f"<script>{load('app.js')}</script>", height=0)
+
+
+def size_model_picker(models) -> None:
+    """Tell the stylesheet how wide the picker's trigger has to be.
+
+    The stylesheet cannot work this out: the lineup is discovered from the provider at
+    runtime, so the longest name it can show is known here and nowhere else. Sized to
+    the longest rather than to the selected one on purpose — a width that tracked the
+    selection would resize the button every time a model was picked, which reflows the
+    row it sits in the corner of.
+
+    A second `<style>` because the stylesheet is injected before any provider has been
+    asked what it serves, and moving that injection later would leave the no-key error
+    screen unstyled.
+    """
+    if not models:
+        return
+    st.markdown(
+        f"<style>:root {{ --picker-chars: {max(len(m.label) for m in models)}; }}"
+        "</style>",
+        unsafe_allow_html=True,
+    )

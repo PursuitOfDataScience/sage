@@ -49,26 +49,16 @@ and a base URL in your profile.
 ## What you get
 
 - 🔗 **Real citations** — deep-linked to the exact heading, plus Related sections.
-- 🧠 **Think** — one toggle in the corner of the input box asks the model to work
-  through the question before answering. Off by default, and drawn only where the
-  provider actually takes the parameter.
-- 🪜 **What it read** — every search and every section, with the query the model chose
-  and the time each took, folded under the answer and openable afterwards. The Sources
-  strip says what was cited; this says what was looked at.
-- 🔀 **Failover without a control** — a model that cannot answer, for a reason another
-  model might not share, hands the question on by itself. One hop by default: the
-  shipped default model is a router that already picks a live model per request, so a
-  second walk through the lineup only queues up models to fail through. Set
-  `SAGE_MAX_MODEL_ATTEMPTS=0` for the full walk if your default is a pinned model.
+- 🔀 **Model picker** — in the corner of the input box; switch mid-conversation; a model that cannot answer — spent
+  quota, spent free allowance, an empty reply — hands the question on by itself, and
+  keeps going down the lineup until one answers.
 - ⏹ **Stop & edit** — cut an answer short, or reword a question and re-ask it.
 - ⏭ **Ask the next question early** — send a follow-up while an answer is still
   arriving; it waits its turn and goes the moment the current one lands.
 - 💬 **The session's conversations** — a sidebar of every chat, named after its own
   first question, with a New chat button and a ✕ that removes one on the first click.
 - 💡 **Ask about a passage** — select any text in an answer and follow up on it.
-- 📎 **Attachments** — PDFs, screenshots, job scripts, logs. Judged on bytes, not
-  names. Images are sent to models that declare they can see one; the rest are told
-  the file is attached and unread, rather than being handed a request they will refuse.
+- 📎 **Attachments** — PDFs, screenshots, job scripts, logs. Judged on bytes, not names.
 - 🙅 **Honest refusals** — weak retrieval makes it say so instead of guessing.
 - 🤐 **No shop talk** — asked how it works, it says what it looks up, not what it is made of.
 - 🌗 **Light, dark, or whatever the browser says** — one button in the top-right corner,

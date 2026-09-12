@@ -349,23 +349,14 @@ class TestTheSidebar:
         for key in live:
             assert stub.disabled[key] is False, key
 
-    def test_abandoning_a_turn_that_produced_nothing_keeps_the_question(self, monkeypatch):
-        """Three reports meet on this path and only one state satisfies all of them.
+    def test_abandoning_a_turn_that_produced_nothing_leaves_nothing(self, monkeypatch):
+        """The bug in the reader's third screenshot: a conversation holding their
+        question with the bare word `Stopped` under it and no answer.
 
-        The reader's third screenshot was a question with the bare word `Stopped` under
-        it and no answer: `finish_stopped_turn` appends that empty message on purpose,
-        because someone who pressed Stop has to see that something happened, and someone
-        who walked off to another chat is not looking at that screen. So nothing is
-        appended here.
-
-        Dropping the question as well — which is what this used to do — cost the
-        conversation itself: `_stash` prunes a conversation with no messages, so a chat
-        the reader had just created and just typed into vanished out of the panel behind
-        them. "the new chat session will disappear. this is very confusing and annoying."
-
-        The question stays. No empty assistant message, so no `Stopped` under it; a
-        conversation with a message in it, so nothing for `_stash` to prune and no spare
-        `Nothing asked yet` row; and the chat is still there, named after the question.
+        `finish_stopped_turn` appends that empty message on purpose — a reader who
+        pressed Stop has to see that something happened. A reader who has walked off to
+        another chat is not looking at that screen, so the turn is dropped whole, the
+        question with it, and the conversation is left as it was before it was asked.
         """
         stub, module = run_app(
             monkeypatch,
@@ -378,15 +369,14 @@ class TestTheSidebar:
         stub.session_state.partial = []          # not one token arrived
         sidebar.leave(module.VIEW)
 
-        assert [m["text"] for m in stub.session_state.messages] == ["the question"]
-        # Nothing appended: an assistant message here is the `Stopped` bug.
-        assert [m["role"] for m in stub.session_state.messages] == ["user"]
+        assert stub.session_state.messages == []
         assert stub.session_state.processing is False
-        # And the conversation survives being left, because it is not a blank.
+        # And with the conversation now empty, leaving it drops it — which is where the
+        # spare `Nothing asked yet` row in that screenshot came from.
         state = _state()
         with pytest.raises(stub_streamlit.Rerun):
             state.new_chat()
-        assert len(stub.session_state.chats) == 2
+        assert len(stub.session_state.chats) == 1
 
     def test_leaving_mid_answer_keeps_what_had_arrived(self, monkeypatch):
         """The half-written answer goes to the conversation it belongs to, marked
@@ -555,45 +545,3 @@ class TestDeletingChats:
         state = _state()
         state.delete_chat(999)          # no Rerun raised
         assert len(stub.session_state.chats) == 1
-
-
-class TestAFailoverDoesNotPinTheSession:
-    """`session_state.model` belongs to the turn that set it, not to the session.
-
-    `View.can_think` reads the provider of the model answering NOW, which is right, and
-    a failover sets that model — with nothing putting it back except leaving the
-    conversation. So one hop onto a provider that takes no `reasoning` parameter took the
-    Think pill off the page and nothing inside that conversation could return it: "the
-    think toggle is gone forever. this is far worse", and it was. A control that vanishes
-    for good is worse than the spent quota the failover was rescuing.
-
-    A new question is where the pin stops being justified — the reason the last one was
-    refused has nothing to do with the next, least of all on a router that picks a model
-    per request.
-    """
-
-    def test_a_new_question_returns_to_the_default_model(self, monkeypatch):
-        from sage import config  # noqa: PLC0415
-
-        stub, _ = run_app(monkeypatch, session={"messages": [], "processing": False})
-        state = _state()
-        # As a failover leaves it.
-        stub.session_state["model"] = "somewhere:else"
-        with pytest.raises(stub_streamlit.Rerun):
-            state.start_new_turn("a fresh question")
-        assert stub.session_state["model"] == config.DEFAULT_MODEL
-
-    def test_leaving_a_conversation_returns_to_it_too(self, monkeypatch):
-        """The other half, and the one that shipped first. Kept because a conversation
-        switched away from mid-failover must not hand the pin to the next one."""
-        from sage import config  # noqa: PLC0415
-
-        stub, _ = run_app(
-            monkeypatch,
-            session={"messages": [{"role": "user", "text": "asked", "attachments": []}]},
-        )
-        state = _state()
-        stub.session_state["model"] = "somewhere:else"
-        with pytest.raises(stub_streamlit.Rerun):
-            state.new_chat()
-        assert stub.session_state["model"] == config.DEFAULT_MODEL

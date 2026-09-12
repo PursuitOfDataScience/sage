@@ -13,22 +13,21 @@ has to change and none of them are settings.
 | `SAGE_PROFILE` | `./profiles/rcc.toml` | The deployment profile |
 | `SAGE_DEFAULT_MODEL` | `openrouter:openrouter/free` | Model a fresh session starts on, `provider:model-id` |
 | `SAGE_TOOLLESS_MODELS` | *(empty)* | Substrings of models that cannot call tools |
-| `SAGE_VISION_MODELS` | `pixtral,claude,openrouter/free` | Substrings of models that can be shown an image. Anything not matched is told a file is attached and left unread, because an image sent to a text-only model is a 4xx rather than a polite decline. `openrouter/free` is on the list on evidence: `GET /models` gives it `text+image->text` and a probe with an 8×8 PNG returned `200` — though only 10 of the 19 free models it routes to accept image input, and it picks one per request |
+| `SAGE_VISION_MODELS` | `pixtral,claude` | Substrings of models that can be shown an image |
 | `SAGE_MAX_TOKENS` | `8000` | Response cap. Generous: 1600 cut answers off mid-sentence |
 | `SAGE_TEMPERATURE` | `0.2` | Sampling temperature |
 | `SAGE_MAX_TOOL_ROUNDS` | `4` | Search/read rounds before the turn must answer |
-| `SAGE_MAX_MODEL_ATTEMPTS` | `0` *(no limit — the whole lineup)* | Models one turn may ask before it gives up. A model that fails in a way another model might not — an empty reply, a spent allowance, a 5xx — can hand the question to the next one. `0` means no limit and walks the whole lineup, which is what a deployment with a pinned model per provider wants; the default is 1 because the shipped default model is a router that already picks a live model per request, so a second walk queues up models to fail through rather than adding a safety net. A lineup of eight can cost forty provider calls in the worst case, which is what `SAGE_CALL_BUDGET` is for |
+| `SAGE_MAX_MODEL_ATTEMPTS` | `0` *(the whole lineup)* | Models one turn may ask before it gives up. A model that fails in a way another model might not — an empty reply, a spent allowance, a 5xx — hands the question to the next one automatically. `1` switches that off; a lineup of eight can cost forty provider calls in the worst case, which is what `SAGE_CALL_BUDGET` is for |
 | `SAGE_SEARCH_RESULTS` | `6` | Results per search |
 | `SAGE_MAX_PER_PAGE` | `2` | Sections of one page allowed in a result set |
 | `SAGE_SYNONYM_WEIGHT` | `0.8` | Weight of expanded synonym terms |
 | `SAGE_HISTORY_CHAR_BUDGET` | `48000` | History size before oldest turns are trimmed |
 | `SAGE_MAX_PROMPT_CHARS` | `8000` | Longest question accepted |
-| *(no variable)* | `openrouter/free` → `enigma` | What a model is CALLED in front of a reader, set by `labels` in the profile. Nothing on the page shows it since the model picker was removed; it is what the failover notice and the feedback log would use. See [Naming a model](#naming-a-model) — it has no environment override on purpose |
-| `SAGE_OPENROUTER_FREE_MARKS` | `openrouter/free` | Which OpenRouter models are in the lineup. The default is the router's own id, so exactly one is offered; `:free` would offer all 18 free models and hand their upkeep back to you |
-| `SAGE_OPENROUTER_FREE_ONLY` | `1` | Off, the lineup holds all 387 models OpenRouter fronts, most of which need a balance |
+| *(no variable)* | `openrouter/free` → `enigma` | The picker name, set by `labels` in the profile. See [Naming a model](#naming-a-model) — it has no environment override on purpose |
+| `SAGE_OPENROUTER_FREE_MARKS` | `openrouter/free` | Which OpenRouter models the picker offers. The default is the router's own id, so exactly one is offered; `:free` would offer all 18 free models and hand their upkeep back to you |
+| `SAGE_OPENROUTER_FREE_ONLY` | `1` | Off, the picker offers all 387 models OpenRouter fronts, most of which need a balance |
 | `SAGE_ZEN_DENY` | *(see profile)* | Model ids never offered, however the provider lists them. For a model that is served and cannot answer — maintained by `lineup.yml`, and cleared when the model answers again |
 | `SAGE_STREAM_REPAINT_MS` | `40` | Shortest gap between repaints of a streaming answer. Deltas arriving inside one interval are drawn together, because `write_stream` redraws the whole answer every time. `0` = one repaint per delta |
-| `SAGE_STATUS_ARGUMENT_CHARS` | `96` | How much of a tool's argument the progress block shows — the query searched for, the path read. A ceiling on what a model can put in the page, not a layout number: the row ellipses whatever is too wide for the window it is in |
 | `SAGE_MAX_UPLOAD_BYTES` | `10485760` | Upload size limit, per file |
 | `SAGE_MAX_ATTACHED_BYTES` | `20971520` | Upload size limit, across one turn |
 | `SAGE_IMAGE_MAX_EDGE` | `1568` | Longest edge an image is downscaled to before it is sent |
@@ -51,7 +50,7 @@ These exist because [`profiles/rcc.toml`](profiles/rcc.toml) asks for them by na
 | `MISTRAL_API_KEY` | *(one key required)* | Mistral API key |
 | `OPENCODE_API_KEY` | *(one key required)* | OpenCode Zen key (`sk-zen-…`), free tier |
 | `OPENCODE_BASE_URL` | `https://opencode.ai/zen/v1` | OpenAI-compatible endpoint |
-| `SAGE_MISTRAL_MODELS` | small/medium/large | Mistral models in the lineup |
+| `SAGE_MISTRAL_MODELS` | small/medium/large | Mistral models offered in the picker |
 | `SAGE_OPENCODE_MODELS` | deepseek-v4-flash-free, … | Fallback list if `GET /models` fails |
 | `SAGE_ZEN_FREE_ONLY` | `1` | Offer only Zen's free models. `0` for a paid balance |
 | `SAGE_ZEN_FREE_MARKS` | `-free,big-pickle` | How a free Zen model is recognised |
@@ -73,7 +72,7 @@ knows which is in use.
 
 - **Mistral** — the official SDK.
 - **OpenRouter** — `https://openrouter.ai/api/v1`, and the entry is one model id:
-  `openrouter/free`, OpenRouter's *Free Models Router*, called, in front of a reader,
+  `openrouter/free`, OpenRouter's *Free Models Router*, shown in the picker as
   **`enigma`** because the served id names a billing arrangement and a reader choosing a
   row is not choosing one — see [Naming a model](#naming-a-model). It picks a free model per
   request from whatever is currently up, filtered to the ones supporting the parameters
@@ -93,11 +92,11 @@ knows which is in use.
 - **OpenCode Zen** — the OpenAI-compatible endpoint at `https://opencode.ai/zen/v1`.
   Its model list comes from `GET /models` at runtime, because a free tier's lineup
   changes without notice; the profile's list is only the fallback. Zen serves its paid
-  lineup from the same endpoint, so the lineup keeps only the free ones — matched by
+  lineup from the same endpoint, so the picker keeps only the free ones — matched by
   naming convention (`-free`, plus stealth codenames) rather than a hardcoded list,
   since the lineup moves. `SAGE_ZEN_FREE_ONLY=0` shows everything, for a deployment
   with a balance. The tier marker is part of the id sent upstream and of the filter
-  that reads it, but not of the name shown to a reader: it is billing plumbing, not
+  that reads it, but not of the name in the picker: it is billing plumbing, not
   something to pick between models on.
 
 Models that cannot call tools answer from a **single retrieval pass** instead of the
@@ -156,7 +155,7 @@ below, which is the arrangement the router was chosen to avoid. On the sweep it 
 measured against, nine of those eighteen were rate-limited or dead.
 
 The rest of this section is about Zen. Nothing has to be done there either for a model
-that appears or disappears. The lineup is built from
+that appears or disappears. The picker is built from
 `GET /models` and filtered by `free_marks`, so a model Zen starts serving free under a
 `-free` name is offered the moment it exists — `muse-spark-1.2-contributor-free` was in
 the picker before the profile named it — and `SAGE_DEFAULT_MODEL` naming something no
@@ -206,17 +205,6 @@ device while Streamlit painted a white page underneath it. `server.maxUploadSize
 deliberately larger than `SAGE_MAX_UPLOAD_BYTES` for a related reason — Streamlit
 renders its own "file is too large" inside the uploader widget, which this app hides,
 so the app has to be the one that refuses.
-
-The typeface is stated there too, and it has to be: `[theme] font` and
-`[theme] codeFont` are the only things that reach Streamlit's own widgets, while
-`--font-sans` / `--font-mono` in `static/app.css` are the only things that reach the
-markup this app writes itself. Both name IBM Plex, and `tests/test_streamlit_config.py`
-holds the two files to the same families. The faces are five OFL woff2 files in
-[`static/fonts/`](static/fonts) rather than a Google Fonts URL, so an offline
-deployment renders correctly and no third party sees the reader — which is why
-`server.enableStaticServing` must stay `true`: the `app/static/…` urls under
-`[[theme.fontFaces]]` 404 without it, and a 404 there is not an error anywhere. The
-page simply renders in the browser's default sans.
 
 ## Sharing a deployment
 

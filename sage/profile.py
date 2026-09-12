@@ -152,57 +152,18 @@ class Copy:
     new_chat: str = "New chat"
     untitled_chat: str = "Nothing asked yet"
     delete_chat: str = "Delete this chat"
-    #: The progress block, for the two lines on it that are not a tool call.
-    #:
-    #: `status_thinking` is the wait before anything has been called, and the wait
-    #: between a tool result going up and the next thing coming back. `status_working`
-    #: names a tool that declared no reader-facing name (see `tools.Tool.label`), so
-    #: that an unnamed tool is still one honest line rather than a blank.
-    #:
-    #: `status_searching` and `status_reading` name the stage a turn is in, vaguely and
-    #: on purpose, and they are back after a detour worth recording so nobody walks it
-    #: again. They were removed when the row started naming each tool call with its
-    #: argument — asked for as "the user needs to see the detailed status updates and
-    #: which sections to read etc" — and what that produced, once several rounds had
-    #: run, was six rows of history stacked over an empty answer, one of them a
-    #: repository path. Both were reported: "it's everything showing, which looks bad",
-    #: and "it should be like what we had before with the cool status message with
-    #: gradients".
-    #:
-    #: So the two jobs are split rather than merged. WHILE a turn runs, one of these
-    #: phrases in the sweeping row — a progress cue, which is what a reader waiting
-    #: with nothing on screen actually needs. AFTER it, the detail: every step with its
-    #: section title and its time, folded under the answer where it can be opened
-    #: against the thing it produced. Nothing is lost and nothing is stacked.
+    #: The progress line, one phrase per stage of a turn. Fixed phrases on purpose:
+    #: this row is progress, not a log, and it used to name the document being read
+    #: and quote the model's query back — neither of which a reader can place. A
+    #: deployment over something other than documentation says so here.
     status_thinking: str = "Thinking"
     status_searching: str = "Searching the documentation"
     status_reading: str = "Reading the relevant sections"
     status_working: str = "Working"
-    #: The toggle in the corner of the input box, where the model picker used to be.
-    #:
-    #: One word, and the SAME word in both states — not "Think" against "Thinking".
-    #: The pill's width follows its label, it is the leftmost member of a
-    #: right-anchored cluster, and a label that grows on click moves the control out
-    #: from under the cursor that just pressed it. State is carried by the fill.
-    #:
-    #: `think_hint` is a native `title`, not Streamlit's `help=`. Two reasons, both
-    #: already paid for elsewhere in this app: `help` draws a black panel beside the
-    #: cursor (on the 240px chat rows it covered the row above, which is why the ✕ and
-    #: New chat have none), and it wraps the control so the wrapper carries a second,
-    #: zero-sized copy of the button — which the composer's geometry bounds would then
-    #: be measuring. It says what the reader gets and what it costs, because on a free
-    #: lineup the cost is the allowance the next few turns are paid out of.
-    think_label: str = "Think"
-    think_hint: str = "Work through it before answering. Slower."
 
     @property
     def status_phrases(self) -> tuple[str, ...]:
-        """Every fixed phrase the block can hold — what the layout check has to fit.
-
-        Only the fixed ones. A tool's line is its name plus an argument the model
-        chose, which has no longest form to measure; `tools/render_check.py` holds
-        that row with a width bound instead of a length one.
-        """
+        """Every phrase the row can hold — what the layout check has to fit."""
         return (
             self.status_thinking,
             self.status_searching,
@@ -289,25 +250,6 @@ class ProviderEntry:
     #: Model ids never offered, however the provider lists them. See the class
     #: docstring: this is "known not to work", not "cannot be paid for".
     deny: tuple[str, ...] = ()
-    #: Whether this provider takes OpenRouter's `reasoning` request parameter — the
-    #: thing the Think toggle sends. Declared per provider rather than assumed from
-    #: `kind`, because `kind = "openai"` covers both OpenRouter and OpenCode Zen and
-    #: only one of them has ever heard of it; a `reasoning` key sent to the other is
-    #: an unknown field on a wire format that is entitled to reject it.
-    #:
-    #: It is also what decides whether the toggle is DRAWN. A control that is present
-    #: and does nothing is the failure this app has a rule against, and with the model
-    #: picker gone the reader cannot move themselves to a provider where it would
-    #: work — an automatic failover can, which is why `View.can_think` reads this off
-    #: the model answering now rather than off the default.
-    #:
-    #: Verified against the provider, not assumed: `GET /models` on OpenRouter lists
-    #: `reasoning` in `supported_parameters` for `openrouter/free` and for all 19 of
-    #: its `:free` models. `reasoning_effort` — the discrete low/medium/high knob — is
-    #: on only 6 of those 19, which is why this is a switch and not a dial: the router
-    #: sends a different model every turn, so an effort setting would be honoured on
-    #: roughly a third of turns with nothing on screen able to say which.
-    reasoning: bool = False
     #: `(served id, what the reader is shown)` pairs. The id is untouched everywhere it
     #: matters — it is what goes upstream, what `Model.key` is built from, what the
     #: feedback log and `tools/agent_bench.py` record, and what the error card's
@@ -497,7 +439,6 @@ def _provider(raw: dict) -> ProviderEntry:
         free_marks=marks,
         free_only=free_only,
         deny=deny,
-        reasoning=bool(raw.get("reasoning", False)),
         labels=labels,
         hint=str(raw.get("hint", "")),
         user_agent=str(raw.get("user_agent", "")),

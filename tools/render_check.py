@@ -83,14 +83,11 @@ Requires a Chromium binary; set SAGE_CHROME to override the path.
 
 from __future__ import annotations
 
-import html
 import json
 import os
 import re
 import subprocess
 import sys
-
-import tomllib
 
 CHROME = os.environ.get(
     "SAGE_CHROME", "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
@@ -99,9 +96,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, REPO)
 
-from sage import config as config_module  # noqa: E402
 from sage import profile as profile_module  # noqa: E402
-from sage import tools as tools_module  # noqa: E402
 
 # Streamlit's own header (`[data-testid="stHeader"]`) is a FULL-WIDTH fixed strip
 # across the top of every app at a z-index far above anything a stylesheet sets.
@@ -142,73 +137,6 @@ JS = _read("static", "app.js")
 # from here — not left pointing at nothing, which is how a check comes to pass on a
 # placeholder. The lesson is the same one: read the real string, or do not claim to be
 # measuring it.
-
-# The typeface, read out of `.streamlit/config.toml` rather than written down here.
-#
-# A font is not a detail this harness can afford to guess at: it decides the width of
-# every string on the page, and most of the bounds below are about a string fitting
-# somewhere. This file named `"Source Sans Pro"` on `body` for as long as it existed —
-# and nothing on this cluster or in CI has Source Sans Pro installed, so what it
-# actually measured all that time was DejaVu Sans, which is about 12% wider than the
-# face the app really ships. Every bound was tuned against a font the app never had.
-#
-# So the faces come from the same `[[theme.fontFaces]]` table Streamlit builds the
-# app's own @font-face rules from, pointed at the woff2 files in `static/fonts/` as
-# absolute `file://` urls — the deployed urls are relative to the app root, which is
-# not where this harness writes its pages. That makes the geometry here the geometry
-# the reader gets, on any machine, with no system font installed at all.
-#
-# Every failure is loud. A missing table, a missing file, a face that does not load:
-# each one would leave Chromium quietly measuring whatever sans it can find, which
-# reads as a pass. `font-display: block` because a swap halfway through a render would
-# measure two fonts in one page.
-def _theme_table() -> dict:
-    with open(os.path.join(REPO, ".streamlit", "config.toml"), "rb") as handle:
-        return tomllib.load(handle).get("theme", {})
-
-
-def _font_faces(theme: dict) -> str:
-    faces = theme.get("fontFaces") or []
-    if not faces:
-        raise SystemExit(
-            "render_check: .streamlit/config.toml declares no [[theme.fontFaces]], so "
-            "this harness has no way to render the app's typeface and would measure "
-            "the system fallback instead. Add the table or stop claiming to measure "
-            "the app."
-        )
-    rules = []
-    for face in faces:
-        path = os.path.join(REPO, face["url"].replace("app/static/", "static/", 1))
-        if not os.path.exists(path):
-            raise SystemExit(
-                f"render_check: {face['url']} is declared in [[theme.fontFaces]] and "
-                f"is not in this repo ({path}). On the deployment that is a 404 and a "
-                "page in the fallback face; here it would be a silently wrong "
-                "measurement."
-            )
-        rules.append(
-            f'@font-face {{ font-family: "{face["family"]}";'
-            f' src: url("file://{path}") format("woff2");'
-            f' font-weight: {face.get("weight", "400")};'
-            f' font-style: {face.get("style", "normal")};'
-            " font-display: block; }"
-        )
-    return "\n".join(rules)
-
-
-THEME = _theme_table()
-FONT_FACES = _font_faces(THEME)
-# The stacks as the app states them. Read, not copied: a font named in one place and
-# measured from another is the DejaVu mistake with a new spelling.
-FONT_STACK = THEME.get("font") or "sans-serif"
-CODE_STACK = THEME.get("codeFont") or "monospace"
-# What `snapshot()` reports back so a render cannot pass on the wrong face. The family
-# is taken off the front of each stack, which is where the app's own name is.
-FONT_PROBES = {
-    "sans": FONT_STACK.split(",")[0].strip(),
-    "mono": CODE_STACK.split(",")[0].strip(),
-}
-
 PROFILE = profile_module.active()
 SUBTITLE = PROFILE.copy.welcome_subtitle or "(missing)"
 CARDS = [f"{card.icon} {card.label}" for card in PROFILE.examples]
@@ -246,23 +174,12 @@ def theme_css(scheme: str) -> str:
 BACKGROUNDS = {"dark": "#0e1117", "light": "#ffffff"}
 FOREGROUNDS = {"dark": "#e5e7eb", "light": "#31333f"}
 
-# What the Think pill shows. Both come from `profile.Copy`, so the label this replica
-# renders is the label a default deployment renders — and unlike the model picker this
-# replaces, there is no "longest name" to size for: the word is the same in both states
-# and the pill has no width rule at all.
-#
-# Imported rather than copied. The pill's one hard bound is that it fits beside the send
-# button in the band at 500px, and a literal here would go on passing on the day the
-# profile's word got longer — which is the whole failure mode this file exists to avoid.
-THINK_LABEL = profile_module.Copy().think_label
-THINK_HINT = html.escape(profile_module.Copy().think_hint, quote=True)
-# The brain app.js injects, inlined exactly as it does: a 14px stroke SVG with a 5px
-# right margin, inside the label. Part of what the pill has to fit.
-BRAIN = ('<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" '
-         'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
-         '<path d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-1 5.8V16a3 3 0 0 0 4 2.8V5Z"></path>'
-         '<path d="M12 5a3 3 0 0 1 3 3 3 3 0 0 1 1 5.8V16a3 3 0 0 1-4 2.8V5Z"></path>'
-         "</svg>")
+# What the model picker's trigger shows, and the name its width is set from. The
+# longest in the configured lists, because the width is sized for the longest name a
+# deployment can offer rather than for the one selected — that is what stops picking a
+# model from resizing the button. Measuring against a shorter label would report slack
+# the stylesheet never chose.
+PICKER_LABEL = "mistral-medium-latest"
 
 # What the composer asks for, keyed on whether this is the landing screen. app.py
 # switches on an answer existing; every screen here that is not `landing` has one.
@@ -275,42 +192,14 @@ PLACEHOLDERS = {True: "Ask any question about the RCC…",
 # reading, and pure fiction since it stopped: the app cannot produce that string any
 # more, so measuring it measured nothing that ships. The phrases are fixed now, so the
 # longest of them IS the worst case, exactly.
-#
-# It is the worst case for the FIXED half of the block: the line a turn opens on and
-# waits between rounds on. A tool's line is named and measured differently — see the
-# three constants below and `step_block`.
 STATUS_LABEL = max(PROFILE.copy.status_phrases, key=len)
-
-# A step names its tool the way a reader would and prints the argument that says which
-# one. Both read off the tools that declare them rather than written out here, for the
-# same reason STATUS_LABEL is: a screen rendering a string the app cannot produce
-# measures nothing that ships.
-STEP_NAMES = (tools_module.SearchDocs.label, tools_module.ReadDoc.label)
-# A real read, anchor and all — the profile's own example of one.
-# A section TITLE, which is what a read step shows — never the corpus path. The row
-# resolves the id it is given to `Chunk.label` before painting it, because a path is
-# this repository's name for a file rather than the documentation's and it was reported
-# on sight: "docs/allocations.md shouldn't be disclosed in this way". Modelled as a
-# title here so the width this measures is the width the app draws; the old value was
-# `PROFILE.identity.path_example`, which is shorter than a real label and would have
-# under-measured the row.
-STEP_PATH = "Allocations and Service Units FAQ — Service Units (SUs)"
-# And the widest line the block can hold, which is where `turn.shown` clips. Past that
-# a value's own length stops mattering and short of it every length is narrower, so
-# this is the exact worst case rather than a guess at one. `x` in a monospace face is
-# an ordinary-width character, so the width it produces is honest.
-STEP_WIDEST = "sbatch " + "x" * (config_module.STATUS_ARGUMENT_CHARS - 7)
 
 
 def base_css(scheme: str) -> str:
     return f"""
-{FONT_FACES}
 * {{ box-sizing: border-box; }}
-/* The face and the stack Streamlit itself puts on the page from `[theme] font`, which
-   is why they are here and not left to app.css: the app is painted by both files and
-   the harness has to model the half it does not own. */
 body {{ margin: 0; background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme]};
-       font-family: {FONT_STACK}; }}
+       font-family: "Source Sans Pro", system-ui, sans-serif; }}
 .stMarkdownColoredText {{ color: {COLORED_TEXT[scheme]}; }}
 [data-testid="stAppViewContainer"] {{ min-height: 100vh; }}
 [data-testid="stMain"] {{ overflow: auto; height: 100vh; }}
@@ -342,9 +231,7 @@ body {{ margin: 0; background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme
 .stMarkdown p {{ margin: 0 0 1rem; font-size: 1rem; line-height: 1.6; }}
 .stMarkdown pre {{ background: {'#262730' if scheme == 'dark' else '#f0f2f6'};
                   padding: 1rem; border-radius: 8px; overflow-x: auto; margin: 0 0 1rem; }}
-/* Streamlit's `[theme] codeFont`, which it applies to `code` and `pre` itself — so a
-   code block is in the mono face here even where app.css says nothing. */
-.stMarkdown code, .stMarkdown pre {{ font-family: {CODE_STACK}; }}
+.stMarkdown code {{ font-family: monospace; }}
 .element-container {{ width: 100%; }}
 [data-testid="stVerticalBlock"] {{ display: flex; flex-direction: column; }}
 [data-testid="stHorizontalBlock"] {{ display: flex; flex-direction: row; }}
@@ -354,13 +241,6 @@ body {{ margin: 0; background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme
    color: inherit; border: 1px solid {'#3a3b46' if scheme == 'dark' else '#d5d6d8'};
    font: inherit; cursor: pointer; }}
 .stButton button p {{ margin: 0; }}
-/* Streamlit renders a button's label as markdown, and paints that paragraph with the
-   theme font itself — so a `font-family` set on the BUTTON is handed to a child that
-   has already been told otherwise. Modelled because a rule naming only the button
-   passed every render here while the open model picker rendered all four names in the
-   sans face in the running app: the harness could not fail on it, which reads as a
-   pass. See the `p` selectors in app.css's TYPE block. */
-.stButton button p {{ font-family: {FONT_STACK}; }}
 /* The pinned input bar, modelled BOTH ways — see `page(sticky=…)`. `fixed` paints
    it over the conversation, so the page must leave a bar's worth of room at the end
    or the newest answer hides underneath; `sticky` puts it in the flow at the end of
@@ -396,12 +276,7 @@ body {{ margin: 0; background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme
 /* Streamlit's send button: its own size, in the flow, and a flex item of the box
    alongside the textarea. Modelled at its real size because the height of the box is
    what it decides — an unstyled button is small enough to hide the row it takes. */
-/* `:not(#think-btn)` for the same reason app.css excludes it: app.js injects the pill
-   as a button inside this element, and a blanket 36px square squashed it to an icon
-   under the send button — which is exactly what this replica is for catching, except
-   here the replica was the one causing it. The paperclip is untouched because it IS a
-   36px round button. */
-.stChatInput button:not(#think-btn) {{ width: 36px; height: 36px; flex: 0 0 auto; border-radius: 8px;
+.stChatInput button {{ width: 36px; height: 36px; flex: 0 0 auto; border-radius: 8px;
    background: {'#3a3b46' if scheme == 'dark' else '#e6e6e9'}; color: inherit;
    border: 0; font: inherit; cursor: pointer; }}
 .stChatInput button p {{ margin: 0; }}
@@ -426,12 +301,34 @@ body {{ margin: 0; background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme
        white slab a dark-mode reader saw, and a stylesheet that fails to override it
        has to LOSE here, or this screen proves nothing. */
 #stFloatingOverlayPortal {{ position: fixed; right: 1rem; bottom: 8rem; z-index: {HOST_Z + 5}; }}
-/* The pill is a plain `st.button`, so Streamlit's own button styling reaches it and
-   the base rule above is enough. Nothing is modelled for a popover any more: the
-   model picker is gone and `st.popover` is used nowhere in the app, so a trigger, a
-   chevron and a portalled panel were three shapes this replica carried for markup
-   that no longer renders. `--picker-chars` went with them — the pill's label is one
-   word in both states, so nothing has to publish a width for it. */
+[data-testid="stPopoverBody"] {{ background: #ffffff; color: #31333F;
+   padding: 0.75rem; border-radius: 8px; }}
+/* A popover trigger is a button, and Streamlit gives it the same base styling as
+   st.button. Modelled explicitly because the markup is not `.stButton`, so the
+   rule above does not reach it — and an unstyled button would measure smaller
+   than the real one and hide an overflow. */
+/* `inline-flex`, as Streamlit has it, and not a detail: it makes the label-plus-
+   chevron row a flex item that sizes to its content. As a plain button the row was a
+   block filling whatever width the button had, so empty space inside the control
+   measured as zero however wide it got. */
+[data-testid="stPopover"] button {{ padding: .4rem .75rem; border-radius: 8px;
+   background: {'#262730' if scheme == 'dark' else '#fff'};
+   color: inherit; border: 1px solid {'#3a3b46' if scheme == 'dark' else '#d5d6d8'};
+   font: inherit; cursor: pointer; display: inline-flex; align-items: center; }}
+[data-testid="stPopover"] button p {{ margin: 0; }}
+/* The label and the chevron are a flex row inside the button, 2px apart, and the
+   chevron is a 20px Material glyph. Both are Streamlit's, and both are part of what
+   the button's width has to cover. */
+[data-testid="stPopover"] button .popover-trigger {{ display: flex;
+   align-items: center; gap: 2px; }}
+[data-testid="stPopover"] button [data-testid="stIconMaterial"] {{ display: flex;
+   flex: 0 0 auto; width: 20px; height: 20px; }}
+/* What app.py publishes once it knows what the provider served — see the picker's
+   width rule in app.css. Set here to the label this replica renders, which is the
+   longest a default deployment offers: the width is sized for the longest name, so
+   measuring it against a shorter one would report slack the stylesheet did not
+   choose. */
+:root {{ --picker-chars: {len(PICKER_LABEL)}; }}
 /* Streamlit's header: full width, transparent, and above everything. */
 [data-testid="stHeader"] {{ position: fixed; top: 0; left: 0; right: 0;
    height: {HOST_BAR}px; background: transparent; z-index: {HOST_Z}; }}
@@ -478,6 +375,45 @@ def _cards_html() -> str:
     return rows
 
 
+def panel(legacy: bool = False) -> str:
+    """The model picker with its panel OPEN, in the portal Streamlit renders it into.
+
+    Modelled because it was not, and the stylesheet had a whole section aimed at an
+    element no render had ever contained: the panel came out white on a dark page and
+    nothing here could see it. It is not a descendant of anything else in the app —
+    Streamlit portals it to the end of `<body>` — so a rule written as a descendant
+    selector reaches nothing, which is exactly the failure this screen exists to catch.
+
+    `legacy` is the pre-1.59 shape, when Streamlit was built on Base Web and the panel
+    sat inside `[data-baseweb="popover"]`. 1.59 removed Base Web and renders into
+    `#stFloatingOverlayPortal` instead. requirements.txt allows >=1.42, so both are
+    live, and a stylesheet that only names one of them is half a fix.
+    """
+    rows = "".join(
+        f'<div class="element-container"><div class="stButton">'
+        f"<button><p>{label}</p></button></div></div>"
+        for label in (
+            # The model's own id, with no provider prefix — a third of the picker's
+            # width used to restate "Zen ·" on every line — and none of the tier
+            # marker `Model.label` strips off, so these are the strings a reader sees.
+            "● mistral-small-latest",
+            "○ mistral-medium-latest",
+            "○ deepseek-v4-flash",
+            "○ nemotron-3-ultra",
+        )
+    )
+    # No caption above the rows. There was one; `render_model_picker` dropped it, and a
+    # replica that keeps rendering a control the app does not is a harness measuring
+    # its own scaffolding.
+    body = f'<div data-testid="stPopoverBody">{rows}</div>'
+    if legacy:
+        body = f'<div data-baseweb="popover"><div><div>{body}</div></div></div>'
+    return (
+        '<div id="stFloatingOverlayPortal" data-st-overlay-root="true">'
+        f"{body}</div>"
+    )
+
+
 def chips(wrapped: bool = True) -> str:
     """Attachment chips, rendered where app.py renders them: above the controls.
 
@@ -501,7 +437,7 @@ def chips(wrapped: bool = True) -> str:
             f"{buttons}</div>")
 
 
-def strip(clear: bool = True, wrapped: bool = True, pressed: bool = False) -> str:
+def strip(clear: bool = True, wrapped: bool = True) -> str:
     """The model picker, in the bottom-right corner of the input box.
 
     Rendered last in the block, where app.py renders it, and pinned into the box by
@@ -519,26 +455,28 @@ def strip(clear: bool = True, wrapped: bool = True, pressed: bool = False) -> st
     170 renders here in a row. Both shapes are rendered now, so a rule that only
     reaches one of them fails the audit.
     """
-    # The CLIPPED hook and nothing else. This function used to build the visible
-    # control in this corner — a 🗑️, then the model picker, then a `position: fixed`
-    # pill — and there is no visible control here any more: the pill app.js injects is
-    # rendered inside `[data-testid="stChatInput"]` by `page()`, because that is where
-    # the app puts it. What Streamlit renders is the wire, clipped to a pixel by
-    # app.css exactly as the stop hook and the uploader are.
-    #
-    # `st-key-think-on`/`-off` is the container key app.css used to paint the fill off
-    # and app.js now reads the state from. Both shapes `st.container(key=…)` produces
-    # are still rendered, for the reason the docstring above gives.
-    hook = f"""
-    <div class="st-key-think-toggle element-container"><div class="stButton">
-      <button><p>{THINK_LABEL}</p></button>
-    </div></div>"""
-    key = f"st-key-think-{'on' if pressed else 'off'}"
+    trash = ""
+    # The picker alone. There was a 🗑️ to its left and a caveat line left of that; both
+    # are gone, and with them the whole idea of a row under the input — which is where
+    # the vertical space this change bought back came from.
+    # The trigger holds the model's name AND the chevron Streamlit puts after it, in a
+    # flex row with a gap. Modelled because the name is only part of what the button
+    # has to be wide enough for: with the chevron missing, the replica read a 20px
+    # narrower control than the app draws, and the width is now set from the name.
+    # `PICKER_LABEL` is the longest name a default deployment offers, which is the one
+    # the width is sized for — anything shorter would leave slack that is the
+    # selection's fault rather than the stylesheet's, and prove nothing.
+    controls = f"""
+    {trash}
+    <div class="element-container"><div data-testid="stPopover"><div class="stPopover">
+      <button><div class="popover-trigger"><p>{PICKER_LABEL}</p><span
+      data-testid="stIconMaterial"></span></div></button>
+    </div></div></div>"""
     if wrapped:
-        return f"""<div class="{key}" data-testid="stVerticalBlockBorderWrapper">
- <div data-testid="stVerticalBlock">{hook}</div></div>"""
-    return f"""<div class="{key}" data-testid="stVerticalBlock">
- {hook}</div>"""
+        return f"""<div class="st-key-composer-strip" data-testid="stVerticalBlockBorderWrapper">
+ <div data-testid="stVerticalBlock">{controls}</div></div>"""
+    return f"""<div class="st-key-composer-strip" data-testid="stVerticalBlock">
+ {controls}</div>"""
 
 
 # Real citation labels, not short ones. A chip's text is `"{doc_title} — {heading}"`,
@@ -634,18 +572,10 @@ def answer_block(index: int, question: bool = True) -> str:
   batch job on Midway3, and what partition should I use?</div></div>
 </div></div></div>
 """ if question else ""
-    # The progress block, folded, on a FINISHED answer. It used to die with the turn
-    # that drew it; a stored message carries its steps now and
-    # `transcript.render_steps` draws it again, above the text, where the live one
-    # already was — so nothing moves when the turn ends. Rendered here because that
-    # makes it part of every answer's geometry: it is inside the chat message, so the
-    # answer's own top edge, the copy button's corner and the gap to the question above
-    # are all measured with it present.
     return asked + f"""
 <div class="st-key-answer-{index} element-container"><div class="stChatMessage">
  <div></div>
  <div class="stMarkdown"><div data-testid="stMarkdownContainer">
-  {folded_block(2)}
   <h2>Requesting a GPU</h2>
   <p>Add <code>--gres=gpu:1</code> to your script and submit to the
   <code>gpu</code> partition.{MARKER}</p>
@@ -761,8 +691,9 @@ SHORT_ANSWER = f"""
              ["Checking job status in the terminal"])}
 </div>
 <div class="element-container"><div class="stMarkdown"><div data-testid="stMarkdownContainer">
-  <div class="notice">The first model was unavailable (out of credit), so another
-  answered. This turn took longer than usual.</div></div></div></div>"""
+  <div class="notice">Mistral · small-latest was unavailable (out of credit), so Zen ·
+  deepseek-v4-flash-free answered instead. Pick a different one from the model button
+  under the input box.</div></div></div></div>"""
 
 def landing(wrapped: bool = True) -> str:
     """The hero and the starter cards.
@@ -824,6 +755,7 @@ DOC_SCROLL = {"doc-scroll"}
 # Which screens render the model picker's panel open, and in which of the two shapes
 # Streamlit has portalled it into. One screen each: the panel does not change with the
 # conversation, so states and widths are what matter, not the page behind it.
+OPEN_PICKER = {"picker-open": False, "picker-open-legacy": True}
 
 # What each screen has waiting in the queue app.js keeps on the parent window. Only
 # one screen has anything: a queue exists only while an answer is arriving, and what is
@@ -849,90 +781,13 @@ TYPED = (
     "the box is unambiguously taller than one row at every width this renders."
 )
 
-def step_row(name: str, argument: str, seconds: str) -> str:
-    """One finished step, as `sage.ui.turn._done_html` writes it."""
-    return (
-        '<div class="status-step">'
-        '<span class="status-mark" aria-hidden="true">✓</span>'
-        f'<span class="status-name">{name}</span>'
-        f'<span class="status-arg">{argument}</span>'
-        f'<span class="status-time">{seconds}</span>'
-        "</div>"
-    )
-
-
-def live_row(name: str = "", argument: str = "") -> str:
-    """The step that is running — or, with no name, the row a turn opens on.
-
-    That second form is what this file rendered before there were steps, down to the
-    byte, because that frame of a turn did not change. The live step differs from it in
-    two ways and both are deliberate: the argument is a sibling of `.status-text`
-    rather than inside it (the text is a gradient clipped to its own glyphs, so a child
-    of it is invisible), and the live line carries no `role`, because the block around
-    it is the one live region.
-    """
-    role = ' role="status" aria-live="polite"' if not name else ""
-    return (
-        f'<div class="status-row"{role}>'
-        '<span class="status-dot" aria-hidden="true"></span>'
-        f'<span class="status-text">{name or STATUS_LABEL}</span>'
-        + (f'<span class="status-arg">{argument}</span>' if argument else "")
-        + '<span class="status-dots" aria-hidden="true"><span></span><span></span>'
-        "<span></span></span></div>"
-    )
-
-
-def step_block(*, live: str, steps: int = 6) -> str:
-    """The block mid-turn: every step that has finished, and the live line under them.
-
-    Six, because that is the tallest the block gets on a real turn — the default
-    `config.MAX_TOOL_ROUNDS` is 4 and a single round may call more than one tool — and
-    the whole question about a block that grows a line at a time is whether the page
-    still has room for the line after it.
-    """
-    rows = [
-        step_row(STEP_NAMES[index % 2],
-                 STEP_WIDEST if index == 0 else STEP_PATH,
-                 f"{index / 3 + 0.4:.1f}s")
-        for index in range(steps)
-    ]
-    return (
-        '<div class="status-block" role="status" aria-live="polite">'
-        + "".join(rows) + live + "</div>"
-    )
-
-
-def folded_block(steps: int = 3) -> str:
-    """The line the block becomes when the answer starts, opened again.
-
-    Rendered OPEN, and that is the point of rendering it at all: closed, the browser
-    skips its contents, every step inside is a box with no layout behind it, and a
-    check on those boxes passes without having looked at anything. Open is also the
-    state a reader has to be able to use — it is what the summary line is for.
-    """
-    rows = [
-        step_row(STEP_NAMES[index % 2], STEP_PATH, f"{index / 2 + 0.3:.1f}s")
-        for index in range(steps)
-    ]
-    return (
-        '<details class="status-done" open>'
-        f'<summary class="status-summary">{steps} steps · 12.4s</summary>'
-        '<div class="status-block">' + "".join(rows) + "</div>"
-        "</details>"
-    )
-
-
-def in_flight(body: str) -> str:
-    """A question, and whatever the assistant has put under it so far.
-
-    What is actually on screen while an answer is being generated. The other screens
-    render a *finished* answer with the processing marker set, which is a much taller
-    page — so the slack app.js puts above a short conversation stayed small there and
-    the check below had nothing to catch. On this screen it is the whole page, which is
-    how the question ended up halfway down the window with the answer arriving
-    underneath it.
-    """
-    return f"""
+# What is actually on screen while an answer is being generated: the question, and
+# a status row where the answer will go. The other screens render a *finished*
+# answer with the processing marker set, which is a much taller page — so the slack
+# app.js puts above a short conversation stayed small there and the check below had
+# nothing to catch. On this screen it is the whole page, which is how the question
+# ended up halfway down the window with the answer arriving underneath it.
+IN_FLIGHT = f"""
 <div class="element-container"><div class="stMarkdown"><div data-testid="stMarkdownContainer">
   <div class="user-message"><div class="user-bubble">How do I connect to Midway via
   SSH?</div></div>
@@ -940,31 +795,12 @@ def in_flight(body: str) -> str:
 <div class="element-container"><div class="stChatMessage">
  <div></div>
  <div class="stMarkdown"><div data-testid="stMarkdownContainer">
-  {body}
+  <div class="status-row" role="status" aria-live="polite">
+    <span class="status-dot" aria-hidden="true"></span>
+    <span class="status-text">{STATUS_LABEL}</span>
+    <span class="status-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+  </div>
  </div></div></div></div>"""
-
-
-# The answer, while it is still arriving. Its own chat message under the block rather
-# than inside it, which is the shape the app draws: the block is written into a slot
-# taken before the answer's container exists, so they are siblings, and the gap
-# between them is the one the reader watches the first words appear in.
-STREAMING_ANSWER = """
-<div class="st-key-live-answer-1 element-container"><div class="stChatMessage">
- <div></div>
- <div class="stMarkdown"><div data-testid="stMarkdownContainer">
-  <p>You reach Midway over SSH from a terminal, and which host you use depends on
-  the cluster your account is on.</p>
- </div></div></div></div>"""
-
-IN_FLIGHT = in_flight(live_row())
-# The same screen once the turn has done something: six finished steps, each naming a
-# tool and what it was given, and the live line under them. This is the one that grows
-# — 22px a step, measured — so it is where "does the newest thing on the page still
-# clear the composer" is asked of a block rather than of an answer.
-# And once the answer has started: the block is one summary line, with the steps behind
-# a disclosure the reader can open — during the turn, because it is the browser's own
-# control and a Streamlit one would be a rerun, and a rerun mid-turn aborts the answer.
-IN_FLIGHT_FOLDED = in_flight(folded_block()) + STREAMING_ANSWER
 
 # The strip's container shape alternates across the screens, so both shapes are
 # audited at every width, in both themes, in every state.
@@ -1001,22 +837,9 @@ SCENARIOS = {
     "attached-flat": CHAT_MARKER + SHORT_ANSWER + chips(wrapped=False) + strip(),
     # The picker, open. The page behind it is an ordinary answer; what is under test
     # is the panel, which lives outside every container this stylesheet reaches.
-    # The pill switched on. Its own screen rather than another state on an
-    # existing one, because what it is for is the filled variant: white on
-    # `--brand`, which is the one contrast pair in this band that can fail,
-    # and a 10px-wider box than the outlined version once the fill lands.
-    "think-on": CHAT_MARKER + SHORT_ANSWER + strip(pressed=True),
+    "picker-open": CHAT_MARKER + SHORT_ANSWER + strip(),
+    "picker-open-legacy": CHAT_MARKER + SHORT_ANSWER + strip(),
     "in-flight": CHAT_MARKER + IN_FLIGHT + strip(wrapped=False),
-    # No `in-flight-steps` screen any more, and its absence is the change: the block
-    # drew a step per tool call and kept them, and it does not — one sweeping row is on
-    # screen for the whole turn and the steps arrive folded when the answer does.
-    # `in-flight` above IS that screen. What the steps need measuring in is the folded
-    # shape, which the next entry and every `answer_block` now carry.
-    # And once the answer has started arriving: one summary line where the block was,
-    # opened again, with the answer underneath it.
-    "in-flight-folded": CHAT_MARKER
-    + "".join(answer_block(i) for i in range(3))
-    + IN_FLIGHT_FOLDED + strip(wrapped=False),
     # The same mid-turn screen with the reader's next question waiting behind it. Its
     # body is the in-flight one: what is added is not markup but the state app.js
     # holds a queue in, so the row measured here is the row `renderQueue` builds. It
@@ -1079,29 +902,8 @@ NARROW_LINE_LIMITS: dict[str, int] = {
     # The status line, at a phone width too — this is the one place the general gate
     # would be wrong to let go. It is a progress cue over an empty answer, so a second
     # row is the page growing under a reader who is waiting and has nothing else to
-    # look at. The phrases it can hold are fixed, and `Copy.status_phrases` is the set.
+    # look at. Holding it here is what the cap in `app.py`'s `describe` is for.
     ".status-text": 1,
-    # A step's argument is allowed THREE lines, and the change from one is deliberate.
-    # It was held to a single line by an ellipsis, on the reasoning that a step is a
-    # progress cue over an empty answer and a second row is the page growing under a
-    # waiting reader. That reasoning survives for `.status-text` above and did not
-    # survive the value: since the row resolves section ids to titles, the argument is a
-    # sentence, and the ellipsis cut it where the useful half began — "why can't it show
-    # the complete cot?"
-    #
-    # Three rather than unbounded, because the cap still has to catch a layout that has
-    # stopped constraining the column at all: the widest value the app can produce is
-    # `config.STATUS_ARGUMENT_CHARS` of monospace, which is three lines at the narrowest
-    # viewport this renders and one at the widest. Both ends of the column are checked —
-    # the first row carries that widest argument and the last is the one nearest the
-    # composer.
-    ".status-step": 3,
-    "last:.status-step": 3,
-    ".status-arg": 3,
-    "last:.status-arg": 3,
-    # The line the whole block folds into. Two words and a number; a second line here
-    # means something has gone wrong with the disclosure marker.
-    ".status-summary": 1,
 }
 
 MEASURE = """
@@ -1166,12 +968,6 @@ function box(sel) {
     left: Math.round(r.left), right: Math.round(r.right),
     lines: Math.max(1, Math.round(r.height / lh)),
     fontPx: Math.round(parseFloat(cs.fontSize) * 10) / 10,
-    // The face this element is actually set in — the first family of the stack,
-    // which is the one the browser will use now that it is loaded. Recorded because
-    // nothing else here can see a typeface: a page in the wrong font passes every
-    // bound in this file, and the one that shipped (every model name in the open
-    // picker in the sans face) was found by looking at the running app.
-    family: (cs.fontFamily || '').split(',')[0].replace(/["']/g, '').trim(),
     overflowX: el.scrollWidth - el.clientWidth,
     contrast: ratio(cs.color, solidBg(el)),
     hit: hitTest(el, r)
@@ -1308,6 +1104,18 @@ function snapshot() {
     var found = image.match(/rgba?\\([^)]*\\)/g) || [];
     statusStops = found.map(function (stop) { return ratio(stop, behind); });
   }
+  var pickEl = document.querySelector(PICKER_SELECTOR);
+  var pickInner = pickEl && pickEl.firstElementChild;
+  var pickerSlack = null;
+  if (pickInner) {
+    var pcs = getComputedStyle(pickEl);
+    var sides = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth']
+        .reduce(function (sum, side) { return sum + parseFloat(pcs[side]); }, 0);
+    pickerSlack = Math.round(pickEl.getBoundingClientRect().width - sides
+                             - pickInner.getBoundingClientRect().width);
+  }
+  var panelEl = document.querySelector('[data-testid="stPopoverBody"]');
+  var panelBg = panelEl ? getComputedStyle(panelEl).backgroundColor : '';
   // EVERY row of a list, not just the first. `box()` below resolves one element per
   // selector, which is why no check here could express "do the wrapped rows line up"
   // — the ragged Sources strip was measured in a scratch probe and shipped for months
@@ -1324,8 +1132,8 @@ function snapshot() {
   var out = {viewport: {w: innerWidth, h: innerHeight}, hostBar: HOSTBAR,
            lists: {'.source-item': rows('.source-item'),
                    '.related-item': rows('.related-item')},
-           cursorGap: cursorGap,
-           clipDrop: clipDrop, sendDrop: sendDrop,
+           panelBg: panelBg, cursorGap: cursorGap,
+           clipDrop: clipDrop, sendDrop: sendDrop, pickerSlack: pickerSlack,
            statusStops: statusStops,
            answerToRefs: answerToRefs, refsToRelated: refsToRelated,
            refsOverhang: refsOverhang,
@@ -1343,36 +1151,17 @@ function snapshot() {
            canScrollUnfilled: !!port
              && port.scrollHeight - port.clientHeight
                 - (parseFloat(root.getPropertyValue('--fill')) || 0) > 1,
-           // How much scroll is left below this position. Reported as the
-           // distance rather than as "is it at the end", because what the bound
-           // below it needs is not whether the page can move but whether it can
-           // move FAR ENOUGH: mid-turn app.js stops the view one `--tail-gap`
-           // above the composer, and the document reserves the bar's height plus
-           // that gap below the last message — so the view settles short of the
-           // end rather than on it, by an amount that moves with every line the
-           // page grows. Measured at 0, 18, 23 and 30px inside one six-step turn.
-           scrollRoom: !port ? 0
-             : Math.max(0, Math.round(port.scrollHeight - port.clientHeight
-                                      - port.scrollTop)),
+           // Already as far down as the page goes. The scroll pin clamps to this,
+           // so a question that looks low here is as high as it can be put.
+           atEnd: !port || port.scrollHeight - port.clientHeight - port.scrollTop <= 2,
            docOverflowX: Math.max(0, document.documentElement.scrollWidth - innerWidth),
            reserved: {bar: root.getPropertyValue('--bar-h').trim(),
                       // The bar alone, which is what the chips are anchored to. Named
                       // separately because a failure where the two disagree is a
                       // different bug from either of them being wrong.
                       band: root.getPropertyValue('--bar-band').trim(),
+                      pickRight: root.getPropertyValue('--pick-right').trim(),
                       fill: root.getPropertyValue('--fill').trim()},
-           // Did the app's own faces actually arrive? Every width, wrap and overlap
-           // bound below is a measurement of a string, and a string measured in
-           // whatever sans the machine happens to have is a number about a page
-           // nobody sees. The failure is silent by nature — the text renders, in the
-           // wrong face — so it is reported per render rather than assumed.
-           fonts: (function () {
-             var probes = FONTPROBES, got = {status: document.fonts.status};
-             Object.keys(probes).forEach(function (k) {
-               got[k] = document.fonts.check('400 16px "' + probes[k] + '"');
-             });
-             return got;
-           })(),
            els: {}};
   SELECTORS.forEach(function (s) { out.els[s] = box(s); });
   document.title = JSON.stringify(out);
@@ -1382,24 +1171,18 @@ setTimeout(snapshot, 700);
 </script>
 """
 
-# The Think pill. Named because three checks below treat it specially: collapsed
-# width, whether it is inside the strip pinned for it, and reachability. It kept the
-# name `PICKER` from the model picker that stood in this corner before it, for the
-# same reason `.st-key-composer-strip` and `--pick-right` kept theirs — the selector
-# table, the checks and the fixture would all have to move to say nothing new.
-PICKER = "#think-btn"
+# The model picker's trigger. Named because three checks below treat it specially:
+# collapsed width, whether it is inside the strip pinned for it, and reachability.
+PICKER = '.st-key-composer-strip [data-testid="stPopover"] button'
 # The strip the controls sit in, and the input it must never cover.
-STRIP = "#think-btn"
+STRIP = ".st-key-composer-strip"
 INPUT = ".stChatInput textarea"
 # The bordered box around the textarea, and the button that sends. Both measured so
 # the space between the end of the text and the bottom of the box can be: in the flow
 # the button takes a row of its own once the text passes one line, and that row is a
 # band of nothing under what was typed.
 INPUT_BOX = ".stChatInput > div"
-# Mirrors app.css's own exclusions. Without `#think-btn` this matched the pill as
-# well as the send button, so the overlap check below compared the pill against
-# itself and reported its own width as an overlap at every render.
-SEND = '.stChatInput button:not(#paperclip-btn):not(#stop-btn):not(#think-btn)'
+SEND = '.stChatInput button:not(#paperclip-btn):not(#stop-btn)'
 # The square app.js puts in the send button's corner while an answer generates, and
 # the pencil it puts in the gutter beside each question. Both are injected rather
 # than rendered by Streamlit, both are the only way to reach a thing the app can now
@@ -1423,6 +1206,11 @@ THEME_TOGGLE = "#theme-toggle"
 # The block holding whatever the reader sent while an answer was still arriving. Named
 # because it is measured as the end of the conversation as well as measured in itself.
 QUEUED_NOTE = ".queued-note"
+# The popover panel and what is in it. Named because the panel is portalled to the end
+# of <body>, so its colours come from nothing it is nested inside — if the stylesheet
+# does not state them, Streamlit's default does, and on a dark page that was white.
+PANEL = '[data-testid="stPopoverBody"]'
+PANEL_BUTTON = '[data-testid="stPopoverBody"] button p'
 # What app.js parks in a finished answer's top-right corner, and the prose it is
 # parked on top of. Absolutely positioned inside the message, so the corner it sits
 # in is a corner the text also uses unless the message reserves it — measured in the
@@ -1455,21 +1243,16 @@ SELECTORS = [
     # stylesheet rule anybody reads, and a piece of it going missing would show up
     # here as a selector nothing rendered.
     QUEUED_NOTE, ".queued-bubble", ".queued-label", ".queued-drop",
-    ".status-text",
-    # A step on the progress block, and the machine data on it. Both ends of the
-    # column, because the block grows downwards and the last line is the one with the
-    # composer under it. `.status-arg` is measured for its own sake: it is the only
-    # element on the block allowed to be narrower than its content, and the check that
-    # it ellipses rather than wraps is the line budget below.
-    ".status-step", "last:.status-step", ".status-arg", "last:.status-arg",
-    ".status-summary",
+    PANEL, PANEL_BUTTON, ".status-text",
     # The theme toggle, which lives in the one band of this page that has already
     # killed a control: Streamlit's header takes every click aimed at anything
     # underneath it, and the fix is a z-index that outranks the chrome. Measured AND
     # hit-tested, because "on screen" and "clickable" came apart there once before.
     THEME_TOGGLE, '[data-testid="stExpandSidebarButton"]', "#host-bar",
+    ".st-key-composer-strip button",
     # The rightmost control in the strip, so the row is measured end to end: with
     # a model name in it, it is the widest thing under the input.
+    "last:.st-key-composer-strip button",
     PICKER,
     # The error card's actions. The switch one carries a whole model name, so it
     # is the widest button in the app and the first thing to overflow at 360px.
@@ -1482,8 +1265,8 @@ SELECTORS = [
 # it reserves: if the two measurements ever disagree, the strip lands on the
 # textarea, and "the box will not take a click" is the worst bug in the app.
 INTERACTIVE = {
-    PICKER, INPUT,
-    SEND, STOP, THEME_TOGGLE,
+    PICKER, ".st-key-composer-strip button", "last:.st-key-composer-strip button", INPUT,
+    SEND, STOP, PANEL_BUTTON, THEME_TOGGLE,
     # The ✕ on a queued question. It is the only way to take one back, so a queue with
     # it painted over or under the composer is a queue that sends the question the
     # reader decided against.
@@ -1497,12 +1280,7 @@ INTERACTIVE = {
 # everywhere, since the row is right-aligned and it belongs in the corner. So all
 # three selectors that can reach it are exempt from the overflow check; the emoji
 # button they also reach has nothing to ellipse.
-ELLIPSIS_OK = {PICKER,
-               # A query or a path too long for the window is ellipsed on purpose, and
-               # an ellipsed line reports scrollWidth past clientWidth — that reading
-               # IS the feature working. What must not overflow is the row holding it,
-               # which is `.status-step`, and that is not on this list.
-               ".status-arg", "last:.status-arg"}
+ELLIPSIS_OK = {PICKER, ".st-key-composer-strip button", "last:.st-key-composer-strip button"}
 
 # Text painted as a gradient clipped to the glyphs. `getComputedStyle().color` on these
 # is the fallback a browser without `background-clip: text` would use, not the colour a
@@ -1564,12 +1342,12 @@ MAX_BUTTON_DROP = 6
 # that needed 136 in the app, and 59px of it here.
 #
 # Not zero, because the width comes out of `ch` units and a "0" is wider than the
-# lowercase letters model ids are mostly made of — about 10% in a proportional face.
-# In IBM Plex Mono, which is what the picker is set in now, a "0" is exactly as wide
-# as every other character, so the reading should be tight; the allowance stays loose
-# because it is the safe direction. The other side of the check is not, so it has no
-# allowance at all: a negative reading means the name is being ellipsed, which is the
-# failure that matters and the thing keeping the 0.78 in `app.css` honest.
+# lowercase letters model ids are mostly made of — about 10% in the app's Source Sans,
+# and nearer 20% in whatever this machine falls back to, which is why the allowance is
+# this loose. Slack is the safe direction; the other side of the check is not, so it
+# has no allowance at all: a negative reading means the name is being ellipsed, which
+# is the failure that matters and the thing keeping the 0.78 in `app.css` honest.
+MAX_PICKER_SLACK = 30
 # How much lighter the lit end of the status line's sweep has to be than the dim end,
 # as a ratio of their contrasts against the page. An animation nobody can see is not an
 # animation: the sweep it replaced ran 11:1 to 7.7:1, two dark maroons 1.42x apart, and
@@ -2297,7 +2075,7 @@ def page(body: str, scheme: str, scroll: bool, generating: bool = False,
          pin: bool = False, script: bool = True, sticky: bool = False,
          doc_scroll: bool = False, typed: bool = False, landing: bool = False,
          column_input: bool = False, portal: str = "", queued=(),
-         think_on: bool = False, driver: str = "") -> str:
+         driver: str = "") -> str:
     """The replica, with or without app.js, and with the bar pinned either way.
 
     `script=False` is the app's first frame: the stylesheet's own fallback for how
@@ -2364,17 +2142,6 @@ def page(body: str, scheme: str, scroll: bool, generating: bool = False,
            # never fired here, so neither the button nor the `:not(#paperclip-btn)`
            # exclusion that keeps it out of the send button's corner was ever rendered.
            '<button id="paperclip-btn" type="button">📎</button>'
-           # And the Think pill, which app.js injects into this same element. It was
-           # modelled as a `position: fixed` strip outside the bar, which is what it
-           # used to be — and a fixed control chasing a measurement of the box is the
-           # bug that moved it in here: "the think toggle will also jump out of the
-           # textbox... the up arrow won't". Rendered in both states, because the "on"
-           # fill is white on `--brand` and that is the one contrast pair in this band
-           # that can fail. The brain is inlined exactly as app.js writes it, since a
-           # 14px SVG and its gap are part of what the pill has to fit.
-           + ('<button id="think-btn" type="button" title="' + THINK_HINT + '"'
-              + (' data-on="true"' if think_on else "")
-              + ">" + BRAIN + "<span>" + THINK_LABEL + "</span></button>")
            # Two placeholders, as app.py has them: the landing screen names the
            # subject because nothing else on that page does, and every screen with an
            # answer on it asks for a follow-up instead.
@@ -2460,7 +2227,7 @@ def page(body: str, scheme: str, scroll: bool, generating: bool = False,
 window.__sageWatched = {str('chat-container' in body).lower()};
 window.__sageQueue = {json.dumps(list(queued))};</script>
 {'<script id="sage-js">' + JS + '</script>' if script else ''}
-{driver or MEASURE.replace("HOSTBAR", str(HOST_BAR)).replace("TOPGAP", str(TOP_GAP)).replace("SELECTORS", json.dumps(SELECTORS)).replace("SEND_SELECTOR", json.dumps(SEND)).replace("FONTPROBES", json.dumps(FONT_PROBES))}
+{driver or MEASURE.replace("HOSTBAR", str(HOST_BAR)).replace("TOPGAP", str(TOP_GAP)).replace("SELECTORS", json.dumps(SELECTORS)).replace("SEND_SELECTOR", json.dumps(SEND)).replace("PICKER_SELECTOR", json.dumps(PICKER))}
 </body></html>"""
 
 
@@ -2703,42 +2470,6 @@ SEEN_SELECTORS: set[str] = set()
 # `audit_citations` reads them and the coverage check has to know they exist.
 LIST_SELECTORS = (".source-item", ".related-item")
 
-# Which face each of these has to be in. Two faces carry a distinction the app makes
-# on purpose — language in the sans, machine data in the mono — and it is the one
-# thing on the page that no measurement notices: a model name in the wrong font is the
-# right size, in the right place, at the right contrast, and wrong. The values are
-# read out of `[theme]` rather than written here, so renaming the typeface in one
-# place moves this check with it.
-#
-# The prose entries are not padding. `html, body` in app.css is the only thing putting
-# the sans on most of this page, and `!important` in the mono block above is a blunt
-# instrument: a selector typo there that caught `.source-link` or an answer's
-# paragraphs would set a documentation title or a whole answer in Plex Mono, which is
-# a change to every screen in the app and fails nothing else in this file.
-FACES = {
-    ".stChatMessage pre": "mono",
-    ".stChatMessage code": "mono",
-    # The query a turn searched for and the section it read. Both ends of the column,
-    # because the block is built a line at a time and one line set in the body face
-    # would be the only thing on the page where a path is not code.
-    ".status-arg": "mono",
-    "last:.status-arg": "mono",
-    ".source-kind": "mono",
-    # The pill, and it is SANS. The model picker here was mono because its label
-    # was a served model id — machine data, like a path in an answer. This label
-    # is one English word from the profile, so it takes the interface face, and
-    # this line is what holds app.css to having taken it off the mono list.
-    PICKER: "sans",
-    ".welcome-title": "sans",
-    ".welcome-subtitle": "sans",
-    ".user-bubble": "sans",
-    ANSWER_TEXT: "sans",
-    ".sources-label": "sans",
-    ".source-link": "sans",
-    ".related-link": "sans",
-    INPUT: "sans",
-}
-
 
 def audit(data, scenario, scheme, width, state: str) -> list[str]:
     problems, els = [], data["els"]
@@ -2762,16 +2493,6 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
     # page is scrolled, content passing under a fixed overlay is inherent. A page that
     # has NOT scrolled is still judged, which is the case the check was written for.
     scrolled = state not in ("rest", "unmeasured") or data["scrolled"] > 0
-
-    for selector, face in FACES.items():
-        measured = els.get(selector)
-        if not measured:
-            continue
-        if measured["family"] != FONT_PROBES[face]:
-            problems.append(
-                f"{where}: {selector} is set in {measured['family']!r}, and the "
-                f"{face} face is {FONT_PROBES[face]!r}"
-            )
 
     if data["docOverflowX"] > 0:
         problems.append(f"{where}: page scrolls sideways by {data['docOverflowX']}px")
@@ -2904,30 +2625,35 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
             f"has to be the smaller one"
         )
 
-    # A zero-width control in this corner is the exact bug that shipped twice with the
-    # model picker: present in the DOM, invisible on screen. The floor is lower than it
-    # was — 40px against 80 — because the thing being measured changed size. The picker
-    # showed a served model id and could not be narrower than one; the Think pill shows
-    # one short word beside a 14px icon and measures 72px at every width in the running
-    # app. A floor above that would fail on a correct control, and a floor at zero
-    # would not catch the bug it exists for, so it sits between the two: wide enough
-    # that a collapsed pill is caught, narrow enough that a deployment whose word is
-    # shorter than "Think" still passes.
+    # A zero-width picker is the exact bug that shipped twice: present in the DOM,
+    # invisible on screen. 80px is narrower than any real label, so anything below
+    # it means the control collapsed rather than merely being tight.
     picker = els.get(PICKER)
-    if picker and picker["right"] - picker["left"] < 40:
+    if picker and picker["right"] - picker["left"] < 80:
         problems.append(
-            f"{where}: the Think pill is only "
+            f"{where}: the model picker is only "
             f"{picker['right'] - picker['left']}px wide (collapsed)"
         )
 
-    # No slack bound any more, and its absence is deliberate. `MAX_PICKER_SLACK` held
-    # the picker's width to the longest model id it could show rather than to a round
-    # number, and the pair of bounds under it caught a name being ellipsed. The pill
-    # has no width rule at all — it is sized by one word that does not change between
-    # its two states — so there is no declared width for a measurement to disagree
-    # with, and a slack check would only be re-measuring the browser's own text
-    # layout. What is still worth holding is that it fits in the box beside the send
-    # button, which the containment and overlap bounds below do.
+    # …and the other end of the same control. Too narrow hides it; too wide is a slab
+    # of empty box in the corner under the input, which is what a width picked as a
+    # round number rather than from the name gives you.
+    slack = data.get("pickerSlack")
+    if slack is not None and slack > MAX_PICKER_SLACK:
+        problems.append(
+            f"{where}: the model picker is {slack}px wider than the name in it "
+            f"(want at most {MAX_PICKER_SLACK} — the width is meant to be the "
+            f"longest name it can show, not a round number)"
+        )
+    # Above the mobile breakpoint only. Under it the stylesheet caps this button at
+    # 9.5rem on purpose, to keep three controls on one line at 360px, and ellipsing the
+    # name is the price it chose to pay — see the `max-width` in the mobile block.
+    if slack is not None and slack < 0 and width > 640:
+        problems.append(
+            f"{where}: the model picker is {-slack}px too narrow for the name in it, "
+            f"which is being ellipsed — the width is set from the longest name, so "
+            f"the longest name has to fit"
+        )
 
     # The picker belongs INSIDE the input box, in its bottom-right corner beside the
     # send button. This bound used to say the opposite — that the controls must sit
@@ -2963,7 +2689,7 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
     send_btn, clip = els.get(SEND), els.get("#paperclip-btn")
     if picker and send_btn and picker["right"] > send_btn["left"] + 1:
         problems.append(
-            f"{where}: the Think pill overlaps the send button by "
+            f"{where}: the model picker overlaps the send button by "
             f"{round(picker['right'] - send_btn['left'])}px"
         )
     if picker and clip and picker["left"] < clip["right"] - 1:
@@ -3015,6 +2741,26 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
                 f"line with each other ({names}; want within {MAX_BAND_SPREAD} — they "
                 f"are one row)"
             )
+
+    # The popover panel must belong to the page it is drawn over. It is portalled to
+    # the end of <body>, so it inherits nothing from the app — and when the stylesheet
+    # aimed only at a Base Web wrapper Streamlit had removed, what a dark-mode reader
+    # got was a white slab: "completely white… very sharp and uncomfortable".
+    panel_bg = data.get("panelBg", "")
+    if panel_bg:
+        rgb = [int(part) for part in re.findall(r"\d+", panel_bg)[:3]]
+        if rgb:
+            lightness = sum(rgb) / 3
+            if scheme == "dark" and lightness > 90:
+                problems.append(
+                    f"{where}: the popover panel is {panel_bg} on a dark page "
+                    f"(unthemed — it is portalled outside everything, so its colour "
+                    f"has to be stated, not inherited)"
+                )
+            if scheme == "light" and lightness < 160:
+                problems.append(
+                    f"{where}: the popover panel is {panel_bg} on a light page"
+                )
 
     # Under the text is the band of controls, and it is bounded at both ends: too small
     # and a control is on the text, too large and the box has a strip of nothing in it.
@@ -3256,76 +3002,26 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
         # mid-turn the question sits ~100px down at every width, so the tighter
         # ceiling costs nothing and buys ~30px of margin at the narrowest window.
         ceiling = round(data["viewport"]["h"] * 0.35)
-        # …and only where the layout could do anything about it, which is what the
-        # scroll left below the view says. The question can only be raised by moving
-        # the page, so a window with less scroll remaining than the lift needed is
-        # being asked for something the geometry forbids.
-        #
-        # This used to read `not atEnd` — the view being within 2px of the document's
-        # end — and that is the same test only while the app scrolls to the end, which
-        # it does not. Mid-turn `autoScroll` follows the TAIL and stops one
-        # `--tail-gap` above the composer; the document reserves the bar's height plus
-        # that gap below the last message, so the view settles some tens of pixels
-        # short of the end and the exact number moves with every line the answer or
-        # the progress block adds. Measured in the running app at 768x900, three turns
-        # above and a six-step turn in flight: the question sat 474-572px down while
-        # the scroll left below it went 0 → 23 → 30 → 18 → 23 → 0 as the block grew.
-        # `atEnd` was therefore true on some frames of that turn and false on others,
-        # with nothing about the layout differing between them, and the screens that
-        # passed it passed by coincidence — `in-flight-steps` and `in-flight-folded`
-        # by 1px, until a typeface change moved a rounding by 13.
-        #
-        # The bound itself is unchanged, and so is what it was written for: a question
-        # stranded mid-window with the top half of the page EMPTY, which is the `--fill`
-        # slack arriving mid-turn. That shape has the whole slack below the view to
-        # scroll through — 463px against a 148px lift when it was reported — so it
-        # still fires, and the `--fill` check further down catches it a second time.
-        #
-        # What the app does instead of lifting the question is written down in
-        # `static/app.js`: "Keep the newest text on screen while the answer arrives.
-        # NOT bring the question to the top of the viewport" — asked for again on
-        # 2026-08-28 and declined there, because putting a question at the top needs a
-        # viewport of content beneath it and at send time there is none.
-        lift = asked["top"] - ceiling if asked else 0
-        if lift > 0 and data.get("scrollRoom", 0) > lift:
+        # Not when the page is scrolled as far as it goes: the pin clamps to max
+        # scroll, so on a conversation whose last turn is near the end of the
+        # document the question cannot be lifted any higher and this would be
+        # asking the layout for something the geometry forbids.
+        if asked and asked["top"] > ceiling and not data.get("atEnd", False):
             problems.append(
                 f"{where}: the question is {asked['top']}px down the window while "
-                f"its answer generates (want no lower than {ceiling}, and there is "
-                f"{data['scrollRoom']}px of scroll below the view to lift it with)"
+                f"its answer generates (want no lower than {ceiling})"
             )
-
-    # The progress block, while a turn is working. Its lines are held to one line each
-    # by the budgets above and its last line has to clear the composer, which `newest`
-    # below is what says. Two things are left, and the first is the one that keeps the
-    # rest honest.
-    step = els.get(".status-step")
-    if scenario.startswith("in-flight-") and not step:
-        problems.append(
-            f"{where}: this screen models the progress block and no step rendered — "
-            f"every check on the block passes here without having looked at anything"
-        )
-    if step:
-        # One column, flush left. The block is a list of lines and a summary above
-        # them; the `<details>` marker is drawn INSIDE the summary's box for exactly
-        # this reason, because outside it the marker hangs into the message's own left
-        # margin and the line it belongs to starts somewhere the others do not.
-        for sel in ("last:.status-step", ".status-summary"):
-            other = els.get(sel)
-            if other and abs(other["left"] - step["left"]) > 1:
-                problems.append(
-                    f"{where}: {sel} starts {round(other['left'] - step['left'])}px "
-                    f"off the left edge of the step column — the block is one list, "
-                    f"and a line of it that does not line up reads as a broken indent"
-                )
 
     # An OPEN popover is meant to cover the page: that is what an overlay is, and
     # clicking the thing underneath is how a reader dismisses it. So on the screens
     # that render one, the composer being covered is the feature, and what has to stay
     # reachable is the panel's own buttons — which are in INTERACTIVE and are checked.
-    # Nothing is exempt any more. This held the controls the open model-picker panel
-    # was allowed to cover; the picker is gone, `st.popover` is used nowhere in the
-    # app, and a control this file cannot reach is now a control that is broken.
-    covered_by_overlay: set[str] = set()
+    covered_by_overlay = (
+        {INPUT, SEND, PICKER, STRIP, ".st-key-composer-strip button",
+         "last:.st-key-composer-strip button"}
+        if scenario.startswith("picker-open")
+        else set()
+    )
     # And the send button is deliberately unreachable while an answer generates: the
     # stop square is in its corner, which is the swap the reader asked for. The check
     # above reads that as "something is on top of the send button", which it is — so
@@ -3397,15 +3093,7 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
                           ".st-key-error-actions", ".notice",
                           # A queued question is the last thing on the page when
                           # there is one, so it is what must clear the composer.
-                          QUEUED_NOTE,
-                          # And so is the progress block, for as long as the turn is
-                          # working: it grows a line per tool call, and on the screens
-                          # where nothing has been answered yet it is the only thing
-                          # the page has to leave room for. Measured at its last step
-                          # rather than at the block, because a block whose own box is
-                          # clear of the composer can still have its sixth line behind
-                          # it if anything inside it overhangs.
-                          "last:.status-step")),
+                          QUEUED_NOTE)),
         key=lambda b: b["bottom"], default=None,
     )
     reserved = data.get("reserved", {})
@@ -3585,9 +3273,9 @@ def main() -> int:
                 # pin left behind).
                 if scenario.startswith("landing"):
                     states = ["unmeasured", "rest"]   # no turn to be in the middle of
-                elif scenario == "think-on":
-                    # The pill is the same whatever the conversation behind it is
-                    # doing, so scrolling and generating would re-measure one control.
+                elif scenario.startswith("picker-open"):
+                    # The panel is the same whatever the conversation behind it is
+                    # doing, so scrolling and generating would re-measure one slab.
                     states = ["unmeasured", "rest"]
                 elif scenario.startswith("composing"):
                     # What these two are for is the inside of the input box, and that
@@ -3597,14 +3285,6 @@ def main() -> int:
                     states = ["unmeasured", "rest"]
                 elif scenario == "in-flight":
                     states = ["generating"]           # it *is* the mid-turn screen
-                elif scenario.startswith("in-flight-"):
-                    # Mid-turn, which is when the progress block exists, and scrolled
-                    # to the end, which is the state its clearance bound fires in:
-                    # `newest` counts the block's last step, so this is what would
-                    # catch a sixth line hiding under the composer. Both are real
-                    # frames — the block is on the page for the whole tool loop and
-                    # for as long as the answer takes to arrive after it.
-                    states = ["generating", "scrolled"]
                 elif scenario == "queued":
                     # Mid-turn, which is when a queue exists, and scrolled to the end,
                     # which is the state the clearance bound below actually fires in:
@@ -3635,8 +3315,8 @@ def main() -> int:
                                 landing=scenario.startswith("landing"),
                                 column_input=scenario in COLUMN_INPUT,
                                 queued=QUEUED.get(scenario, ()),
-                                think_on=scenario == "think-on",
-                                portal="")
+                                portal=(panel(OPEN_PICKER[scenario])
+                                        if scenario in OPEN_PICKER else ""))
                     data = render(name, html, width, height,
                                   shot=(scheme == "dark" and width == 1263
                                         and state == "rest"))
@@ -3653,28 +3333,6 @@ def main() -> int:
                             f"{name}: asked for a {width}x{height} viewport and got "
                             f"{got[0]}x{got[1]} — nothing measured here is about the "
                             f"size it claims"
-                        )
-                        continue
-                    # Same reasoning one step further in: the right viewport in the
-                    # wrong typeface measures a page nobody is looking at either, and
-                    # unlike the viewport it does not announce itself.
-                    #
-                    # Asked only of the faces this page actually sets something in.
-                    # `document.fonts.check` is false for a face that is declared and
-                    # has never been asked for, which is the correct answer and not a
-                    # fault: a screen with no code, no badge and no model name on it
-                    # has no reason to have fetched the mono. Every screen here has
-                    # both today — the picker is on all of them — so this is about the
-                    # next screen somebody adds, not about a failure being hidden.
-                    families = {box["family"] for box in data["els"].values() if box}
-                    missing = [face for face, family in FONT_PROBES.items()
-                               if family in families
-                               and not data.get("fonts", {}).get(face)]
-                    if missing:
-                        failures.append(
-                            f"{name}: {', '.join(missing)} did not load "
-                            f"({FONT_PROBES}), so every width below was measured in "
-                            "the fallback face"
                         )
                         continue
                     failures.extend(audit(data, scenario, scheme, width, state))

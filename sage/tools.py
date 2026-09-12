@@ -49,32 +49,6 @@ class Tool(Protocol):
     #: tool at all should have used instead, and `sage.redact` swaps one for the other.
     #: Optional: a tool that leaves it empty is simply never substituted.
     label: str
-    #: Which of this tool's arguments is worth showing a reader while it runs — the
-    #: query for a search, the path for a read. The status row names the tool and
-    #: prints this one value beside it, so a reader watching a turn can see what was
-    #: searched for and which section was opened.
-    #:
-    #: Declared per tool rather than guessed at by the row, because only the tool
-    #: knows which of its arguments is the subject and which are options. Optional:
-    #: a tool that leaves it empty is named on the row with nothing beside it, which
-    #: is the right outcome for a tool whose arguments would mean nothing on screen.
-    argument: str
-    #: Whether that argument is a SECTION ID rather than something the reader could
-    #: have written. A search's argument is the model's own words and belongs on screen
-    #: as it is; a read's is `docs/allocations.md#how-do-i-check-...`, which is this
-    #: repository's own name for a file — the corpus layout, not the documentation.
-    #:
-    #: It got onto the page and was reported at once: "docs/allocations.md shouldn't be
-    #: disclosed in this way". Nothing else in the app shows one. The Sources strip
-    #: resolves every id to `Chunk.label` and `Chunk.url` before a reader sees it, and
-    #: `links.fix_links` does the same to the paths a model writes into an answer; the
-    #: progress row was the one place an id reached the page unresolved.
-    #:
-    #: True here means `ui.turn.call_step` resolves it against the corpus and shows the
-    #: section's own title. An id that does not resolve shows NOTHING — a model that
-    #: invented a path has not told the reader anything, and printing the invention is
-    #: the disclosure this exists to prevent.
-    argument_is_section: bool = False
 
     @property
     def schema(self) -> dict: ...
@@ -144,7 +118,6 @@ class SearchDocs:
 
     name = SEARCH_DOCS
     label = "search"
-    argument = "query"
 
     def __init__(self, retriever: Retriever, identity: Identity) -> None:
         self.retriever = retriever
@@ -228,10 +201,6 @@ class ReadDoc:
 
     name = READ_DOC
     label = "read"
-    argument = "path"
-    # `path` is a corpus id. See `Tool.argument_is_section`: the progress row shows the
-    # section's title, never this string.
-    argument_is_section = True
 
     def __init__(self, retriever: Retriever, identity: Identity) -> None:
         self.retriever = retriever
@@ -355,34 +324,6 @@ class Toolset:
             for tool in self.tools
             if getattr(tool, "label", "")
         }
-
-    @property
-    def public_arguments(self) -> dict[str, str]:
-        """Internal name -> which argument the status row shows, for `sage.ui.turn`.
-
-        The same shape and the same reasoning as `public_names` one property up: read
-        off the tools, so a deployment that registers a third tool says what to show
-        for it by declaring `argument` and nothing here has to be edited. A tool that
-        declares none is left out, and the row then names it with nothing beside it.
-        """
-        return {
-            tool.name: getattr(tool, "argument", "")
-            for tool in self.tools
-            if getattr(tool, "argument", "")
-        }
-
-    @property
-    def section_arguments(self) -> frozenset[str]:
-        """Which tools' shown argument is a section id — see `Tool.argument_is_section`.
-
-        Read off the tools for the same reason the two properties above are: a third
-        tool whose argument is an id says so by declaring it, and the row learns to
-        resolve it without this file or `ui.turn` naming the tool.
-        """
-        return frozenset(
-            tool.name for tool in self.tools
-            if getattr(tool, "argument_is_section", False)
-        )
 
     def runner(self) -> ToolRunner:
         return ToolRunner(self)

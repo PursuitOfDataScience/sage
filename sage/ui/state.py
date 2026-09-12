@@ -22,13 +22,6 @@ logger = logging.getLogger(__name__)
 SESSION_DEFAULTS: tuple[tuple[str, object], ...] = (
     ("messages", []),
     ("processing", False),
-    # The Think toggle in the corner of the input box. Off by default, and that is the
-    # safe default rather than a shy one: reasoning tokens are billed as output tokens,
-    # so on-by-default spends a free allowance on every turn whether the question
-    # needed the thinking or not. Cleared by `composer.render_think_toggle` whenever
-    # the model answering cannot take the parameter, which an automatic failover can
-    # bring about without anyone touching the control.
-    ("thinking", False),
     # A list, not one file. Holding one meant the guard in `uploads` dropped anything
     # offered while a file was already attached, and a second attachment looked from
     # the outside like a control that does nothing.
@@ -196,12 +189,6 @@ def _stash() -> None:
     conversation, and the list never fills with blanks, because the blank you are
     leaving goes as you leave it. (A reader pressing it twice on an empty chat sees no
     change, and there is none to see — both states are an empty conversation.)
-
-    This prunes on "has no messages", which is the right question. What made a chat the
-    reader was USING disappear was `abandon_turn` answering it wrongly: it dropped the
-    unanswered question, so a conversation that had been asked in looked identical to
-    one that never had. That is fixed where it was wrong rather than here — see
-    `abandon_turn`.
     """
     for index, record in enumerate(st.session_state.chats):
         if record["id"] != st.session_state.chat_id:
@@ -235,25 +222,6 @@ def _leave_conversation() -> None:
     st.session_state.notice = ""
     st.session_state.tried = []
     st.session_state.switched_from = None
-    # And the MODEL, which is the one thing this function used to leave behind.
-    #
-    # A failover is per-turn in its reasoning and was permanent in its effect: it sets
-    # `session_state.model`, nothing here put it back, and while the model picker
-    # existed that did not matter because a reader could move themselves. With the
-    # picker gone there was no way back at all. Reported from the running app as three
-    # symptoms of this one omission — an error card naming a Zen model on a deployment
-    # whose default is the OpenRouter router ("isn't our default openrouter free? why
-    # is this showing up?"), the Think pill missing from a brand-new chat because the
-    # provider it had been walked to does not take the parameter, and a notice about
-    # model churn the reader could do nothing about.
-    #
-    # Per conversation, not per turn: inside one conversation a failover has to stick,
-    # or the next question walks back into the model that just refused. Leaving a
-    # conversation is where the ledger is already being torn up, so it is where the
-    # default comes back. `app.current_model` validates it against what the providers
-    # actually served, so a default that is no longer available falls through exactly
-    # as it did before.
-    st.session_state.model = config.DEFAULT_MODEL
     # A failover in flight belongs to the turn being left. Left set, it fires on the
     # next run and `turn.run`'s `finally` sets `processing` again — a question from
     # the conversation that was just closed, answered into the one that replaced it.
@@ -321,23 +289,10 @@ def abandon_turn(model_key: str, names: dict[str, str] | None = None) -> None:
     question with the bare word `Stopped` under it and no answer — reported with a
     screenshot of exactly that, and "this is certainly a bug".
 
-    So a turn that arrived empty leaves the QUESTION and appends nothing. That is the
-    one state all three reports about this path can hold at once:
-
-    * no bare `Stopped` under a question nobody stopped — nothing is appended, so there
-      is no empty assistant message to carry that word;
-    * no spare `Nothing asked yet` row in the panel — the conversation still has the
-      question in it, so it is not a blank and `_stash` has nothing to prune, which is
-      where that screenshot's extra row came from;
-    * and the conversation does not VANISH, which is what dropping the question caused.
-      Open a new chat, ask something, switch away before the answer starts: the question
-      went, `_stash` saw an empty conversation and pruned it, and the chat the reader had
-      just made and just typed into disappeared out of the list behind them — "the new
-      chat session will disappear. this is very confusing and annoying."
-
-    What the reader comes back to is their own question with nothing under it and a live
-    composer, in a chat the panel names after that question. Nothing claims to have
-    happened that did not.
+    So a turn that arrived empty is dropped whole, the question with it, and the
+    conversation is left as it was before it was asked. Nothing half-done, and — because
+    `_stash` drops a conversation with no messages — no empty chat left in the panel
+    either, which is where that screenshot's spare `Nothing asked yet` row came from.
     """
     if not st.session_state.processing:
         return
@@ -355,28 +310,9 @@ def abandon_turn(model_key: str, names: dict[str, str] | None = None) -> None:
     st.session_state.error = None
     st.session_state.error_detail = ""
     st.session_state.notice = ""
-    # Marked, so opening this conversation again ASKS IT. Keeping the question alone
-    # left the reader with the other half of the same complaint: "now when switching
-    # from the new chat to the old one, the new one won't go away but the answer won't
-    # be generated and it will have nothing."
-    #
-    # A turn cannot outlive the run that started it — Streamlit reruns the script per
-    # session and `turn.run` is reached from `app.py` only while the conversation
-    # holding it is the open one — so there is no version of this where the answer
-    # arrives in a conversation the reader is not looking at. What there is, is the
-    # question being asked again the moment they come back, which is what they expect
-    # to find and costs the turn they already intended to spend.
-    #
-    # On the RECORD and not on `session_state`, because it belongs to one conversation:
-    # `_leave_conversation` would clear a session flag, and a second abandoned turn in
-    # another chat would overwrite it. `open_chat` reads it and clears it, so a
-    # conversation resumes once — a question the reader never comes back to is never
-    # asked, and one they open twice is not asked twice.
-    for record in st.session_state.chats:
-        if record["id"] == st.session_state.chat_id:
-            record["resume"] = True
-            break
-    logger.info("Turn abandoned before it produced anything; it resumes on reopening")
+    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+        st.session_state.messages.pop()
+    logger.info("Turn abandoned before it produced anything; the question goes with it")
 
 
 def new_chat() -> None:
@@ -397,11 +333,6 @@ def new_chat() -> None:
     st.rerun()
 
 
-def may_resume(messages: list[dict]) -> bool:
-    """Whether this conversation ends on a question nobody has answered yet."""
-    return bool(messages) and messages[-1].get("role") == "user"
-
-
 def open_chat(chat_id: int) -> None:
     """Switch to another conversation in this session."""
     if chat_id == st.session_state.chat_id:
@@ -417,16 +348,6 @@ def open_chat(chat_id: int) -> None:
     st.session_state.chat_id = chat_id
     st.session_state.messages = target["messages"]
     _leave_conversation()
-    # A turn this conversation had taken from it by the reader walking away — see
-    # `abandon_turn`. Asked again now, which is what they came back for. AFTER
-    # `_leave_conversation`, which sets `processing` to False for the conversation being
-    # left and would otherwise undo this.
-    #
-    # Both conditions, not just the mark: a record whose last message is not an
-    # unanswered question has nothing to re-ask, and asking anyway would send whatever
-    # the transcript happened to end with.
-    if target.pop("resume", False) and may_resume(st.session_state.messages):
-        st.session_state.processing = True
     st.rerun()
 
 
@@ -516,23 +437,6 @@ def start_new_turn(
     # new question while the new one generates, reading as if it belonged to it.
     st.session_state.tried = []
     st.session_state.notice = ""
-    # And the MODEL, which is the third thing belonging to the turn that just ended.
-    #
-    # A failover exists to rescue the turn it happens in. It was also pinning the
-    # session: it sets `session_state.model`, and the only thing that put it back was
-    # leaving the conversation — so one hop onto a provider that does not take a
-    # `reasoning` parameter took the Think pill off the page and nothing inside that
-    # conversation could bring it back. "the think toggle is gone forever. this is far
-    # worse", and it was: a control that vanishes permanently is worse than the spent
-    # quota the failover was rescuing.
-    #
-    # A new question is exactly where the pin stops being justified, and on this
-    # deployment it is not justified at all: the default model is a router that picks a
-    # live model per request, so the reason it refused the last question has nothing to
-    # do with the next one. Within a turn the hop still sticks — `failover_to` is
-    # popped by `turn.run`, not here — so nothing walks back into the model that just
-    # refused mid-question.
-    st.session_state.model = config.DEFAULT_MODEL
     st.session_state.attachments = []
     # Both, together: the widget is reset so its files stop being reported, and the
     # dismissal list is emptied because the keys in it refer to a widget that no
