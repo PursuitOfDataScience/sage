@@ -555,3 +555,45 @@ class TestDeletingChats:
         state = _state()
         state.delete_chat(999)          # no Rerun raised
         assert len(stub.session_state.chats) == 1
+
+
+class TestAFailoverDoesNotPinTheSession:
+    """`session_state.model` belongs to the turn that set it, not to the session.
+
+    `View.can_think` reads the provider of the model answering NOW, which is right, and
+    a failover sets that model — with nothing putting it back except leaving the
+    conversation. So one hop onto a provider that takes no `reasoning` parameter took the
+    Think pill off the page and nothing inside that conversation could return it: "the
+    think toggle is gone forever. this is far worse", and it was. A control that vanishes
+    for good is worse than the spent quota the failover was rescuing.
+
+    A new question is where the pin stops being justified — the reason the last one was
+    refused has nothing to do with the next, least of all on a router that picks a model
+    per request.
+    """
+
+    def test_a_new_question_returns_to_the_default_model(self, monkeypatch):
+        from sage import config  # noqa: PLC0415
+
+        stub, _ = run_app(monkeypatch, session={"messages": [], "processing": False})
+        state = _state()
+        # As a failover leaves it.
+        stub.session_state["model"] = "somewhere:else"
+        with pytest.raises(stub_streamlit.Rerun):
+            state.start_new_turn("a fresh question")
+        assert stub.session_state["model"] == config.DEFAULT_MODEL
+
+    def test_leaving_a_conversation_returns_to_it_too(self, monkeypatch):
+        """The other half, and the one that shipped first. Kept because a conversation
+        switched away from mid-failover must not hand the pin to the next one."""
+        from sage import config  # noqa: PLC0415
+
+        stub, _ = run_app(
+            monkeypatch,
+            session={"messages": [{"role": "user", "text": "asked", "attachments": []}]},
+        )
+        state = _state()
+        stub.session_state["model"] = "somewhere:else"
+        with pytest.raises(stub_streamlit.Rerun):
+            state.new_chat()
+        assert stub.session_state["model"] == config.DEFAULT_MODEL
