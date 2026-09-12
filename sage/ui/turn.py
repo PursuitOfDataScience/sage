@@ -21,10 +21,9 @@ from ..progress import (
     Step,
     shown,
     status_html,
-    steps_html,
     summary_html,
 )
-from ..tools import gather_context
+from ..tools import READ_DOC, SEARCH_DOCS, gather_context
 from .access import get_provider
 from .state import get_limiter
 from .transcript import citations, render_user
@@ -169,6 +168,27 @@ def call_step(view: View, call: dict) -> tuple[str, str]:
 
 
 
+def stage_phrase(view: View, tool: str) -> str:
+    """The vague phrase for the stage a turn is in — what the sweeping row says.
+
+    Keyed on the tool's own name rather than on its reader-facing label, because this is
+    the machinery choosing a phrase for itself and the labels belong to `redact`. A tool
+    this does not know about gets `status_working`, the same fallback `call_step` uses
+    for a tool that declares no name: a third registered tool is one honest line rather
+    than a blank.
+
+    Deliberately says nothing about WHAT is being searched for or read. That is the
+    point of it. The detail — the section's title and the time it took — is in the
+    folded block after the answer, and the reason it is not on this row is that a title
+    per call, accumulating, is what the reader asked to be rid of.
+    """
+    return {
+        SEARCH_DOCS: view.copy.status_searching,
+        READ_DOC: view.copy.status_reading,
+    }.get(tool, view.copy.status_working)
+
+
+
 class Status:
     """The progress block: one line per thing the turn did, written in place.
 
@@ -297,10 +317,22 @@ class Status:
     def _html(self) -> str:
         if self._collapsed:
             return summary_html(self._steps, time.monotonic() - self._opened)
-        if not self._steps:
-            return status_html(self._phrase)
-        live = self._live or (Step(self._phrase) if self._phrase else None)
-        return steps_html(self._steps, live=live)
+        # THE SWEEPING ROW, and nothing else, for the whole time a turn is in flight.
+        #
+        # It drew a step per tool call for a while, accumulating: by the third round
+        # that was six rows of history stacked over an empty answer, one of them a
+        # section title long enough to wrap. Reported twice — "it's everything showing,
+        # which looks bad", and then plainly: "it should be like what we had before with
+        # the cool status message with gradients."
+        #
+        # So the two jobs are split. This is the progress cue: one line, one phrase,
+        # the gradient crossing it, which is what a reader waiting on an empty answer
+        # needs and all they need. The record is `record()` and `summary_html` — every
+        # step with its section title and its time, folded under the answer the moment
+        # text arrives, where it can be opened against the thing it produced.
+        #
+        # `self._steps` is still filled by `begin()`. It is no longer PAINTED here.
+        return status_html(self._phrase)
 
     def _paint(self) -> None:
         if self._line is None:
@@ -639,6 +671,13 @@ def run(view: View) -> None:
                 # per round — a round of parallel calls runs them in this order and
                 # reports each one's own.
                 status.begin(*call_step(view, call))
+                # The vague phrase for the stage, in the sweeping row. The step the
+                # line above records is for the folded block after the answer; what is
+                # on screen now is "Searching the documentation" or "Reading the
+                # relevant sections" — the tool's own stage rather than its argument,
+                # which is the distinction the two were merged into one row for and
+                # then reported out of it again.
+                status.show(stage_phrase(view, call.get("name") or ""))
                 result = runner.run(call["name"], call["input"])
                 # The budget is cumulative across rounds, which is the whole point:
                 # each result is individually legal at MAX_DOC_CHARS and it is the

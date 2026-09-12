@@ -179,6 +179,16 @@ def render_think_toggle(view: View) -> None:
     # comment is the general form: the container key is the only thing a stylesheet
     # can read. app.js still sets `aria-pressed` for the accessibility tree, where
     # being a frame late costs nothing a reader can see.
+    # Clipped to a pixel by app.css, exactly like the stop hook above and the file
+    # uploader: the control the reader presses is drawn INSIDE the composer by app.js,
+    # and this is the widget that carries the click back to Python.
+    #
+    # It was a visible `st.button` in a `position: fixed` container, placed at a spot
+    # app.js measured from Streamlit's own send button. That is what "the think toggle
+    # will also jump out of the textbox... the up arrow won't" is: the arrow is really
+    # inside the box, so it moves with it, and a fixed element chasing a measurement
+    # cannot be. Injected into `[data-testid="stChatInput"]` it is not chasing anything
+    # — it is in the box, and there is no measurement left to be wrong.
     with st.container(key="think-on" if on else "think-off"):
         if st.button(view.copy.think_label, key="think-toggle"):
             st.session_state.thinking = not on
@@ -190,6 +200,7 @@ def render_think_toggle(view: View) -> None:
     # bounds would then be measuring. The ✕ on a chat row is labelled the same way.
     st.markdown(
         f'<div id="think-state" data-on="{"1" if on else "0"}" '
+        f'data-label="{html.escape(view.copy.think_label, quote=True)}" '
         f'data-hint="{html.escape(view.copy.think_hint, quote=True)}" hidden></div>',
         unsafe_allow_html=True,
     )

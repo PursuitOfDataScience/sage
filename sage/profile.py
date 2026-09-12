@@ -159,16 +159,24 @@ class Copy:
     #: names a tool that declared no reader-facing name (see `tools.Tool.label`), so
     #: that an unnamed tool is still one honest line rather than a blank.
     #:
-    #: There used to be two more — "Searching the documentation" and "Reading the
-    #: relevant sections" — and a rule that nothing from inside the machine could
-    #: reach this row: not the query, not the path, not the section's own title. The
-    #: owner asked for the opposite ("the user needs to see the detailed status
-    #: updates and which sections to read etc, this is more precise"), so a tool call
-    #: is now named by its own reader-facing name with its salient argument beside it,
-    #: and those two stage phrases have nothing left to describe. The reversal is
-    #: recorded rather than quietly applied: the phrases were deliberate, and the
-    #: reasoning for them is in this file's history if a deployment wants it back.
+    #: `status_searching` and `status_reading` name the stage a turn is in, vaguely and
+    #: on purpose, and they are back after a detour worth recording so nobody walks it
+    #: again. They were removed when the row started naming each tool call with its
+    #: argument — asked for as "the user needs to see the detailed status updates and
+    #: which sections to read etc" — and what that produced, once several rounds had
+    #: run, was six rows of history stacked over an empty answer, one of them a
+    #: repository path. Both were reported: "it's everything showing, which looks bad",
+    #: and "it should be like what we had before with the cool status message with
+    #: gradients".
+    #:
+    #: So the two jobs are split rather than merged. WHILE a turn runs, one of these
+    #: phrases in the sweeping row — a progress cue, which is what a reader waiting
+    #: with nothing on screen actually needs. AFTER it, the detail: every step with its
+    #: section title and its time, folded under the answer where it can be opened
+    #: against the thing it produced. Nothing is lost and nothing is stacked.
     status_thinking: str = "Thinking"
+    status_searching: str = "Searching the documentation"
+    status_reading: str = "Reading the relevant sections"
     status_working: str = "Working"
     #: The toggle in the corner of the input box, where the model picker used to be.
     #:
@@ -195,7 +203,12 @@ class Copy:
         chose, which has no longest form to measure; `tools/render_check.py` holds
         that row with a width bound instead of a length one.
         """
-        return (self.status_thinking, self.status_working)
+        return (
+            self.status_thinking,
+            self.status_searching,
+            self.status_reading,
+            self.status_working,
+        )
 
 
 @dataclass(frozen=True)

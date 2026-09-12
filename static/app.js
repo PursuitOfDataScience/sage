@@ -293,36 +293,6 @@
         return overlaid && !streamlitPins;
     }
 
-    // Where the model picker sits: inside the input box, immediately left of Streamlit's
-    // own send button. Measured from that button rather than written down, because it is
-    // the thing the picker has to stay beside and app.css places it in a corner of a box
-    // whose width tracks the viewport.
-    //
-    // The send button survives a turn — `markGenerating` leaves it in the DOM and paints
-    // the stop square over it — so this does not lurch mid-answer. Nothing is published
-    // when it cannot be found, which holds the last good position through the frames
-    // where Streamlit is rebuilding the composer instead of snapping the picker into the
-    // corner and back.
-    // Where the picker sits: the right-hand end of the band, just left of the send
-    // button, measured off that button rather than written down. It spent a revision at
-    // the other end of the band, past the paperclip, which is where ChatGPT and Claude
-    // put theirs — the ask was specific, so it is on the right.
-    //
-    // Its RIGHT edge is what is pinned, so the send button never moves. The control
-    // in this corner has changed twice — a trash can, then the model picker, now the
-    // Think pill — and the names `--pick-right`/`--pick-bottom` are historical for
-    // the same reason `.st-key-composer-strip` is: renaming them would touch the
-    // stylesheet, the layout harness's fixture and its selector table to say nothing
-    // new. Right-anchoring outlives all three: whatever sits here grows leftward into
-    // empty band instead of pushing the button beside it around.
-    function publishPickerSpot() {
-        var send = sendButton();
-        if (!send) return;
-        var rect = send.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) return;
-        publish('--pick-right', Math.round(view.innerWidth - rect.left) + 8);
-        publish('--pick-bottom', Math.round(view.innerHeight - rect.bottom));
-    }
 
     /* --- the box grows with the prompt ----------------------------------- */
 
@@ -382,7 +352,6 @@
         // were a band the bar had to pad itself by; what is left is one pill inside the
         // box beside the send button, so there is nothing below the input to reserve —
         // which is the ~4rem of vertical space this bought back.
-        publishPickerSpot();
         if (bar) {
             // Two numbers, and the difference between them matters.
             //
@@ -1645,32 +1614,48 @@
      * the app, so nothing is left to close. */
     var BRAIN_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-1 5.8V16a3 3 0 0 0 4 2.8V5Z"></path><path d="M12 5a3 3 0 0 1 3 3 3 3 0 0 1 1 5.8V16a3 3 0 0 1-4 2.8V5Z"></path></svg>';
 
-    function dressThinkToggle() {
+    function addThinkButton() {
+        var input = doc.querySelector('[data-testid="stChatInput"]');
         var marker = doc.querySelector('#think-state');
-        var strip = doc.querySelector('.st-key-composer-strip');
-        var button = strip ? strip.querySelector('button') : null;
-        if (!button) return;
-        // State off the CONTAINER KEY, not off the marker's `data-on`. Both say the
-        // same thing, but this function runs from a mutation observer and the marker
-        // version was read a pass too early every time: measured in the running app,
-        // `data-on="1"` sat beside `aria-pressed="false"` five seconds after the
-        // click, because no later pass came to correct it. The key is on an ancestor
-        // of the button in the same DOM this pass is already looking at, so it cannot
-        // disagree with what the reader sees. app.css paints off the same key.
-        var on = !!button.closest('.st-key-think-on');
-        // The marker carries only the words now — the deployment's own hint text,
-        // which app.css cannot hold and this file must not hardcode.
-        var hint = marker ? (marker.getAttribute('data-hint') || '') : '';
-        button.setAttribute('aria-pressed', on ? 'true' : 'false');
-        if (hint) {
-            button.setAttribute('title', hint);
-            button.setAttribute('aria-label', (button.textContent || '').trim() + ' — ' + hint);
+        var existing = doc.getElementById('think-btn');
+        // No marker means the control was not drawn for this model — see
+        // `View.can_think`. Anything already injected has to go with it, or a failover
+        // onto a provider without reasoning leaves a pill behind that no longer has a
+        // widget to click.
+        if (!input || !marker) {
+            if (existing) existing.remove();
+            return;
         }
-        if (button.dataset.sageThink === 'true') return;
-        var label = button.querySelector('p') || button;
-        label.insertAdjacentHTML('afterbegin', BRAIN_SVG);
-        button.dataset.sageThink = 'true';
+        // State off the container key Streamlit put on the node in the same run that
+        // changed it, so it cannot be a pass behind. This element is rebuilt each pass
+        // anyway, which is the other half of why it cannot: the class is read at the
+        // moment the button is made.
+        var on = !!doc.querySelector('.st-key-think-on');
+        var hint = marker.getAttribute('data-hint') || '';
+        var label = marker.getAttribute('data-label') || 'Think';
+
+        if (existing) existing.remove();
+        var btn = injected('button');
+        btn.id = 'think-btn';
+        btn.type = 'button';
+        btn.innerHTML = BRAIN_SVG + '<span>' + label + '</span>';
+        btn.title = hint;
+        btn.setAttribute('aria-label', label + ' — ' + hint);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        if (on) btn.dataset.on = 'true';
+        btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            // The clipped Streamlit button is the only thing with a channel back to
+            // the script, exactly as the stop square and the paperclip work.
+            var hook = doc.querySelector('[class*="st-key-think-toggle"] button');
+            if (hook) hook.click();
+        });
+
+        input.style.position = 'relative';
+        input.appendChild(btn);
     }
+
 
     function copyText(text) {
         // The PARENT's clipboard. This iframe is never focused — the click that gets
@@ -2490,7 +2475,7 @@
         addPromptHistory();
         growComposer();
         resetComposerOnClear();
-        dressThinkToggle();
+        addThinkButton();
         addCodeCopyButtons();
         addAnswerCopyButtons();
         addEditButtons();
