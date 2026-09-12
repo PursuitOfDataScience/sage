@@ -99,8 +99,13 @@ class TestTheme:
         one widget without saying it for every other use of the primary.
         """
         css = stylesheet()
+        # The pill is excluded from this rule and the exclusion is load-bearing: the
+        # same fill painted `#think-btn` maroon in every state, so a toggle that worked
+        # looked stuck on. See `tests/test_palette.py`'s blanket-fill check. Matched
+        # loosely on the `:not(…)` list so adding another exclusion does not fail this,
+        # while the two properties it exists for are still asserted.
         rule = re.search(
-            r"\.stChatInput button:not\(#paperclip-btn\):not\(:disabled\)\s*\{([^}]*)\}",
+            r"\.stChatInput button(?::not\([^)]*\))*:not\(:disabled\)\s*\{([^}]*)\}",
             css,
         )
         assert rule, (
@@ -108,6 +113,10 @@ class TestTheme:
             "[theme.dark] primaryColor, which is the lighter text tint"
         )
         assert "background: var(--brand)" in rule.group(1)
+        assert "#think-btn" in rule.group(0), (
+            "the send button's fill must exclude the Think pill, or it paints the "
+            "pill maroon whether Think is on or off"
+        )
 
     def test_the_typeface_is_stated_for_both_halves_of_the_page(self):
         """One face, named in two files, because each reaches half the page.

@@ -66,6 +66,38 @@ class TestPalette:
         assert "theme.dark :: primaryColor" in config
         assert "theme.light :: primaryColor" in config
 
+    def test_no_blanket_fill_reaches_the_think_pill(self):
+        """The rule that painted the Think pill permanently maroon.
+
+        `.stChatInput button:not(#paperclip-btn):not(:disabled)` gives the send button
+        its `--brand` fill with `!important`. The pill is a button inside
+        `.stChatInput` too — app.js injects it there, which is what stopped it chasing
+        the box — so that rule caught it and beat `#think-btn`'s own
+        `background: var(--control-bg)`. Measured on a fresh load with `data-on` absent
+        and `.st-key-think-on` absent: `backgroundColor` was `rgb(128, 0, 0)`. It read
+        as a toggle stuck on, reported twice as exactly that, while the container key,
+        `data-on` and `aria-pressed` all flipped correctly underneath.
+
+        Nothing caught it. Every probe read the ATTRIBUTES rather than the paint, and
+        `tools/render_check.py` writes its own copy of that rule as
+        `.stChatInput button:not(#think-btn)`, so the replica's pill was never painted
+        by it and 684 renders had nothing to notice. This is the check that would have.
+        """
+        palette = _palette_check()
+        offenders = [
+            f"{selector} :: {prop} = {value}"
+            for key, value in palette.inventory()["static/app.css"].items()
+            for selector, prop in [key.rsplit(" :: ", 1)]
+            if ".stChatInput button" in selector
+            and "#think-btn" not in selector
+            and prop in ("background", "background-color", "color")
+        ]
+        assert not offenders, (
+            "a blanket fill on the buttons inside the composer also paints "
+            "`#think-btn`, whose own background is what says whether Think is on:\n  "
+            + "\n  ".join(offenders)
+        )
+
     def test_the_send_button_fill_is_covered(self):
         """The control this check was built for. If the rule is ever renamed or
         dropped, the entry goes with it — and that is drift, which fails above."""

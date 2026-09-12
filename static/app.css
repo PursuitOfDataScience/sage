@@ -1213,8 +1213,28 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
  * the white arrow on the maroon (12.6:1), not the maroon against the page.
  *
  * `:not(:disabled)` leaves the empty-composer state alone. Streamlit greys it out,
- * and that is how the box says there is nothing to send yet. */
-.stChatInput button:not(#paperclip-btn):not(:disabled) {
+ * and that is how the box says there is nothing to send yet.
+ *
+ * `:not(#think-btn)` AND IT IS THE WHOLE BUG THIS RULE CAUSED. The pill is a button
+ * inside `.stChatInput` too — app.js injects it there, which is what stopped it
+ * chasing the box — so this rule caught it and painted it `--brand` with `!important`,
+ * beating `#think-btn`'s own `background: var(--control-bg)`. The pill has been
+ * maroon in every state since it moved into the box: measured on a fresh load with
+ * `data-on` absent and `.st-key-think-on` absent, `backgroundColor` was still
+ * `rgb(128, 0, 0)`.
+ *
+ * So it read as permanently on and impossible to switch off — "i just found the think
+ * toggle can't be deactivated. why is it on all the time?", "by default it should be
+ * deactivated" — while the state machine underneath was working perfectly: the
+ * container key, `data-on` and `aria-pressed` all flipped correctly on every click.
+ *
+ * Two checks looked straight past it. Every probe measured `data-on`/`aria-pressed` —
+ * the attributes, not the paint — which is the inverse of the mistake recorded on
+ * `#think-btn`'s z-index above, where geometry and computed style were both right and
+ * only a hit test could see the fault. And `tools/render_check.py` writes its copy of
+ * this rule as `.stChatInput button:not(#think-btn)`, so the replica's pill was never
+ * painted by it and 684 renders had nothing to notice. */
+.stChatInput button:not(#paperclip-btn):not(#think-btn):not(:disabled) {
     background: var(--brand) !important;
     color: #ffffff !important;
 }
