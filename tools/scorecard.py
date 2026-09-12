@@ -3,7 +3,7 @@
 
 There is no single number for "how is Sage doing". Any weighted average of what follows
 reads as healthy: retrieval is at 100% recall@5, the suite is green, the layout harness
-renders 660 states clean, the palette has not drifted. When this file was written one cell
+renders 684 states clean, the palette has not drifted. When this file was written one cell
 read 36.8% — the gate that decides whether the app declines to answer at all — and a
 scalar would have diluted it to invisibility. It is 86.7% now, and the point stands: the
 headline is the worst cell, whichever cell that turns out to be.
@@ -15,7 +15,7 @@ correct.
 
     python tools/scorecard.py                       # the model-independent card, seconds
     python tools/scorecard.py --with-suite           # + ruff and pytest
-    python tools/scorecard.py --with-layout          # + the 660-render layout harness
+    python tools/scorecard.py --with-layout          # + the 684-render layout harness
     python tools/scorecard.py --save report/card.json --against report/card-prev.json
 
 Axis B (per-model behaviour) is read from `report/agents.json` if `tools/agent_bench.py`
@@ -36,6 +36,15 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
+# And this directory, for `render_check.RENDER_COUNT` — the size of the layout run,
+# which this card names in two cells and a usage line. It was written out as 660 here
+# and 684 in `CLAUDE.md`, with nothing able to say which was right; importing the
+# harness for its own count means the card cannot disagree with the run it reports.
+# Importing costs nothing and launches no browser: Chromium is only started by
+# `calibrate()` and `render()`, and this shells out to the script for the real run.
+sys.path.insert(0, HERE)
+
+import render_check  # noqa: E402
 
 import evals  # noqa: E402
 from evals import corpus_health, gate  # noqa: E402
@@ -283,8 +292,13 @@ def report(card: dict) -> None:
     _cell("advertised topics caveated",
           str(len(corpus_row["topics_caveated"])),
           ", ".join(corpus_row["topics_caveated"]) or "none")
+    # The note lists the pages rather than naming one in the source. It read "incl. one
+    # titled 'Modules'" — true when it was written, and still printed beside "0 are not"
+    # after that page became findable, which is a cell arguing with itself.
+    unfindable = corpus_row["unfindable_pages"]
     _cell("pages findable by their title", f"{corpus_row['findable_by_title']:.1%}",
-          f"{len(corpus_row['unfindable_pages'])} are not, incl. one titled 'Modules'")
+          f"{len(unfindable)} are not"
+          + (": " + ", ".join(sorted(unfindable)[:3]) if unfindable else ""))
     reach = corpus_row["reachability"]
     _cell("index reachability",
           f"{reach['touched']}/{reach['total']}" if reach["measurable"] else UNMEASURED,
@@ -305,9 +319,11 @@ def report(card: dict) -> None:
               f"{suite['collected']} collected")
     layout = card["layout"]
     if layout == UNMEASURED:
-        _cell("layout, 660 renders", UNMEASURED, "run with --with-layout (~7 min)")
+        _cell(f"layout, {render_check.RENDER_COUNT} renders", UNMEASURED,
+              "run with --with-layout (~8 min)")
     else:
-        _cell("layout, 660 renders", "clean" if layout["ok"] else "FAILED",
+        _cell(f"layout, {render_check.RENDER_COUNT} renders",
+              "clean" if layout["ok"] else "FAILED",
               layout["tail"])
 
     print("\nagents — is this model good enough for the app? (never gated)")

@@ -484,6 +484,21 @@ def strip_bare_references(text: str, corpus: Corpus) -> str:
     filename is left alone. Markdown link targets are skipped — `](path)` is the citation
     the prompt asked for and the one thing here that must survive — as is anything inside
     code, where a filename is usually the reader's own file and not ours.
+
+    **What models actually write, measured over the 662 recorded answers in
+    `report/transcripts*.jsonl`: this pass fires on 10 of them, and every one is a
+    TRAILING BRACKETED ASIDE** — `…is the hard limit 【docs/storage/main.md#quotas】.` or
+    the same in square brackets after a working link. `_with_wrapper` takes the brackets
+    with the id and the sentence closes cleanly; all ten read correctly afterwards.
+
+    The shape that would NOT read correctly is a bare id used as a sentence constituent,
+    with no wrapper around it: `See docs/accounts.md#apply for the details` becomes `See
+    for the details`, and `docs/x.md#y covers this` becomes `covers this`. Zero of 662
+    answers do that, which is why removal is the right move and why this is recorded
+    rather than fixed — the cure would be to replace the id with `[Title](path)` and let
+    `fix_links` render it, which is more code, a new failure mode (a link the model did
+    not ask for) and, on the evidence, a fix for nothing. If it ever shows up, that is
+    the fix, and this paragraph is the measurement it should be re-taken against.
     """
     if not text or not corpus:
         return text

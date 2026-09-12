@@ -129,6 +129,97 @@ class TestPalette:
             + ", ".join(f"{key} ({system[key]} vs {chosen[key]})" for key in differing)
         )
 
+    def test_the_dark_media_query_holds_nothing_the_comparison_cannot_see(self):
+        """Everything under `prefers-color-scheme: dark` goes through that comparison.
+
+        The one above is keyed on a single selector, written out on purpose. What it
+        cannot say is that the selector is the *only* one in the block — and a second
+        rule added inside that media query has no reader-chosen counterpart required
+        of it by anything. Measured: a dark-only rule added there, given a colour the
+        chosen-dark path does not have and a baseline updated to accept it, passed
+        every check in this file. It is the same bug as a drifted token and it arrives
+        by the likelier route, since a new dark override is a new *rule* far more often
+        than it is a new line in `:root`.
+
+        So the block is held to one selector rather than the comparison being taught to
+        translate arbitrary ones: adding a second is then a decision, made here, where
+        whoever makes it has to say how the reader who pressed the toggle gets it too.
+        """
+        palette = _palette_check()
+        css = palette.inventory()["static/app.css"]
+        scope = SYSTEM_DARK.split(" :: ")[0]
+        inside = [key for key in css if key.startswith(scope + " :: ")]
+        assert inside, "no dark palette under prefers-color-scheme in app.css"
+        strays = sorted({
+            key[len(scope) + 4:].split(" :: ")[0]
+            for key in inside if not key.startswith(SYSTEM_DARK)
+        })
+        assert not strays, (
+            f"{scope} paints through selectors the two-dark-palettes comparison does "
+            f"not look at, so a reader who chose dark from the toggle does not get "
+            f"what a dark-mode device gets: {strays}. Give each one a "
+            '`:root[data-sage-theme="dark"]` counterpart and add it to this test.'
+        )
+
+    def test_the_tokens_app_css_and_app_js_share_stay_in_step(self):
+        """app.js is a third of what the hook watches and none of what it could see.
+
+        `.claude/hooks/ui-guard.sh` fires on an app.js edit and runs `palette_check`,
+        and until this existed that check never opened app.js: measured, an app.js edit
+        that repainted the page came back "271 declared colours and tokens, all
+        unchanged". There is no colour literal in app.js to inventory — what it decides
+        travels in custom properties it measures and publishes, which app.css reads
+        with a fallback (`right: var(--toggle-right, 16px)`).
+
+        That contract spans two files and had nothing holding it. Rename or drop one
+        side and the `var()` draws its fallback for ever: it renders, breaks no bound,
+        fails no baseline, and is wrong at every width app.js was measuring for —
+        which is the failure mode `--pick-right`/`--pick-bottom` avoided only because
+        both sides happened to be removed in one change.
+        """
+        palette = _palette_check()
+        problems = palette.token_contract()
+        assert not problems, (
+            "static/app.css and static/app.js disagree about a custom property:\n\n"
+            + "\n".join(problems)
+        )
+
+    def test_a_broken_token_contract_is_detected(self):
+        """And that one has to be able to fail too."""
+        palette = _palette_check()
+        declared, read = palette.css_custom_properties(
+            ":root { --brand: #800000; }\n"
+            "#theme-toggle { right: var(--toggle-right, 16px); }"
+        )
+        assert declared == {"--brand"}
+        assert read == {"--toggle-right"}
+        assert palette.js_publishes("publish('--toggle-right', 12);") == {
+            "--toggle-right"
+        }
+        # The rename that only happened on one side.
+        assert palette.js_publishes("publish('--toggle-rght', 12);") == {
+            "--toggle-rght"
+        }
+        # And a colour decided in app.js, which is in step by name and repaints the
+        # page anyway: the case that reported "all unchanged" before this existed.
+        assert not palette.js_colour_decisions("publish('--bar-h', bar.height);")
+        for line in (
+            "root.style.setProperty('--brand', '#ff00ff');",
+            "el.style.background = 'rgba(128, 0, 0, 0.4)';",
+            "el.style.borderColor = someColour;",
+            "chip.style.color = 'maroon';",
+        ):
+            assert palette.js_colour_decisions(line), line
+        # Comments are not code, and app.js discusses colour at length.
+        assert not palette.js_colour_decisions("/* it was #800000 once */")
+        assert not palette.js_colour_decisions("    // rgba() here would be wrong")
+        # Geometry from JavaScript is the whole point of the file, so it must pass.
+        assert not palette.js_colour_decisions(
+            "area.style.height = want + 'px';\n"
+            "btn.style.opacity = '0.65';\n"
+            "host.style.setProperty('position', 'relative');"
+        )
+
     def test_a_repaint_is_detected(self):
         """The check has to be able to fail, or it is decoration.
 

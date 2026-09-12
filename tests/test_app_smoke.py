@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 import stub_streamlit
-from sage import config, limits, llm, providers, tools
+from sage import config, limits, llm, profile, progress, providers, tools
 
 
 def event(content=None, tool_calls=None):
@@ -35,15 +35,17 @@ class ScriptedProvider:
         self.calls = 0
         self.sent: list[list[dict]] = []
         self.tools_seen: list = []
+        self.choices_seen: list[str] = []
         self._models = models
 
     def models(self):
         return [providers.Model(self.name, model_id) for model_id in self._models]
 
-    def stream(self, model, messages, tools, thinking=False):
+    def stream(self, model, messages, tools, thinking=False, tool_choice="auto"):
         self.calls += 1
         self.sent.append(messages)
         self.tools_seen.append(tools)
+        self.choices_seen.append(tool_choice)
         if self.error:
             raise self.error
         if not self.turns:
@@ -382,8 +384,8 @@ class TestRepaintPacing:
         assert len(painted) < 200
 
 
-class TestTheLastRequestHasNoTools:
-    """A turn's last request goes out with the tools withdrawn, and says why.
+class TestTheLastRequestForbidsTheCall:
+    """A turn's last request forbids a tool call, and says why.
 
     The bug, reported from the running app. Asked about a negative service-unit balance
     — a fact the corpus states in one clause, on a page the model read twice — both free
@@ -396,8 +398,17 @@ class TestTheLastRequestHasNoTools:
     Raising the ceiling is not the fix and was measured not to be — given ten rounds the
     models filled ten. Rule 3 of the system prompt ("if the first search misses, rephrase
     the keywords and search again") has no stopping condition, so the app supplies one:
-    the last request carries no tools, and with nothing left to call the only move a model
+    the last request forbids a call, and with nothing left to call the only move a model
     has is the answer.
+
+    **It withdrew the schemas to do that, and now it sends them with
+    `tool_choice: "none"` instead.** Same stopping condition, one exposure fewer: a
+    request carrying no tools is the only kind a free ROUTER can hand to
+    `nvidia/nemotron-3.5-content-safety:free`, the one free model that does not support
+    the parameter — measured at 2 of 33 text rolls and 3 of 9 with an image, each time
+    answering the reader with `User Safety: safe`. The schema keeps the router's own
+    filter on; the choice keeps the model quiet. See the comment at the call site in
+    `ui.turn`.
     """
 
     SEARCH = TestTurnLoop.SEARCH
@@ -423,10 +434,12 @@ class TestTheLastRequestHasNoTools:
         run_app(monkeypatch, client=client, session=self.session())
 
         assert client.calls == config.MAX_TOOL_ROUNDS + 1
-        # Every request but the last one was allowed to search.
-        assert all(client.tools_seen[:-1]), client.tools_seen
-        # And the last one was not, which is the whole mechanism.
-        assert not client.tools_seen[-1]
+        # The schemas go up every time, INCLUDING the last — that is what keeps a
+        # router's parameter filter on and the classifier out of reach.
+        assert all(client.tools_seen), client.tools_seen
+        # And the last request is the one that may not call, which is the mechanism.
+        assert client.choices_seen[:-1] == ["auto"] * config.MAX_TOOL_ROUNDS
+        assert client.choices_seen[-1] == "none"
 
     def test_a_model_that_answers_when_the_tools_go_is_shipped(self, monkeypatch):
         """The reader's turn, and the regression this exists for."""
@@ -813,15 +826,37 @@ class TestStatusBlock:
             module.VIEW, {"name": tools.SEARCH_DOCS, "input": {"query": "gpu jobs"}}
         ) == ("search", "gpu jobs")
 
-    def test_a_read_shows_the_path_and_the_anchor(self, monkeypatch):
-        """The anchor especially: it is the difference between a page and the section
-        of it this turn actually opened."""
+    def test_a_read_shows_the_section_title_and_never_the_path(self, monkeypatch):
+        """`docs/allocations.md#…` is this repository's name for a file — the corpus
+        layout, not the documentation — and it reached the page: "docs/allocations.md
+        shouldn't be disclosed in this way". Resolved to the section's own title, which
+        is the phrase the Sources strip under the answer already shows."""
         module = self.app(monkeypatch)
         name, detail = module.turn.call_step(
             module.VIEW,
-            {"name": tools.READ_DOC, "input": {"path": "docs/storage/main.md#quotas"}},
+            {"name": tools.READ_DOC, "input": {"path": "docs/allocations.md#storage"}},
         )
-        assert (name, detail) == ("read", "docs/storage/main.md#quotas")
+        assert name == "read"
+        assert detail == "Allocations and Service Units FAQ — Storage"
+        assert "docs/" not in detail and ".md" not in detail
+
+    def test_a_whole_page_read_shows_the_page_title(self, monkeypatch):
+        """A read with no anchor has no chunk id — `chunk()` keys on
+        `{source}/{path}#{anchor}` — but the page still has a title."""
+        module = self.app(monkeypatch)
+        assert module.turn.call_step(
+            module.VIEW,
+            {"name": tools.READ_DOC, "input": {"path": "docs/slurm/sbatch.md"}},
+        ) == ("read", "Batch jobs")
+
+    def test_a_path_that_resolves_to_nothing_shows_nothing(self, monkeypatch):
+        """Not a fallback to the string: a model that invented a path has told the
+        reader nothing, and printing the invention is the disclosure itself."""
+        module = self.app(monkeypatch)
+        assert module.turn.call_step(
+            module.VIEW,
+            {"name": tools.READ_DOC, "input": {"path": "docs/nope.md#x"}},
+        ) == ("read", "")
 
     def test_the_name_is_the_one_an_answer_would_use(self, monkeypatch):
         """`sage.redact` swaps these words into an answer that names a tool. The block
@@ -894,6 +929,7 @@ class TestStatusBlock:
             module.VIEW,
             {"name": tools.SEARCH_DOCS, "input": {"query": "<img src=x onerror=1>"}},
         ))
+        status.collapse()
         drawn = module.st.markdown_html[-1]
         assert "<img" not in drawn
         assert "&lt;img" in drawn
@@ -913,31 +949,64 @@ class TestStatusBlock:
         for added in ("status-block", "status-step", "status-arg", "details"):
             assert added not in drawn
 
-    def test_a_line_per_call_and_the_finished_ones_stay(self, monkeypatch):
+    def test_only_the_sweeping_row_is_on_screen_while_a_turn_runs(self, monkeypatch):
+        """One line, one phrase, the gradient crossing it — for the whole turn.
+
+        It drew a step per call and kept them, which by the third round was six rows of
+        history stacked over an empty answer: "it's everything showing, which looks
+        bad", then "it should be like what we had before with the cool status message
+        with gradients". The steps are still recorded; they are not painted while the
+        reader is waiting.
+        """
         module = self.app(monkeypatch)
         status = self.block(module)
         status.show("Thinking")
         status.begin("search", "quota")
-        status.begin("read", "docs/storage/main.md#quotas")
-        status.show("Thinking")
+        status.begin("read", "Data Management FAQ — Quotas")
+        status.show(module.RUNTIME.copy.status_reading)
         drawn = module.st.markdown_html[-1]
-        # Both calls, both still on the page, each with its own argument.
-        assert drawn.count('class="status-step"') == 2
-        assert ">quota<" in drawn and ">docs/storage/main.md#quotas<" in drawn
-        # And one live line under them: the wait for the next request.
         assert drawn.count('class="status-row"') == 1
+        assert "Reading the relevant sections" in drawn
+        for absent in ("status-step", "status-arg", ">quota<", "docs/storage"):
+            assert absent not in drawn
+
+    def test_the_steps_are_recorded_even_though_they_are_not_drawn(self, monkeypatch):
+        """What the stored answer carries, and what the folded block is built from."""
+        module = self.app(monkeypatch)
+        status = self.block(module)
+        status.begin("search", "quota")
+        status.begin("read", "Data Management FAQ — Quotas")
+        status.collapse()
+        assert [x["name"] for x in status.record()] == ["search", "read"]
+        assert [x["detail"] for x in status.record()] == [
+            "quota", "Data Management FAQ — Quotas",
+        ]
+
+    def test_the_phrase_names_the_stage_and_not_the_argument(self, monkeypatch):
+        """Vague on purpose: the row says which stage, the folded block says which
+        section. Merging the two put a repository path on the row."""
+        module = self.app(monkeypatch)
+        copy = module.RUNTIME.copy
+        assert module.turn.stage_phrase(
+            module.VIEW, tools.SEARCH_DOCS) == copy.status_searching
+        assert module.turn.stage_phrase(
+            module.VIEW, tools.READ_DOC) == copy.status_reading
+        assert module.turn.stage_phrase(module.VIEW, "other") == copy.status_working
 
     def test_a_finished_step_carries_its_time_and_the_live_one_does_not(
         self, monkeypatch
     ):
+        """On the FOLDED block, which is where times are shown. A step still running
+        when the turn ended has no duration and `record` leaves it out."""
         module = self.app(monkeypatch)
         status = self.block(module)
         status.begin("search", "quota")
-        assert "status-time" not in module.st.markdown_html[-1]
-        status.begin("read", "docs/storage/main.md#quotas")
+        status.begin("read", "Data Management FAQ — Quotas")
+        status.collapse()
         drawn = module.st.markdown_html[-1]
         assert re.search(r'class="status-time">\d+\.\ds<', drawn)
-        assert drawn.count("status-time") == 1
+        # Two steps, and the second stopped when `collapse` did.
+        assert drawn.count("status-time") == 2
 
     def test_the_time_is_the_wait_and_not_the_call(self, monkeypatch):
         """A search of an in-memory index is 10-40ms, so a step timed from the call
@@ -949,8 +1018,8 @@ class TestStatusBlock:
         monkeypatch.setattr(module.turn.time, "monotonic", lambda: next(ticks, 102.5))
         status = self.block(module)          # opened at 100.0
         status.begin("search", "quota")      # the wait for it started there too
-        status.show("Thinking")              # and ended at 102.5
-        assert ">2.5s<" in module.st.markdown_html[-1]
+        status.begin("read", "a section")    # and ended at 102.5
+        assert status.record()[0]["seconds"] == 2.5
 
     def test_it_folds_into_one_line_the_reader_can_open_again(self, monkeypatch):
         module = self.app(monkeypatch)
@@ -964,6 +1033,50 @@ class TestStatusBlock:
         # Folded, not thrown away: the steps are inside the disclosure.
         assert drawn.count('class="status-step"') == 2
         assert ">docs/storage/main.md#quotas<" in drawn
+
+    def test_the_summary_clock_stops_where_the_reader_last_saw_it(self, monkeypatch):
+        """One measurement, not two — and it is wall time, not the steps added up.
+
+        These were two computations of two different things: the painted line read wall
+        time since the block opened, and `transcript.render_steps` summed the steps,
+        because the wall clock was not on the stored message for it to read. So `2
+        steps · 12.9s` became `2 steps · 9.7s` the moment the turn ended, with nothing
+        having happened in between. The difference is real and belongs on the line: it
+        is the wait for the first word of the answer, which is nobody's step, because
+        the last one was stopped by the phrase that replaced it.
+        """
+        module = self.app(monkeypatch)
+        ticks = iter([100.0, 102.8, 106.0])
+        monkeypatch.setattr(module.turn.time, "monotonic", lambda: next(ticks, 900.0))
+        status = self.block(module)                     # opened at 100.0
+        status.begin("search", "quota")
+        status.show("Searching the documentation")      # the step stops here, 2.8s
+        status.collapse()                               # the answer arrived at 106.0
+        assert "1 step · 6.0s" in module.st.markdown_html[-1]
+        # Frozen at the fold: read again later it is the same number, not a clock
+        # still running against a turn that has ended.
+        assert status.total_seconds == 6.0
+        # And more than the steps add up to, which is the whole reason summing them
+        # was wrong.
+        assert status.total_seconds > sum(x["seconds"] for x in status.record())
+
+    def test_the_stored_summary_reports_what_the_live_one_did(self, monkeypatch):
+        """The number goes onto the message, so the folded block a reader opens an
+        hour later says what they watched it say."""
+        client = ScriptedProvider([self.SEARCH, self.READ, self.ANSWER])
+        stub, _module = run_app(monkeypatch, client=client, session={
+            "messages": [{"role": "user", "text": "what is my storage quota",
+                          "attachments": []}],
+            "processing": True,
+        })
+        stored = stub.session_state["messages"][-1]
+        live = [h for h in stub.markdown_html if h.startswith("<details")][-1]
+        assert f"· {progress.elapsed(stored['step_seconds'])}<" in live
+        # The fallback for a message stored before the field existed is the sum, and
+        # it is not this number: that is what made the line change at the fold.
+        assert stored["step_seconds"] >= sum(
+            step["seconds"] for step in stored["steps"]
+        )
 
     def test_one_step_is_one_step(self, monkeypatch):
         module = self.app(monkeypatch)
@@ -1024,15 +1137,85 @@ class TestStatusBlock:
             "processing": True,
         })
         drawn = [html for html in stub.markdown_html if "status-" in html]
-        assert any('class="status-arg">quota<' in html for html in drawn)
-        assert any('class="status-arg">docs/storage/main.md#quotas<' in html
-                   for html in drawn)
-        # Two calls, in the order they were made, on lines of their own.
-        widest = max(drawn, key=lambda html: html.count("status-step"))
+        # The sweeping row carried each stage while the turn ran.
+        assert any("Searching the documentation" in html for html in drawn)
+        assert any("Reading the relevant sections" in html for html in drawn)
+        # And no corpus path anywhere on the page at any point in the turn.
+        assert not any("docs/storage/main.md" in html for html in drawn)
+        # The steps arrived folded, once the answer started, with their arguments.
+        folded = [html for html in drawn if "status-done" in html]
+        assert folded, "the block never folded into its summary"
+        assert any('class="status-arg">quota<' in html for html in folded)
+        widest = max(folded, key=lambda html: html.count("status-step"))
         assert widest.count('class="status-step"') == 2
-        assert widest.index(">quota<") < widest.index(">docs/storage/main.md#quotas<")
+        # In the order the calls were made. The read's argument is a resolved section
+        # title now, not the path the model sent, so the order is checked on the names.
+        assert widest.index(">search<") < widest.index(">read<")
         # And it folded when the answer began.
         assert any(html.startswith("<details") and "2 steps" in html for html in drawn)
+
+    def test_the_reading_budget_is_a_ceiling_and_not_a_target(self, monkeypatch):
+        """The cumulative tool budget, which nothing covered until now.
+
+        `history.build` trims the conversation ONCE, before the loop, and the loop then
+        appends up to `MAX_TOOL_ROUNDS` results of up to `MAX_DOC_CHARS` each —
+        `TOOL_RESULT_CHAR_BUDGET` is what stops the sum overrunning what was trimmed
+        for. It was overrun by its own truncation note: the note was appended AFTER the
+        clip, so every truncated call went its own length past the budget. Measured at
+        595 characters over with five clipped calls and 1,071 with nine.
+
+        Driven with a tiny budget so an ordinary corpus section is already too big,
+        and asserted on what actually went upstream rather than on the arithmetic.
+        """
+        monkeypatch.setattr(config, "TOOL_RESULT_CHAR_BUDGET", 200)
+        client = ScriptedProvider([self.SEARCH, self.READ, self.ANSWER])
+        run_app(monkeypatch, client=client, session={
+            "messages": [{"role": "user", "text": "what is my storage quota",
+                          "attachments": []}],
+            "processing": True,
+        })
+        # The last request carries every tool result the turn produced.
+        tools_sent = [
+            message for message in client.sent[-1] if message.get("role") == "tool"
+        ]
+        assert tools_sent, "the turn made no tool calls, so this measures nothing"
+        # Imported here, not at module scope. CI installs no Streamlit for the lint
+        # and test job, so a module-level `from sage.ui import turn` is a
+        # ModuleNotFoundError at collection that takes `test_chats.py` and
+        # `test_turn_control.py` down with this file — and it is wrong locally too,
+        # because `stub_streamlit.forget_importers()` drops `sage.ui.*` on every
+        # `install()`, so a module bound once would be a previous run's stub. The
+        # deferred import is the idiom the rest of this file uses.
+        from sage.ui import turn  # noqa: PLC0415
+
+        note = turn.TRUNCATED
+        # The sharp one, and the shape the bug actually had: the FIRST clipped result
+        # was `room` characters of content plus the note, so one call on its own went
+        # past the whole budget. Everything after it then ran with negative room and
+        # added a note each, which is how five clipped calls reached 595 over.
+        assert len(tools_sent[0]["content"]) <= config.TOOL_RESULT_CHAR_BUDGET, (
+            f"one result is {len(tools_sent[0]['content'])} characters against a "
+            f"budget of {config.TOOL_RESULT_CHAR_BUDGET} for the whole turn"
+        )
+        # The CONTENT — what was read — is what the budget governs, and it holds
+        # exactly, because the note is now paid for out of the room it is printed in.
+        content = sum(
+            len(message["content"].replace(note, "")) for message in tools_sent
+        )
+        assert content <= config.TOOL_RESULT_CHAR_BUDGET, (
+            f"{len(tools_sent)} results totalling {content} characters of content "
+            f"against a budget of {config.TOOL_RESULT_CHAR_BUDGET}"
+        )
+        # And the whole request is bounded too, which is the property that matters:
+        # once the room is smaller than the note a call returns the note alone, so the
+        # overshoot is at most one note per round and cannot grow with the size of
+        # what was read. Before the fix it was 595 over at five clipped calls.
+        total = sum(len(message["content"]) for message in tools_sent)
+        ceiling = config.TOOL_RESULT_CHAR_BUDGET + config.MAX_TOOL_ROUNDS * len(note)
+        assert total <= ceiling, f"{total} characters against a ceiling of {ceiling}"
+        # And the model is still told that it was cut, or a truncated section reads as
+        # the whole of one.
+        assert any(note in message["content"] for message in tools_sent)
 
     def test_every_fixed_phrase_fits_the_line_it_is_drawn_on(self, monkeypatch):
         """The row is one line at 500px. The fixed phrases are checkable once; a tool's
@@ -1108,7 +1291,7 @@ class TestToollessModels:
         monkeypatch.setattr(config, "TOOLLESS_MODELS", ())
 
         class RejectsTools(ScriptedProvider):
-            def stream(self, model, messages, tools, thinking=False):
+            def stream(self, model, messages, tools, thinking=False, tool_choice="auto"):
                 self.calls += 1
                 self.sent.append(messages)
                 self.tools_seen.append(tools)
@@ -1174,7 +1357,8 @@ class TestQuotaFailover:
         zen = ScriptedProvider([], name="opencode", models=("z1",))
         stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
                            session=self.session(), opencode=True)
-        assert "Retrying with z1" in stub.session_state["notice"]
+        assert "Retrying" in stub.session_state["notice"]
+        assert "z1" not in stub.session_state["notice"]
         assert "came from" not in stub.session_state["notice"]
         assert stub.session_state["switched_from"] == ("m1", "quota")
 
@@ -1193,10 +1377,13 @@ class TestQuotaFailover:
                            session=session, opencode=True)
         notice = stub.session_state["notice"]
         assert "was unavailable (out of credit)" in notice
-        assert "z1 answered instead" in notice
+        # No model names: with the picker gone a reader cannot act on them.
+        assert "so another answered" in notice
+        assert "z1" not in notice
         # And it points at where the picker actually is. It said "the button at
         # the top left" for as long as there was a top left to point at.
-        assert "under the input box" in notice
+        # The instruction is gone with the control it named.
+        assert "took longer than usual" in notice
         assert "top left" not in notice
         assert stub.session_state["switched_from"] is None
         assert stub.session_state["error"] is None
@@ -1268,6 +1455,47 @@ class TestQuotaFailover:
         assert "switch-model" not in stub.button_labels
         assert "retry" in stub.button_labels
 
+
+    def test_the_one_kind_that_is_offered_no_switch_is_the_one_switching_cannot_fix(
+        self, monkeypatch
+    ):
+        """`context` means the REQUEST is too long, not that this model is unwilling.
+
+        Every model in the lineup gets the same oversized message and refuses it the
+        same way, which is why `FAILOVER_KINDS` leaves the kind out and the turn asks
+        exactly one provider. The card drew "→ Use <model>" anyway — a button
+        guaranteed to fail, beside the sentence explaining why — because
+        `render_error_card` read `view.fallback` without looking at what had gone
+        wrong. Try again stays: clearing the chat and pressing it is the remedy.
+        """
+        mistral = ScriptedProvider([], name="mistral", models=("m1",))
+        zen = ScriptedProvider([], name="opencode", models=("z1",))
+        session = self.session() | {
+            "processing": False,
+            "error": llm.AssistantError("context").user_message,
+            "error_detail": "HTTP 400 … maximum context length is 8192 tokens",
+            "error_kind": "context",
+        }
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
+                           session=session, opencode=True)
+        assert "retry" in stub.button_labels
+        assert "switch-model" not in stub.button_labels, (
+            "a switch is offered for a failure that switching cannot help"
+        )
+
+    def test_every_other_kind_still_gets_the_switch(self, monkeypatch):
+        """The guard is one kind wide. A quota with somewhere to go still says so."""
+        mistral = ScriptedProvider([], name="mistral", models=("m1",))
+        zen = ScriptedProvider([], name="opencode", models=("z1",))
+        session = self.session() | {
+            "processing": False,
+            "error": llm.AssistantError("quota").user_message,
+            "error_detail": "HTTP 402",
+            "error_kind": "quota",
+        }
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
+                           session=session, opencode=True)
+        assert stub.button_labels.get("switch-model") == "→ Use z1"
 
     def test_a_clean_answer_clears_a_notice_from_an_earlier_turn(self, monkeypatch):
         provider = ScriptedProvider([[event("Fresh answer.")]], models=("m1",))
@@ -1589,7 +1817,7 @@ class TestWalkingTheLineup:
         def models(self):
             return [providers.Model(self.name, name) for name in self._ids]
 
-        def stream(self, model, messages, tools, thinking=False):
+        def stream(self, model, messages, tools, thinking=False, tool_choice="auto"):
             self.asked.append(model)
             if self._error is not None and model not in self._answers:
                 raise self._error
@@ -1645,7 +1873,7 @@ class TestWalkingTheLineup:
         notice = stub.session_state["notice"]
         assert "returned no answer" in notice
         assert "(empty)" not in notice
-        assert "Retrying with" in notice
+        assert "Retrying" in notice
 
     def test_every_reason_a_turn_can_fail_over_for_reads_as_english(self):
         """The two lists have to be held together, because the failover set is now
@@ -1686,7 +1914,7 @@ class TestWalkingTheLineup:
         assert reply["model"] == "opencode:z4"
         assert stub.session_state["error"] is None
         # Past tense only now, and about the model the reader actually left behind.
-        assert "z4 answered instead" in stub.session_state["notice"]
+        assert "so another answered" in stub.session_state["notice"]
         assert stub.session_state["tried"] == []
 
     def test_a_failure_that_is_not_about_the_model_is_walked_too(self, monkeypatch):
@@ -1733,6 +1961,178 @@ class TestWalkingTheLineup:
         stub = self.drive(monkeypatch, zen)
         assert zen.asked == ["z1", "z2"]
         assert stub.session_state["error"]
+
+
+class TestAskingARouterAgain:
+    """A router that produced no answer is asked again, because it is not the same ask.
+
+    The lineup walk is right for a model and wrong for a router. `openrouter/free`
+    resolves to a different free model per request — measured over 33 rolls: 14 distinct
+    models, and two consecutive rolls repeated a model twice in 32 — so a re-ask lands
+    somewhere else about 94% of the time, while `View.alternative` can only ever move
+    to a DIFFERENT id because it skips everything in `tried`.
+
+    What made it worth building: one of the names in that free pool is
+    `nvidia/nemotron-3.5-content-safety:free`, a classifier whose entire output is
+    `User Safety: safe`. `normalize.is_moderation_verdict` stops that reaching a reader;
+    this is what gets them an answer rather than an error card.
+    """
+
+    ROUTER = "openrouter/free"
+
+    class Router:
+        """The router, as a provider: empty for the first `empties` requests.
+
+        Same shape as `TestAutomaticFailover.Lineup` and a different axis — that one
+        replays by MODEL, because which model answers is its point. Here one id is asked
+        repeatedly and what changes is the request number, which is the whole behaviour
+        under test.
+        """
+
+        name = "openrouter"
+
+        def __init__(self, empties, answer="A service unit is one core-hour."):
+            self._empties = empties
+            self._answer = answer
+            self.asked: list[str] = []
+
+        def models(self):
+            return [providers.Model(self.name, "openrouter/free")]
+
+        def stream(self, model, messages, tools, thinking=False, tool_choice="auto"):
+            self.asked.append(model)
+            if len(self.asked) <= self._empties:
+                return
+            yield event(self._answer)
+
+    def session(self, **extra):
+        return {
+            "messages": [{"role": "user", "text": "what is a service unit?",
+                          "attachments": []}],
+            "processing": True,
+            "model": "openrouter:openrouter/free",
+        } | extra
+
+    CARRIED = ("messages", "processing", "model", "tried", "rerolls",
+               "switched_from", "notice")
+
+    def drive(self, monkeypatch, provider, *, runs=8):
+        session = self.session()
+        for _ in range(runs):
+            stub, _module = run_app(monkeypatch, client=provider,
+                                    session=session, openrouter=True)
+            if not stub.session_state.get("processing"):
+                return stub
+            session = {key: stub.session_state.get(key) for key in self.CARRIED}
+        raise AssertionError(f"still spinning after {runs} runs: {provider.asked}")
+
+    def test_the_same_id_is_asked_again_rather_than_a_different_one(self, monkeypatch):
+        router = self.Router(empties=1)
+        stub, _module = run_app(monkeypatch, client=router, session=self.session(),
+                                openrouter=True)
+        state = stub.session_state
+        assert state["processing"] is True, "the turn should run again"
+        assert state["model"] == "openrouter:openrouter/free", (
+            "the re-ask must be the same id — that is what makes it a re-roll"
+        )
+        assert state["error"] is None
+        assert state["rerolls"] == 1
+
+    def test_a_reroll_spends_no_slot_of_the_lineup_walk(self, monkeypatch):
+        """`tried` is what `alternative` skips, so a re-roll that wrote to it would
+        forbid the next re-roll AND consume an attempt belonging to a model still
+        unasked. Two ledgers, on purpose."""
+        router = self.Router(empties=1)
+        stub, _module = run_app(monkeypatch, client=router, session=self.session(),
+                                openrouter=True)
+        assert stub.session_state["tried"] == []
+        assert stub.session_state["switched_from"] is None, (
+            "nothing switched, so the settled notice must not claim another model answered"
+        )
+
+    def test_it_answers_on_the_second_attempt(self, monkeypatch):
+        router = self.Router(empties=1)
+        stub = self.drive(monkeypatch, router)
+        assert router.asked == [self.ROUTER, self.ROUTER]
+        assert stub.session_state["messages"][-1]["text"].startswith("A service unit")
+        assert stub.session_state["error"] is None
+        # Spent with the turn, not carried into the next question.
+        assert stub.session_state["rerolls"] == 0
+
+    def test_the_re_asks_are_bounded(self, monkeypatch):
+        """Three attempts at the default, then the card. A router that is down stays
+        down, and an unbounded retry is a turn that never ends."""
+        monkeypatch.setattr(config, "ROUTER_RETRIES", 2)
+        router = self.Router(empties=99)
+        stub = self.drive(monkeypatch, router)
+        assert len(router.asked) == 3
+        assert stub.session_state["error"] == llm.AssistantError("empty").user_message
+        assert stub.session_state["processing"] is False
+
+    def test_the_notice_names_no_model_and_no_arithmetic(self, monkeypatch):
+        """There is no model to name — that is the point of a router — and "attempt 2
+        of 3" is machinery. What the reader is owed is why this is taking longer."""
+        router = self.Router(empties=1)
+        stub, _module = run_app(monkeypatch, client=router, session=self.session(),
+                                openrouter=True)
+        notice = stub.session_state["notice"]
+        assert "Trying again" in notice
+        # "came back empty" is prose a reader can read; `(empty)` is the internal kind,
+        # which is what `REASONS` exists to keep off the page.
+        for absent in ("openrouter", "free", "1 of 2", "(empty)"):
+            assert absent not in notice
+
+    def test_it_can_be_switched_off(self, monkeypatch):
+        monkeypatch.setattr(config, "ROUTER_RETRIES", 0)
+        router = self.Router(empties=1)
+        stub, _module = run_app(monkeypatch, client=router, session=self.session(),
+                                openrouter=True)
+        assert router.asked == [self.ROUTER]
+        assert stub.session_state["error"] == llm.AssistantError("empty").user_message
+
+    def test_the_harness_off_switch_switches_it_off_too(self, monkeypatch):
+        """`evals/harness.py` sets `MAX_MODEL_ATTEMPTS = 1` to measure the model it
+        asked. A silent re-roll would have it score one model's answer as another's."""
+        monkeypatch.setattr(config, "MAX_MODEL_ATTEMPTS", 1)
+        router = self.Router(empties=1)
+        stub, _module = run_app(monkeypatch, client=router, session=self.session(),
+                                openrouter=True)
+        assert router.asked == [self.ROUTER]
+        assert stub.session_state["error"] == llm.AssistantError("empty").user_message
+
+    def test_a_safety_verdict_is_a_reroll_and_not_an_answer(self, monkeypatch):
+        """End to end, on the reply that made this worth building. `User Safety: safe`
+        is short, well-formed prose that every other check lets through."""
+        router = self.Router(empties=0, answer="User Safety: safe")
+        router_ok = self.Router(empties=0)
+        stub, _module = run_app(monkeypatch, client=router, session=self.session(),
+                                openrouter=True)
+        assert stub.session_state["messages"][-1]["role"] == "user", (
+            "the verdict must not be stored as the answer"
+        )
+        assert stub.session_state["rerolls"] == 1
+        assert stub.session_state["processing"] is True
+        assert router_ok.asked == []
+
+    def test_a_pinned_model_is_not_asked_again(self, monkeypatch):
+        """The other half of the rule, driven from the profile rather than from code.
+
+        Nothing on the wire says which ids re-route, so the deployment says it — and on
+        a pinned model a re-ask is the same nothing twice, which is why the walk is
+        right everywhere else. Switched here by pointing `routers` at an id this
+        provider does not serve, which is the same lever a deployment has.
+        """
+        monkeypatch.setenv("SAGE_OPENROUTER_ROUTERS", "some/other-router")
+        # The profile is read once per process, so the variable alone changes nothing:
+        # dropping the cached copy is what makes this test the deployment's lever
+        # rather than a patched constant. monkeypatch puts the old one back.
+        monkeypatch.setattr(profile, "_active", None)
+        router = self.Router(empties=1)
+        stub, _module = run_app(monkeypatch, client=router, session=self.session(),
+                                openrouter=True)
+        assert stub.session_state["rerolls"] == 0
+        assert router.asked == [self.ROUTER], "it walked instead, or gave up"
+        assert stub.session_state["error"] == llm.AssistantError("empty").user_message
 
 
 class TestConversationRendering:
@@ -1845,6 +2245,34 @@ class TestAttachments:
         assert len(again.session_state["attachments"]) == 1, (
             "the same file was attached twice by a rerun that changed nothing"
         )
+
+    def test_the_same_file_offered_twice_in_one_run_is_one_attachment(
+        self, monkeypatch
+    ):
+        """`accept_multiple_files` accumulates, so one file can arrive twice at once.
+
+        Not the rerun case above, where the widget re-reports what it already held:
+        this is the widget holding two copies of the same bytes in the *same* run.
+        Picking the same file again does it, and so does app.js's paste and drop
+        path, which seeds its `DataTransfer` with whatever the input already has.
+
+        Both go through the identity check, and a second copy is skipped because the
+        first one is now held. Without that the composer grew a chip per pick, and
+        the turn carried the same file twice and paid for it twice.
+
+        A duplicate *chip in the DOM* is a different thing and is not this: the chips
+        are drawn with `help=`, and Streamlit's tooltip wraps a second, zero-sized
+        copy of the button inside the same `st-key-drop-attachment-N` container. Two
+        buttons, one attachment. Count the containers, not the buttons.
+        """
+        data = b"#SBATCH -p caslake\n"
+        stub, _m = self.app(monkeypatch, [
+            self.Upload("submit.sbatch", data),
+            self.Upload("submit.sbatch", data),
+        ])
+        held = stub.session_state["attachments"]
+        assert len(held) == 1, "one file offered twice became two attachments"
+        assert held[0].filename == "submit.sbatch"
 
     def test_a_rejected_file_does_not_take_the_others_with_it(self, monkeypatch):
         """A bad file used to reset the whole widget, dropping the good ones too."""

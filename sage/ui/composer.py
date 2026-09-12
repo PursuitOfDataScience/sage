@@ -190,6 +190,7 @@ def render_think_toggle(view: View) -> None:
     # bounds would then be measuring. The ✕ on a chat row is labelled the same way.
     st.markdown(
         f'<div id="think-state" data-on="{"1" if on else "0"}" '
+        f'data-label="{html.escape(view.copy.think_label, quote=True)}" '
         f'data-hint="{html.escape(view.copy.think_hint, quote=True)}" hidden></div>',
         unsafe_allow_html=True,
     )
@@ -221,8 +222,16 @@ def render_controls(view: View) -> None:
     this comment says for free.
 
     No `st.columns`: a column has no intrinsic width, which is how the picker came to
-    be invisible twice. Where this sits is measured by app.js from Streamlit's own send
-    button and published for the stylesheet, so it stays beside it at every width.
+    be invisible twice.
+
+    Nothing measures where this sits any more, and that is the point. It used to be a
+    `position: fixed` container at `--pick-right`/`--pick-bottom`, which app.js
+    published by measuring Streamlit's own send button every pass — and a fixed element
+    chasing a measurement of the box can only follow it: "it can jump out of the box
+    when scrolling up and down", while the send arrow never did because the arrow is
+    really inside the box. What Streamlit renders here is now the clipped hook; the
+    visible pill is `#think-btn`, injected by app.js INTO
+    `[data-testid="stChatInput"]` and positioned from the box's own edges.
     """
     with st.container(key="composer-strip"):
         render_think_toggle(view)

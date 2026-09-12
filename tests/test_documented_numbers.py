@@ -173,3 +173,90 @@ class TestTheRatchetsQuoteWhatTheyMeasure:
         assert measured["caveat_recall"] >= gate_eval.MINIMUM_CAVEAT_RECALL
         assert measured["over_refusal"] <= gate_eval.MAXIMUM_OVER_REFUSAL
         assert measured["recall@5"] >= gate_eval.MINIMUM_RECALL_AT_5
+
+
+class TestTheStatusArgumentClipFitsARealLabel:
+    """`config.STATUS_ARGUMENT_CHARS` has to clear the longest section title.
+
+    The progress block's read step shows a section's own title rather than the corpus
+    path it was given. This corpus's headings are frequently whole questions, so a label
+    runs long — and the clip was 96, which put an ellipsis two words from the end of a
+    real one. That was the same complaint the CSS ellipsis had already produced once
+    ("why can't it show the complete cot?"), reappearing in Python after being fixed in
+    the stylesheet.
+
+    Pinned here rather than in the harness because `tools/render_check.py` builds its
+    worst case FROM this constant, so it cannot tell you whether the constant is big
+    enough — only that the layout survives whatever it is. This is the half that moves
+    when the documents change.
+    """
+
+    def test_the_clip_clears_every_label_the_corpus_can_produce(self):
+        from sage import config, profile, runtime  # noqa: PLC0415
+
+        corpus = runtime.build(profile.active()).corpus
+        longest = max(corpus.chunks, key=lambda chunk: len(chunk.label))
+        assert len(longest.label) <= config.STATUS_ARGUMENT_CHARS, (
+            f"the longest section label is {len(longest.label)} characters "
+            f"({longest.label[:60]}…) and the clip is "
+            f"{config.STATUS_ARGUMENT_CHARS}, so a read step would show it ellipsed"
+        )
+
+
+class TestTheRenderCountIsNotHandMaintained:
+    """The size of the layout run, held against the run itself.
+
+    This is the number that went stale in two documents at once: `CLAUDE.md` said 684
+    and `EVAL.md` said 660, and nothing in the repository could say which was right —
+    the figure lived only in the shape of a loop inside `main()`. It is 684, and a
+    scenario or a viewport added to the harness moves it, which is exactly the kind of
+    edit that forgets a document.
+
+    `tools/scorecard.py` is on the list because it was the THIRD copy, and running the
+    card is what found it: two cells and a usage line said 660 while both documents had
+    been corrected to 684. It now imports `RENDER_COUNT` for the cells, so the two that
+    matter cannot drift again; the usage line is prose and this holds it.
+
+    So `render_check` states it (`RENDER_COUNT`, built from `SCENARIOS`, `SCHEMES`,
+    `WIDTHS` and `states_for`) and this holds both documents to it. Importing the module
+    costs nothing and needs no browser: Chromium is only launched by `calibrate()` and
+    `render()`.
+    """
+
+    @pytest.fixture(scope="class")
+    def harness(self):
+        import sys  # noqa: PLC0415
+
+        tools = os.path.join(ROOT, "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        import render_check  # noqa: PLC0415
+
+        return render_check
+
+    def test_the_count_is_the_loop_it_describes(self, harness):
+        frames = sum(len(harness.states_for(name)) for name in harness.SCENARIOS)
+        by_hand = frames * len(harness.SCHEMES) * len(harness.WIDTHS)
+        assert by_hand == harness.RENDER_COUNT
+
+    @pytest.mark.parametrize("document", ["CLAUDE.md", "EVAL.md", "tools/scorecard.py"])
+    def test_every_place_that_states_it_says_what_the_harness_does(
+        self, harness, document
+    ):
+        with open(os.path.join(ROOT, document), encoding="utf-8") as handle:
+            text = handle.read()
+        # Three phrasings, and deliberately not a loose "N renders": CLAUDE.md also
+        # says "at 294 and 360 renders" about two bugs the harness caught at those
+        # sizes, which is history rather than a claim about how big the run is.
+        stated = {
+            int(n)
+            for pattern in (r"for (\d{3,4}) renders",
+                            r"(\d{3,4})-render",
+                            r"(\d{3,4}) renders = ")
+            for n in re.findall(pattern, text)
+        }
+        assert stated, f"{document} no longer states a render count at all"
+        assert stated == {harness.RENDER_COUNT}, (
+            f"{document} says {sorted(stated)} renders and the harness performs "
+            f"{harness.RENDER_COUNT}"
+        )

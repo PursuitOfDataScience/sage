@@ -16,7 +16,8 @@ run the selectbox handed back its *previous* value and switched straight back to
 provider that had just refused. A chat list has the same shape, because the open chat
 can change without anyone touching this widget (`new_chat` opens one, and deleting the
 open one opens its neighbour). Buttons hold no state, so a programmatic switch survives.
-See `composer.render_model_picker`, which reached the same answer from the same bug.
+See `composer.render_think_toggle`, which reached the same answer from the same
+bug — and note the picker itself is gone, so this is the surviving instance of it.
 """
 
 from __future__ import annotations

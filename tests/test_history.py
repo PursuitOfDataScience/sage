@@ -388,6 +388,12 @@ class TestTheQuestionSurvivesAnyBudget:
         `MAX_PROMPT_CHARS` is what the composer accepts, so a question above it cannot come
         from a reader — and the budget must not become optional for anything that skips the
         composer.
+
+        Plus the two strings the app itself wraps around the question, which is the whole
+        of the difference from the flat `MAX_PROMPT_CHARS` this used to assert: the floor
+        has to cover `_ASKS` in front of the question and the cut note `_clip` pays for out
+        of the same allowance, or a question at exactly the composer's limit comes back 71
+        characters short (see the sibling test below).
         """
         from sage import config
 
@@ -401,4 +407,129 @@ class TestTheQuestionSurvivesAnyBudget:
             )
         finally:
             config.HISTORY_CHAR_BUDGET = before
-        assert len(built[1]["content"]) <= config.MAX_PROMPT_CHARS
+        frame = len(history._ASKS) + len(history._CUT_NOTE)
+        assert len(built[1]["content"]) <= config.MAX_PROMPT_CHARS + frame
+
+    @pytest.mark.parametrize("budget", [1, 500, 4000, 12000, 48000])
+    def test_the_longest_question_the_composer_accepts_survives_with_a_file(
+        self, budget
+    ):
+        """The floor was measured on a *rendering* of the turn, capped at
+        `MAX_PROMPT_CHARS`, and the cap is where it came up short.
+
+        A question of 7 999 characters is one the composer accepts. With one attachment
+        and `SAGE_HISTORY_CHAR_BUDGET=4000` the old floor was the cap — 8 000 — while the
+        clip needed 8 071: `_ASKS` (15) in front of the question and `_CUT_NOTE` (57) paid
+        for out of the same allowance. The model was handed the question 71 characters
+        short, mid-word, with nothing saying so. Measured before the fix at every budget
+        below 8 071; whole at every budget after it.
+        """
+        from sage import config
+
+        question = "why did my job die? " + "x" * 7979
+        assert len(question) <= config.MAX_PROMPT_CHARS
+        before = config.HISTORY_CHAR_BUDGET
+        config.HISTORY_CHAR_BUDGET = budget
+        try:
+            built = history.build(
+                [{"role": "user", "text": question,
+                  "attachments": [Attachment("slurm-1.out", "text", "L" * 30000)]}],
+                "S",
+            )
+        finally:
+            config.HISTORY_CHAR_BUDGET = before
+        assert question in built[-1]["content"]
+
+    def test_a_stubbed_current_turn_keeps_the_question_at_its_head(self):
+        """`ATTACHMENT_FULL_TEXT_TURNS = 0` stubs the CURRENT turn, and the stub used to
+        put the question last — the end `_trim` cuts off.
+
+        Nothing caps how many files one turn may carry; `MAX_ATTACHED_BYTES` bounds their
+        bytes. 250 four-byte files with long names are 1 000 bytes against a 20 MB limit
+        and 61 750 characters of filenames, so the stub ran past the budget and the model
+        got 48 000 characters of names and no question at all — the failure
+        `TestTheQuestionSurvives` records, through the rendering it did not cover.
+        """
+        from sage import config
+
+        attachments = [
+            Attachment("n" * 240 + f"{index:03d}.log", "text", "tiny", size=4)
+            for index in range(250)
+        ]
+        before = config.ATTACHMENT_FULL_TEXT_TURNS
+        config.ATTACHMENT_FULL_TEXT_TURNS = 0
+        try:
+            built = history.build(
+                [{"role": "user", "text": self.QUESTION, "attachments": attachments}],
+                "SYSTEM",
+            )
+        finally:
+            config.ATTACHMENT_FULL_TEXT_TURNS = before
+        sent = built[-1]["content"]
+        assert sent.startswith(self.QUESTION)
+        # It still says a file was attached, and `_CUT_NOTE` still says the turn was
+        # cut. The closing half of that sentence is gone with the names it is cut in
+        # the middle of, which is the trade this ordering makes on purpose: a model
+        # missing "the content is omitted here" is guessing at a file; a model missing
+        # the question is guessing at everything.
+        assert "the user attached" in sent
+        assert sent.endswith(history._CUT_NOTE)
+        # The other half of the same fix: a floor measured on the stub grows with the
+        # filenames, which put it at 61 845 against a 48 000 budget.
+        frame = len(history._ASKS) + len(history._CUT_NOTE)
+        assert len(sent) <= max(
+            config.HISTORY_CHAR_BUDGET, config.MAX_PROMPT_CHARS + frame
+        )
+
+
+def _shot(name: str, kilobytes: int) -> Attachment:
+    """An image attachment of roughly the given size, as the uploader would hand it."""
+    return Attachment(
+        name, "image", "",
+        data=b"\x89PNG\r\n\x1a\n" + b"x" * (kilobytes * 1024),
+        mime="image/png",
+        size=kilobytes * 1024,
+    )
+
+
+def test_one_screenshot_is_always_sent_however_big_it_is():
+    """The common case, and the reason the ceiling never refuses the first image.
+
+    A reader who attaches one screenshot asked a question about that screenshot, and
+    an image silently dropped here answers a different question. An upload too big to
+    send is refused at the upload, with a message about uploading.
+    """
+    built = history.build([user("what is this error?", _shot("one.png", 64))],
+                          "S", vision=True)
+    parts = built[-1]["content"]
+    assert [part["type"] for part in parts] == ["text", "image_url"]
+    assert "image limit" not in parts[0]["text"]
+
+
+def test_the_images_past_the_request_ceiling_are_named_rather_than_dropped(
+    monkeypatch,
+):
+    """Nothing bounded the assembled request but the provider.
+
+    A data URL is deliberately uncounted against the character budget — see `_length`
+    — so 87 legal 240 KB images assembled a 26.6 MB request and the reader was shown
+    "this conversation got too long. Clear the chat", about pictures attached to the
+    question they had just asked. `config.MAX_IMAGE_REQUEST_BYTES` is the ceiling, and
+    what goes over it is named in the text so the model can say what it did not get.
+    """
+    monkeypatch.setattr(config, "MAX_IMAGE_REQUEST_BYTES", 120_000)
+    shots = [_shot(f"shot-{n}.png", 64) for n in range(1, 6)]
+    built = history.build([user("compare these", *shots)], "S", vision=True)
+    parts = built[-1]["content"]
+    sent = [part for part in parts if part["type"] == "image_url"]
+    spent = sum(len(part["image_url"]["url"]) for part in sent)
+    assert 0 < len(sent) < len(shots), "the ceiling sent all of them or none"
+    assert spent <= config.MAX_IMAGE_REQUEST_BYTES
+    # The ones that did not go are named, in the order they were attached, so the
+    # answer can say which picture it is not talking about.
+    note = parts[0]["text"]
+    assert "image limit" in note
+    for shot in shots[len(sent):]:
+        assert shot.filename in note
+    for shot in shots[: len(sent)]:
+        assert f"{shot.filename}." not in note.split("image limit")[-1]

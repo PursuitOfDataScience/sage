@@ -287,8 +287,12 @@ STATUS_LABEL = max(PROFILE.copy.status_phrases, key=len)
 # measures nothing that ships.
 STEP_NAMES = (tools_module.SearchDocs.label, tools_module.ReadDoc.label)
 # A real read, anchor and all — the profile's own example of one.
-STEP_PATH = PROFILE.identity.path_example
-# And the widest line the block can hold, which is where `turn.shown` clips. Past that
+# A section TITLE, which is what a read step shows — never the corpus path. The row
+# resolves the id before painting it, because a path is this repository's name for a
+# file and was reported on sight. Modelled as a title so the width measured here is the
+# width the app draws; `path_example` was shorter than a real label and under-measured.
+STEP_PATH = "Allocations and Service Units FAQ — Service Units (SUs)"
+# And the widest line the block can hold, which is where `progress.shown` clips. Past that
 # a value's own length stops mattering and short of it every length is narrower, so
 # this is the exact worst case rather than a guess at one. `x` in a monospace face is
 # an ordinary-width character, so the width it produces is honest.
@@ -389,7 +393,10 @@ body {{ margin: 0; background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme
 /* Streamlit's send button: its own size, in the flow, and a flex item of the box
    alongside the textarea. Modelled at its real size because the height of the box is
    what it decides — an unstyled button is small enough to hide the row it takes. */
-.stChatInput button {{ width: 36px; height: 36px; flex: 0 0 auto; border-radius: 8px;
+/* `:not(#think-btn)` for the same reason app.css excludes it: app.js injects the
+   pill as a button inside this element, and a blanket 36px square squashed it to
+   an icon under the send button. */
+.stChatInput button:not(#think-btn) {{ width: 36px; height: 36px; flex: 0 0 auto; border-radius: 8px;
    background: {'#3a3b46' if scheme == 'dark' else '#e6e6e9'}; color: inherit;
    border: 0; font: inherit; cursor: pointer; }}
 .stChatInput button p {{ margin: 0; }}
@@ -403,23 +410,15 @@ body {{ margin: 0; background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme
 .input-column .chat-actions {{ display: flex; justify-content: flex-end;
    align-items: center; padding: 4px 8px; }}
 .stChatMessage {{ display: flex; }}
-/* The overlay portal Streamlit renders popovers into, at the end of <body>. Modelled
-   with BOTH of the things Streamlit gives it, because the app's own rules only matter
-   in contrast to them:
-     - it is positioned (floating-ui anchors the panel to its trigger), so it takes no
-       space in the flow. Left static it added a slab to the end of the page and the
-       slack above the conversation was measured against it — 476px of dead space that
-       had nothing to do with the panel;
-     - the body has a light background and dark text of Streamlit's own. That is the
-       white slab a dark-mode reader saw, and a stylesheet that fails to override it
-       has to LOSE here, or this screen proves nothing. */
-#stFloatingOverlayPortal {{ position: fixed; right: 1rem; bottom: 8rem; z-index: {HOST_Z + 5}; }}
 /* The pill is a plain `st.button`, so Streamlit's own button styling reaches it and
    the base rule above is enough. Nothing is modelled for a popover any more: the
    model picker is gone and `st.popover` is used nowhere in the app, so a trigger, a
    chevron and a portalled panel were three shapes this replica carried for markup
    that no longer renders. `--picker-chars` went with them — the pill's label is one
-   word in both states, so nothing has to publish a width for it. */
+   word in both states, so nothing has to publish a width for it. The overlay portal
+   they were rendered into went the same way: a rule for `#stFloatingOverlayPortal` that
+   nothing put anything in, and a `portal` hook on `page()` that every call site passed
+   empty. */
 /* Streamlit's header: full width, transparent, and above everything. */
 [data-testid="stHeader"] {{ position: fixed; top: 0; left: 0; right: 0;
    height: {HOST_BAR}px; background: transparent; z-index: {HOST_Z}; }}
@@ -440,9 +439,11 @@ body {{ margin: 0; background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme
                     background: transparent; color: {FOREGROUNDS[scheme]}; }}
 /* Streamlit's running indicator, in the place and at the size it really renders: in the
    header's right-hand group, immediately left of the host's Share button, and only while
-   a script is running. It is modelled so the app's rule hiding it has something to hide
-   — the reader photographed this drawn on top of the theme toggle, and with nothing here
-   the hit test on that toggle had nothing to fail on. */
+   a script is running. It is modelled so the app's rule hiding it has something to hide,
+   and `STATUS_WIDGET` is what holds that rule — the reader photographed this drawn on top
+   of the theme toggle. NOT so the toggle's hit test can fail on it: app.js measures this
+   widget too, so a visible one moves the toggle aside rather than ending up underneath
+   it, and an overlap bound here could never have fired. */
 .status-widget {{ position: absolute; top: 16px; height: 28px;
                   right: {HOST_BAR_W}px; width: 92px;
                   background: {BACKGROUNDS[scheme]}; color: {FOREGROUNDS[scheme]}; }}
@@ -489,15 +490,16 @@ def chips(wrapped: bool = True) -> str:
             f"{buttons}</div>")
 
 
-def strip(clear: bool = True, wrapped: bool = True, pressed: bool = False) -> str:
-    """The model picker, in the bottom-right corner of the input box.
+def strip(wrapped: bool = True, pressed: bool = False) -> str:
+    """The Think pill, in the bottom-right corner of the input box.
 
-    Rendered last in the block, where app.py renders it, and pinned into the box by
-    app.css from a position app.js measures off the send button.
+    The model picker stood here until `#84` gave the corner to the pill, and the
+    function keeps its name for the reason `PICKER` keeps its own — see the note there.
+    What it renders is `#think-btn` and its `#think-state` marker.
 
-    `clear` is dead and kept only so the scenario table below need not be rewritten:
-    the 🗑️ that used to share this row is gone, because every chat in the panel has a
-    ✕ and New chat sits above them. Nothing renders for it either way.
+    Rendered last in the block, where app.py renders it, and parked inside the box by
+    app.css at `right: 52px` — arithmetic against the send button rather than a
+    measurement app.js publishes, which is what stopped the pill chasing the box.
 
     `wrapped` picks which of the two shapes `st.container(key=…)` produces: the
     `st-key-…` class on a wrapper *around* the vertical block, or on the vertical
@@ -507,28 +509,30 @@ def strip(clear: bool = True, wrapped: bool = True, pressed: bool = False) -> st
     170 renders here in a row. Both shapes are rendered now, so a rule that only
     reaches one of them fails the audit.
     """
-    trash = ""
-    # One control. There was a 🗑️ to its left and a caveat line left of that, then the
-    # model picker on its own, and now the Think pill — and with the first of those went
-    # the whole idea of a row under the input, which is where the vertical space this
-    # corner bought back came from.
     # The Think pill, in both states. `pressed` is what app.js sets and what app.css
     # paints the "on" fill off, so rendering only one of them would leave the filled
     # pill — a white label on maroon, the one contrast pair here that can fail — never
     # measured. The brain is inlined exactly as app.js injects it, inside the label,
     # because a 14px SVG with a right margin is part of what the pill has to fit.
-    controls = f"""
-    {trash}
-    <div class="st-key-think-{'on' if pressed else 'off'}" data-testid="stVerticalBlock">
-      <div class="element-container"><div class="stButton">
-        <button aria-pressed="{'true' if pressed else 'false'}" title="{THINK_HINT}"><p>{BRAIN}{THINK_LABEL}</p></button>
-      </div></div>
-    </div>"""
+    # The CLIPPED hook and nothing else. This used to build the visible control in this
+    # corner; the visible pill is `#think-btn`, which `page()` renders inside
+    # `[data-testid="stChatInput"]` because that is where app.js injects it. What
+    # Streamlit renders here is the wire, clipped to a pixel by app.css exactly as the
+    # stop hook and the uploader are.
+    #
+    # `st-key-think-on`/`-off` is the container key app.js reads the state from. Both
+    # shapes `st.container(key=…)` produces are still rendered, for the reason the
+    # docstring above gives.
+    hook = f"""
+    <div class="st-key-think-toggle element-container"><div class="stButton">
+      <button><p>{THINK_LABEL}</p></button>
+    </div></div>"""
+    key = f"st-key-think-{'on' if pressed else 'off'}"
     if wrapped:
-        return f"""<div class="st-key-composer-strip" data-testid="stVerticalBlockBorderWrapper">
- <div data-testid="stVerticalBlock">{controls}</div></div>"""
-    return f"""<div class="st-key-composer-strip" data-testid="stVerticalBlock">
- {controls}</div>"""
+        return f"""<div class="{key} st-key-composer-strip" data-testid="stVerticalBlockBorderWrapper">
+ <div data-testid="stVerticalBlock">{hook}</div></div>"""
+    return f"""<div class="{key} st-key-composer-strip" data-testid="stVerticalBlock">
+ {hook}</div>"""
 
 
 # Real citation labels, not short ones. A chip's text is `"{doc_title} — {heading}"`,
@@ -624,10 +628,17 @@ def answer_block(index: int, question: bool = True) -> str:
   batch job on Midway3, and what partition should I use?</div></div>
 </div></div></div>
 """ if question else ""
+    # The progress block, folded, on a FINISHED answer. It used to die with the turn
+    # that drew it; a stored message carries its steps now and `transcript.render_steps`
+    # draws it again, above the text where the live row already was, so nothing moves
+    # when the turn ends. Rendered here because that makes it part of every answer's
+    # geometry — inside the chat message, so the answer's top edge, the copy button's
+    # corner and the gap to the question above are all measured with it present.
     return asked + f"""
 <div class="st-key-answer-{index} element-container"><div class="stChatMessage">
  <div></div>
  <div class="stMarkdown"><div data-testid="stMarkdownContainer">
+  {folded_block(2)}
   <h2>Requesting a GPU</h2>
   <p>Add <code>--gres=gpu:1</code> to your script and submit to the
   <code>gpu</code> partition.{MARKER}</p>
@@ -804,10 +815,6 @@ STICKY_BAR = {"landing-flat", "answer", "long-chat", "attached-flat"}
 # every state and width still passes through the shape.
 DOC_SCROLL = {"doc-scroll"}
 
-# Which screens render the model picker's panel open, and in which of the two shapes
-# Streamlit has portalled it into. One screen each: the panel does not change with the
-# conversation, so states and widths are what matter, not the page behind it.
-
 # What each screen has waiting in the queue app.js keeps on the parent window. Only
 # one screen has anything: a queue exists only while an answer is arriving, and what is
 # under test is the row it draws at the end of the page.
@@ -944,7 +951,6 @@ IN_FLIGHT = in_flight(live_row())
 # tool and what it was given, and the live line under them. This is the one that grows
 # — 22px a step, measured — so it is where "does the newest thing on the page still
 # clear the composer" is asked of a block rather than of an answer.
-IN_FLIGHT_STEPS = in_flight(step_block(live=live_row(STEP_NAMES[1], STEP_PATH)))
 # And once the answer has started: the block is one summary line, with the steps behind
 # a disclosure the reader can open — during the turn, because it is the browser's own
 # control and a Streamlit one would be a rerun, and a rerun mid-turn aborts the answer.
@@ -953,8 +959,8 @@ IN_FLIGHT_FOLDED = in_flight(folded_block()) + STREAMING_ANSWER
 # The strip's container shape alternates across the screens, so both shapes are
 # audited at every width, in both themes, in every state.
 SCENARIOS = {
-    "landing": landing(wrapped=True) + strip(clear=False, wrapped=True),
-    "landing-flat": landing(wrapped=False) + strip(clear=False, wrapped=False),
+    "landing": landing(wrapped=True) + strip(wrapped=True),
+    "landing-flat": landing(wrapped=False) + strip(wrapped=False),
     "answer": CHAT_MARKER + answer_block(0) + strip(wrapped=False),
     # The same conversation with its question reopened for editing. The one screen
     # where a question is not a bubble, and the one the replica could not draw when
@@ -995,9 +1001,10 @@ SCENARIOS = {
     # reason the `queued` screen has them: the bound that matters here — the newest
     # thing on the page is under the composer — can only fire on a page long enough to
     # scroll, and a question with six status lines under it does not fill a window.
-    "in-flight-steps": CHAT_MARKER
-    + "".join(answer_block(i) for i in range(3))
-    + IN_FLIGHT_STEPS + strip(wrapped=False),
+    # No `in-flight-steps` screen, and its absence is the change: one sweeping row is
+    # on screen for the whole turn and the steps arrive folded when the answer does.
+    # `in-flight` above IS that screen; the folded shape is measured on every
+    # `answer_block` and on `in-flight-folded` below.
     # And once the answer has started arriving: one summary line where the block was,
     # opened again, with the answer underneath it.
     "in-flight-folded": CHAT_MARKER
@@ -1058,9 +1065,11 @@ LINE_LIMITS = {
     **{f".st-key-example-card-{i} button p": 1 for i in range(6)},
 }
 
-# Line budgets that apply BELOW 641px too, where the general gate does not. Empty
-# since the caveat line — the one element that had to hold at a phone width — was
-# removed from under the input.
+# Line budgets that apply BELOW 641px too, where the general gate does not. All six
+# entries are the progress block: the status line, both ends of the step column and the
+# arguments on them, and the line the whole block folds into. A phone is where that block
+# is worst — it is the only thing on the page while a reader waits, so a row it gains is
+# the answer moving down underneath them — which is why the 641px gate cannot have them.
 NARROW_LINE_LIMITS: dict[str, int] = {
     # The status line, at a phone width too — this is the one place the general gate
     # would be wrong to let go. It is a progress cue over an empty answer, so a second
@@ -1075,10 +1084,19 @@ NARROW_LINE_LIMITS: dict[str, int] = {
     # check that the ellipsis is doing it. Both ends of the column: the first row
     # carries the widest argument the app can produce and the last is the one nearest
     # the composer.
-    ".status-step": 1,
-    "last:.status-step": 1,
-    ".status-arg": 1,
-    "last:.status-arg": 1,
+    # THREE lines, not one. The single-line rule was held by an ellipsis, on the
+    # reasoning that a step is a progress cue over an empty answer. That survives for
+    # `.status-text` above and did not survive the value: these are only drawn in the
+    # folded block now, after the answer, and the argument is a sentence since the row
+    # started resolving ids to titles — the ellipsis cut it where the useful half began.
+    # Four rather than unbounded, so a column that has stopped being constrained at all
+    # is still caught. Four and not three because `config.STATUS_ARGUMENT_CHARS` is 160
+    # — the length that lets the longest real section title through whole — and an
+    # unbroken run of that wraps to about four lines at 500px. One line at 1440.
+    ".status-step": 4,
+    "last:.status-step": 4,
+    ".status-arg": 4,
+    "last:.status-arg": 4,
     # The line the whole block folds into. Two words and a number; a second line here
     # means something has gone wrong with the disclosure marker.
     ".status-summary": 1,
@@ -1340,7 +1358,6 @@ function snapshot() {
                       // separately because a failure where the two disagree is a
                       // different bug from either of them being wrong.
                       band: root.getPropertyValue('--bar-band').trim(),
-                      pickRight: root.getPropertyValue('--pick-right').trim(),
                       fill: root.getPropertyValue('--fill').trim()},
            // Did the app's own faces actually arrive? Every width, wrap and overlap
            // bound below is a measurement of a string, and a string measured in
@@ -1366,18 +1383,18 @@ setTimeout(snapshot, 700);
 # The Think pill. Named because three checks below treat it specially: collapsed
 # width, whether it is inside the strip pinned for it, and reachability. It kept the
 # name `PICKER` from the model picker that stood in this corner before it, for the
-# same reason `.st-key-composer-strip` and `--pick-right` kept theirs — the selector
+# same reason `.st-key-composer-strip` kept its entry for a while — the selector
 # table, the checks and the fixture would all have to move to say nothing new.
-PICKER = '.st-key-composer-strip button'
+PICKER = "#think-btn"
 # The strip the controls sit in, and the input it must never cover.
-STRIP = ".st-key-composer-strip"
+STRIP = "#think-btn"
 INPUT = ".stChatInput textarea"
 # The bordered box around the textarea, and the button that sends. Both measured so
 # the space between the end of the text and the bottom of the box can be: in the flow
 # the button takes a row of its own once the text passes one line, and that row is a
 # band of nothing under what was typed.
 INPUT_BOX = ".stChatInput > div"
-SEND = '.stChatInput button:not(#paperclip-btn):not(#stop-btn)'
+SEND = '.stChatInput button:not(#paperclip-btn):not(#stop-btn):not(#think-btn)'
 # The square app.js puts in the send button's corner while an answer generates, and
 # the pencil it puts in the gutter beside each question. Both are injected rather
 # than rendered by Streamlit, both are the only way to reach a thing the app can now
@@ -1398,6 +1415,10 @@ EDITOR = '[class*="st-key-edit-box-"]'
 # footprint: whatever the page reserves at its end has to cover them too.
 CHIPS = ".st-key-attachments"
 THEME_TOGGLE = "#theme-toggle"
+# Streamlit's running indicator, which mounts in that same corner for the length of every
+# turn and which app.css hides outright. Named because it is the one element in this table
+# measured to be ABSENT from the page rather than to be somewhere on it.
+STATUS_WIDGET = '[data-testid="stStatusWidget"]'
 # The block holding whatever the reader sent while an answer was still arriving. Named
 # because it is measured as the end of the conversation as well as measured in itself.
 QUEUED_NOTE = ".queued-note"
@@ -1446,10 +1467,11 @@ SELECTORS = [
     # underneath it, and the fix is a z-index that outranks the chrome. Measured AND
     # hit-tested, because "on screen" and "clickable" came apart there once before.
     THEME_TOGGLE, '[data-testid="stExpandSidebarButton"]', "#host-bar",
-    ".st-key-composer-strip button",
+    # …and Streamlit's own indicator in the same corner, measured for the rule that
+    # hides it rather than for where it sits. See the check in `audit`.
+    STATUS_WIDGET,
     # The rightmost control in the strip, so the row is measured end to end: with
     # a model name in it, it is the widest thing under the input.
-    "last:.st-key-composer-strip button",
     PICKER,
     # The error card's actions. The switch one carries a whole model name, so it
     # is the widest button in the app and the first thing to overflow at 360px.
@@ -1462,7 +1484,7 @@ SELECTORS = [
 # it reserves: if the two measurements ever disagree, the strip lands on the
 # textarea, and "the box will not take a click" is the worst bug in the app.
 INTERACTIVE = {
-    PICKER, ".st-key-composer-strip button", "last:.st-key-composer-strip button", INPUT,
+    PICKER, INPUT,
     SEND, STOP, THEME_TOGGLE,
     # The ✕ on a queued question. It is the only way to take one back, so a queue with
     # it painted over or under the composer is a queue that sends the question the
@@ -1477,7 +1499,7 @@ INTERACTIVE = {
 # everywhere, since the row is right-aligned and it belongs in the corner. So all
 # three selectors that can reach it are exempt from the overflow check; the emoji
 # button they also reach has nothing to ellipse.
-ELLIPSIS_OK = {PICKER, ".st-key-composer-strip button", "last:.st-key-composer-strip button",
+ELLIPSIS_OK = {PICKER,
                # A query or a path too long for the window is ellipsed on purpose, and
                # an ellipsed line reports scrollWidth past clientWidth — that reading
                # IS the feature working. What must not overflow is the row holding it,
@@ -1538,10 +1560,12 @@ MAX_CURSOR_GAP = 16
 # 15px higher up, so the offset was measuring from the wrong edge. Half a line is the
 # most that can pass for level.
 MAX_BUTTON_DROP = 6
-# Empty room allowed inside the model picker's trigger, past the name and the chevron.
-# The button is a fixed width, so this is the difference between a width chosen for the
-# name and one chosen at random: at a flat 15rem it was 104px of nothing beside a name
-# that needed 136 in the app, and 59px of it here.
+# Empty room allowed inside the control in that corner, past its label. Written for the
+# model picker's trigger, whose width was fixed and whose chevron had to fit: at a flat
+# 15rem it was 104px of nothing beside a name that needed 136 in the app, and 59px of it
+# here. It still binds the Think pill, which has no width rule at all — one word from
+# the profile, the same word in both states — so what it now catches is padding that
+# grew, not a width chosen at random.
 #
 # Not zero, because the width comes out of `ch` units and a "0" is wider than the
 # lowercase letters model ids are mostly made of — about 10% in a proportional face.
@@ -2276,7 +2300,8 @@ def check_drop(width, height) -> tuple[list[str], int]:
 def page(body: str, scheme: str, scroll: bool, generating: bool = False,
          pin: bool = False, script: bool = True, sticky: bool = False,
          doc_scroll: bool = False, typed: bool = False, landing: bool = False,
-         column_input: bool = False, portal: str = "", queued=(),
+         column_input: bool = False, queued=(),
+         think_on: bool = False,
          driver: str = "") -> str:
     """The replica, with or without app.js, and with the bar pinned either way.
 
@@ -2300,10 +2325,6 @@ def page(body: str, scheme: str, scroll: bool, generating: bool = False,
 
     `typed` fills the input with a paragraph instead of leaving it on its placeholder.
     An empty box is one line tall and hides everything about how a full one behaves.
-
-    `portal` is markup appended at the very end of `<body>`, where Streamlit renders
-    overlays. Anything in there is outside every container this app styles, which is
-    the whole reason it needs modelling separately.
 
     `window.__sageWatched` is set for any body with a conversation in it, because in
     the app there is no other kind: a conversation only ever appears by growing in
@@ -2344,6 +2365,29 @@ def page(body: str, scheme: str, scroll: bool, generating: bool = False,
            # never fired here, so neither the button nor the `:not(#paperclip-btn)`
            # exclusion that keeps it out of the send button's corner was ever rendered.
            '<button id="paperclip-btn" type="button">📎</button>'
+           # The Think pill, which app.js injects into this same element. Modelled here
+           # rather than as a fixed strip outside the bar, because that is what it used
+           # to be and a fixed control chasing a measurement of the box is the bug that
+           # moved it in. Both states: the "on" fill is white on `--brand`, the one
+           # contrast pair in this band that can fail.
+           + ('<button id="think-btn" type="button" title="' + THINK_HINT + '"'
+              + (' data-on="true"' if think_on else "")
+              + '>' + BRAIN + '<span>' + THINK_LABEL + '</span></button>')
+           # And the MARKER, which `composer.render_think_toggle` draws and which is
+           # what tells app.js the control was drawn at all. Without it this replica
+           # rendered a pill that app.js DELETED on its first pass — `addThinkButton`
+           # returns early on a missing marker and removes anything already injected,
+           # which is right in the app (a failover onto a provider that takes no
+           # `reasoning` must not leave a pill with no widget behind it) and here meant
+           # six bounds passing on an element that was not on the page: its width, its
+           # place in the band, its clearance from the send button, its position below
+           # the text, the white-on-maroon "on" fill and both reachability checks. A
+           # check that cannot fail reads as a pass. `tests/test_think_pill_is_measured`
+           # holds this from the outside.
+           + '<div id="think-state" data-on="'
+           + ("1" if think_on else "0")
+           + '" data-label="' + THINK_LABEL + '" data-hint="' + THINK_HINT
+           + '" hidden></div>'
            # Two placeholders, as app.py has them: the landing screen names the
            # subject because nothing else on that page does, and every screen with an
            # answer on it asks for a follow-up instead.
@@ -2424,7 +2468,6 @@ def page(body: str, scheme: str, scroll: bool, generating: bool = False,
     {bar if sticky else ''}</div>
   {'' if sticky else bar}</div>
 {'<div id="processing-signal" hidden></div>' if generating else ''}
-{portal}
 <script>window.__scrollBottom = {str(scroll).lower()}; window.__pinLast = {str(pin).lower()};
 window.__sageWatched = {str('chat-container' in body).lower()};
 window.__sageQueue = {json.dumps(list(queued))};</script>
@@ -2510,7 +2553,24 @@ def render(name, html, width, height, shot=False, budget=1500):
     if shot:
         cmd.append(f"--screenshot={os.path.join(HERE, name + '.png')}")
     cmd += ["--dump-dom", f"file://{path}"]
-    out = subprocess.run(cmd, capture_output=True, text=True, timeout=120).stdout
+    # Retried once, and a second timeout is this render's failure rather than the
+    # run's. A starved Chromium is not a layout bug: measured standalone, the page
+    # that blew the 120s limit rendered in 0.56s, and what was different was a
+    # machine with two Streamlit servers indexing and a browser driving them. The
+    # cost of treating that as fatal is what makes a check stop being run — the
+    # exception came out of `main()`'s render loop, so ~600 measurements already
+    # taken went with it and the report said nothing about any of them.
+    for attempt in (1, 2):
+        try:
+            out = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=120
+            ).stdout
+            break
+        except subprocess.TimeoutExpired:
+            if attempt == 2:
+                print(f"  {name}: chrome timed out twice; skipped", flush=True)
+                return None
+            print(f"  {name}: chrome timed out, retrying", flush=True)
     start, end = out.find("<title>"), out.find("</title>")
     if start == -1:
         return None
@@ -2759,6 +2819,35 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
             f"Share on the deployment"
         )
 
+    # Streamlit's own running indicator mounts in that corner for the length of every
+    # turn, and app.css hides it outright. Held here because nothing else in the repo
+    # can hold it: `palette_check` reads colour-bearing declarations and `display: none`
+    # is not one, and no test reads the stylesheet for it. Measured in the running app on
+    # 1.54 before this was written, because the alternative was deleting the markup as
+    # something the app never renders: the widget is mounted for the whole of a turn
+    # wherever the header's right-hand group is shown AT ALL, and `display: none` is the
+    # only reason it has no rectangle. Locally that group is not rendered — `minimal`
+    # plus no host items — which is exactly the same reason `#host-bar` and Share are
+    # invisible here and present on the deployment, and this replica models the
+    # deployment.
+    #
+    # Held as "no rectangle" rather than as an overlap with the toggle. app.js measures
+    # this widget too, so a visible one pushes the toggle aside instead of being sat on
+    # and an overlap could never fire; what a visible one costs is the reservation
+    # growing when it mounts and shrinking when it goes, i.e. the toggle moving twice a
+    # turn, which is what was reported. `visibility: hidden` fails this on purpose: it
+    # is still a rectangle, and a rectangle is all app.js reads.
+    indicator = els.get(STATUS_WIDGET)
+    if indicator and (indicator["right"] > indicator["left"]
+                      or indicator["bottom"] > indicator["top"]):
+        problems.append(
+            f"{where}: Streamlit's running indicator paints "
+            f"{indicator['right'] - indicator['left']}x"
+            f"{indicator['bottom'] - indicator['top']}px in the theme toggle's corner — "
+            f"app.css is meant to hide it, and app.js reserves room for whatever is in "
+            f"that group, so one that mounts and unmounts moves the toggle twice a turn"
+        )
+
     bar = els.get('[data-testid="stBottomBlockContainer"]')
     # The top of everything pinned at the bottom, not just of the bar. The attachment
     # chips sit above the bar and are `fixed` too, so a gap measured to the bar's top
@@ -2922,7 +3011,7 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
             out.append(f"{round(box['left'] - picker['left'])}px past its left edge")
         if out:
             problems.append(
-                f"{where}: the model picker is outside the input box — "
+                f"{where}: the Think pill is outside the input box — "
                 + ", ".join(out)
             )
     # And it must share the band with the other two controls rather than sit on either.
@@ -3527,70 +3616,93 @@ def audit_citations(data, where: str) -> list[str]:
     return problems
 
 
+# Every viewport the run measures. The narrowest is Chromium's own floor rather than a
+# phone's width, because a headless window will not go below it and a number it
+# silently ignores is worse than an honest one: this list said 414px for a year and
+# rendered 500px. 500 is still under the 640px mobile breakpoint, so the mobile rules
+# are exercised — what is not covered is a real 414px screen, and saying so is the
+# point. `None` is that floor, filled in from `calibrate()` by `main`.
+#
+# 660 is here because it is the tightest width for the starter cards: two columns, just
+# above the 640px breakpoint that would stack them, so the longest label has the least
+# room it ever gets. Without it the one-line rule was unenforced across the whole
+# 641-760 band.
+WIDTHS = [(1440, 1080), (1263, 900), (966, 626), (768, 900), (660, 900),
+          (None, PHONE_H)]
+
+SCHEMES = ("dark", "light")
+
+
+def states_for(scenario: str) -> list[str]:
+    """Which frames of one screen are worth rendering.
+
+    At module level rather than inside `main`'s loop so the size of the run is a fact
+    this file states rather than one a reader counts: `RENDER_COUNT` below is built from
+    it, and `tests/test_documented_numbers.py` holds the documented figure against that.
+    The number had gone stale in two places at once — `CLAUDE.md` said 684 and `EVAL.md`
+    said 660, and nothing could tell you which was right without reading this loop.
+    """
+    # the first frame before app.js has measured the bar, at rest,
+    # scrolled to the bottom, mid-generation (app.js pinning the
+    # question), and just-finished (app.js closing the dead space the
+    # pin left behind).
+    if scenario.startswith("landing"):
+        return ["unmeasured", "rest"]   # no turn to be in the middle of
+    elif scenario == "think-on":
+        # The pill is the same whatever the conversation behind it is
+        # doing, so scrolling and generating would re-measure one control.
+        return ["unmeasured", "rest"]
+    elif scenario.startswith("composing"):
+        # What these two are for is the inside of the input box, and that
+        # is the same whether the page is scrolled or an answer is in
+        # flight. Three more states each would be 60 renders and a minute
+        # of CI to re-measure an identical box.
+        return ["unmeasured", "rest"]
+    elif scenario == "in-flight":
+        return ["generating"]           # it *is* the mid-turn screen
+    elif scenario.startswith("in-flight-"):
+        # Mid-turn, which is when the progress block exists, and scrolled
+        # to the end, which is the state its clearance bound fires in:
+        # `newest` counts the block's last step, so this is what would
+        # catch a sixth line hiding under the composer. Both are real
+        # frames — the block is on the page for the whole tool loop and
+        # for as long as the answer takes to arrive after it.
+        return ["generating", "scrolled"]
+    elif scenario == "queued":
+        # Mid-turn, which is when a queue exists, and scrolled to the end,
+        # which is the state the clearance bound in `audit` fires in:
+        # `newest` counts the queued row, so this is what would catch it
+        # hiding under the composer. Both are real frames — the row also
+        # exists for the moment between the turn ending and the queue
+        # draining, and nothing has scrolled it away by then.
+        return ["generating", "scrolled"]
+    elif scenario == "wide-answer":
+        # What this screen is for is the width of what is inside an
+        # answer, and that does not change with the scroll position or
+        # with a turn being in flight. Two states, for the same reason
+        # `think-on` renders two: one control, measured once.
+        return ["unmeasured", "rest"]
+    return ["unmeasured", "rest", "scrolled", "generating", "settled"]
+
+
+#: How many renders one full run performs. Stated, not counted by hand.
+RENDER_COUNT = (
+    sum(len(states_for(name)) for name in SCENARIOS) * len(SCHEMES) * len(WIDTHS)
+)
+
+
 def main() -> int:
     global VIEWPORT
     verbose = "-v" in sys.argv
     VIEWPORT = calibrate()
-    # The narrowest entry is Chromium's own floor rather than a phone's width, because
-    # a headless window will not go below it and a number it silently ignores is worse
-    # than an honest one: this list said 414px for a year and rendered 500px. 500 is
-    # still under the 640px mobile breakpoint, so the mobile rules are exercised — what
-    # is not covered is a real 414px screen, and saying so is the point.
-    # 660 is here because it is the tightest width for the starter cards: two
-    # columns, just above the 640px breakpoint that would stack them, so the
-    # longest label has the least room it ever gets. Without it the one-line rule
-    # was unenforced across the whole 641-760 band.
-    widths = [(1440, 1080), (1263, 900), (966, 626), (768, 900), (660, 900),
-              (VIEWPORT["min_w"], PHONE_H)]
+    widths = [(w if w is not None else VIEWPORT["min_w"], h) for w, h in WIDTHS]
     failures: list[str] = []
     checked = 0
 
     for scenario, body in SCENARIOS.items():
         for scheme in ("dark", "light"):
             for width, height in widths:
-                # the first frame before app.js has measured the bar, at rest,
-                # scrolled to the bottom, mid-generation (app.js pinning the
-                # question), and just-finished (app.js closing the dead space the
-                # pin left behind).
-                if scenario.startswith("landing"):
-                    states = ["unmeasured", "rest"]   # no turn to be in the middle of
-                elif scenario == "think-on":
-                    # The pill is the same whatever the conversation behind it is
-                    # doing, so scrolling and generating would re-measure one control.
-                    states = ["unmeasured", "rest"]
-                elif scenario.startswith("composing"):
-                    # What these two are for is the inside of the input box, and that
-                    # is the same whether the page is scrolled or an answer is in
-                    # flight. Three more states each would be 60 renders and a minute
-                    # of CI to re-measure an identical box.
-                    states = ["unmeasured", "rest"]
-                elif scenario == "in-flight":
-                    states = ["generating"]           # it *is* the mid-turn screen
-                elif scenario.startswith("in-flight-"):
-                    # Mid-turn, which is when the progress block exists, and scrolled
-                    # to the end, which is the state its clearance bound fires in:
-                    # `newest` counts the block's last step, so this is what would
-                    # catch a sixth line hiding under the composer. Both are real
-                    # frames — the block is on the page for the whole tool loop and
-                    # for as long as the answer takes to arrive after it.
-                    states = ["generating", "scrolled"]
-                elif scenario == "queued":
-                    # Mid-turn, which is when a queue exists, and scrolled to the end,
-                    # which is the state the clearance bound below actually fires in:
-                    # `newest` counts the queued row, so this is what would catch it
-                    # hiding under the composer. Both are real frames — the row also
-                    # exists for the moment between the turn ending and the queue
-                    # draining, and nothing has scrolled it away by then.
-                    states = ["generating", "scrolled"]
-                elif scenario == "wide-answer":
-                    # What this screen is for is the width of what is inside an
-                    # answer, and that does not change with the scroll position or
-                    # with a turn being in flight. Two states, for the same reason
-                    # the picker renders two.
-                    states = ["unmeasured", "rest"]
-                else:
-                    states = ["unmeasured", "rest", "scrolled", "generating",
-                              "settled"]
+                states = states_for(scenario)
                 for state in states:
                     suffix = "" if state == "rest" else f"-{state}"
                     name = f"{scenario}-{scheme}-{width}{suffix}"
@@ -3603,8 +3715,7 @@ def main() -> int:
                                 typed=scenario in TYPED_INPUT,
                                 landing=scenario.startswith("landing"),
                                 column_input=scenario in COLUMN_INPUT,
-                                queued=QUEUED.get(scenario, ()),
-                                portal="")
+                                queued=QUEUED.get(scenario, ()))
                     data = render(name, html, width, height,
                                   shot=(scheme == "dark" and width == 1263
                                         and state == "rest"))

@@ -20,7 +20,7 @@ failure mode as running `palette_check.py --update` to silence a repaint.
 ```bash
 python tools/scorecard.py                     # seconds, no network
 python tools/scorecard.py --with-suite        # + ruff and pytest
-python tools/scorecard.py --with-layout       # + the 660-render harness (~7 min)
+python tools/scorecard.py --with-layout       # + the 684-render harness (~8 min)
 python tools/scorecard.py --save report/card.json --against report/card-prev.json
 ```
 
@@ -50,7 +50,7 @@ already worked this way and it is the right instinct.
 | `tools/agent_bench.py --toolless` | B | a key | the same phases down the grounded path |
 | `tools/agent_bench.py --meta` | B | a key | asked about itself: does it name its own machinery? |
 | `tools/scorecard.py` | all | — | the card, and the diff against the last one |
-| `tools/render_check.py` | UI | Chrome | 660 renders (predates this) |
+| `tools/render_check.py` | UI | Chrome | 684 renders = 17 scenarios x 2 schemes x 6 widths, minus the states a scenario skips (predates this) |
 | `tools/palette_check.py` | UI | — | declared colours against the baseline (predates this) |
 
 `tests/test_documented_numbers.py` closes the loop on this file: the set sizes and the
@@ -116,7 +116,11 @@ synonym table** names is vocabulary the deployment declared — `scavenge` is in
 groups and in none of its pages, because the documentation says preemptible.
 
 Result on 46 labelled negatives and 79 answerable questions: **caveat recall 36.8% →
-87.0%, over-refusal unchanged at 2.5%, recall@5 unchanged at 98.5%.** `tests/test_retrieval.py::TestNamingAnUnknownThing` pins every signal in both
+89.1%, over-refusal unchanged at 2.5%, recall@5 unchanged at 98.5%.** (87.0% of that
+was this rule; the last 2.1pp came later, from length-normalising the title field —
+see `retrieval.bm25`. The gate's own leak list changed membership rather than only
+shrinking: two institutional-statistics questions now caveat correctly and one new
+leak appeared, net 6 → 5, recorded in `tests/test_gate_eval.py`.) `tests/test_retrieval.py::TestNamingAnUnknownThing` pins every signal in both
 directions — one test per rule, and one per case it must not fire on.
 
 ### And what it changed about the answers — withdrawn, because the instrument was wrong
@@ -189,7 +193,7 @@ env -u MISTRAL_API_KEY python tools/agent_bench.py --models all --limit 8 --nega
 ```
 
 **One provider per run.** Unsetting the paid key means a benchmark cannot spend money,
-and it keeps the lineup to one row of the picker.
+and it keeps the lineup to the models that one provider serves.
 
 It is no longer what stops a row being scored on another model's answer, though: the app
 walks its whole lineup when a model fails in a way another model might not, so

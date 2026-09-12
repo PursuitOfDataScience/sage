@@ -15,6 +15,30 @@ Two bugs shipped for want of this check, both silent:
   cited to `software/index/`, which is a 404. mkdocs with `use_directory_urls`
   publishes `<dir>/index.md` at `<dir>/`.
 
+Two more, both found by the same question asked a third time (2026-09-12):
+
+* mkdocs **deduplicates a repeated heading** — `alphafold.md` carries `AlphaFold 2`
+  three times and the site publishes `#alphafold-2`, `#alphafold-2_1` and
+  `#alphafold-2_2`. Every chunk this app builds for that heading links to the bare
+  slug, so two sections of that page are unreachable from any citation and a reader
+  who clicks the third one lands on the first. Nothing here could see it: the anchor
+  exists, so the membership test passes. `DUPLICATED` reports it, and it counts
+  against the exit status, because a citation that opens the right page at the wrong
+  place is the exact failure this file was written for. The suffix is the chunker's
+  to assign — `readers.read_markdown` builds the anchor from `slugify(heading)` alone
+  and would need mkdocs' `unique()` rule, `_1` from the second occurrence on.
+* a page that **301s** is the docs having moved, not our slug being wrong, and the
+  two are indistinguishable from a `BROKEN` line. Redirects are still followed, but
+  the final URL is now compared against the one we publish and reported as `MOVED`.
+
+What it does NOT cover, so the next reader does not have to measure it again:
+sources whose scheme is `embedded` (the 55 scraped `web/*.txt` pages, 43 distinct
+URLs) are skipped entirely — that scheme drops the anchor, so those pages are never
+fetched and a dead scrape URL is nobody's finding here. Chunks with no heading are
+skipped too (7 of 489 in the docs tree). An anchor counts as present if ANY element
+on the page carries that id, not only an `<h1>`–`<h6>`; that is deliberate, and as of
+today no anchor depends on it — all 479 that resolve resolve to a real heading id.
+
 Network-bound and therefore not part of the test suite: run it after touching
 `slugify`, `plain_heading` or a URL scheme, and when the corpus is refreshed.
 
@@ -57,19 +81,54 @@ from sage import links, profile  # noqa: E402
 _ID = re.compile(r'\sid="([^"]+)"')
 
 
+# mkdocs' own duplicate suffix for a heading that repeats on one page. Python-Markdown's
+# `toc.unique()` appends `_1` from the second occurrence on — an underscore, where this
+# app's chunk ids use `-1`, which is why the two cannot be compared as strings.
+_SUFFIX = re.compile(r"_\d+$")
+
+
 def _fetch(url: str, timeout: float):
-    """(ids, status) for one page; ids is None when it could not be read."""
+    """(ids, status, final_url) for one page; ids is None when it could not be read."""
     import httpx
 
     try:
         # Redirects are followed so a base-URL change is a *warning* here rather than
         # a wall of failures: what this tool is asking is "does the anchor exist".
+        # Where it landed is returned as well, because a page that moved is the
+        # documentation having been reorganised and not this app slugifying wrongly,
+        # and a `BROKEN` line cannot tell those apart.
         response = httpx.get(url, follow_redirects=True, timeout=timeout)
     except Exception as exc:  # noqa: BLE001 — any network failure reads the same
-        return None, repr(exc)[:80]
+        return None, repr(exc)[:80], url
     if response.status_code != 200:
-        return None, str(response.status_code)
-    return set(_ID.findall(response.text)), "200"
+        return None, str(response.status_code), str(response.url)
+    return set(_ID.findall(response.text)), "200", str(response.url)
+
+
+def _deduplicated(anchors, ids: set[str]) -> list[tuple[str, list[str], list[str]]]:
+    """Anchors mkdocs disambiguated that this app does not cite.
+
+    The site's second `AlphaFold 2` is `#alphafold-2_1`; ours was `#alphafold-2` for
+    every occurrence, so two sections of that page were unreachable from any citation
+    and a reader clicking the third landed on the first. Nothing here could see it —
+    the anchor exists, so the membership test passes.
+
+    The finding is what the page publishes MINUS what we cite, not the mere presence
+    of `<anchor>_1`. That was this function's first form and it was right for exactly
+    as long as the reader always cited the bare slug: `corpus.readers` now numbers
+    repeated headings the way `toc.unique` does, and a check that went on reporting a
+    page it had already got right would have to be ignored to be lived with.
+    """
+    cited = set(dict.fromkeys(anchors))
+    found: list[tuple[str, list[str], list[str]]] = []
+    for anchor in sorted(cited):
+        extra = sorted(
+            i for i in ids if _SUFFIX.sub("", i) == anchor and i != anchor
+        )
+        missing = [i for i in extra if i not in cited]
+        if missing:
+            found.append((anchor, extra, missing))
+    return found
 
 
 _CITATION = re.compile(r"\]\(\s*([^)\s]+?)\s*\)")
@@ -154,9 +213,11 @@ def main() -> int:
             zip(pages, pool.map(lambda u: _fetch(u, args.timeout), pages), strict=True)
         )
 
-    unreachable, broken, checked = [], [], 0
+    unreachable, broken, duplicated, moved, checked = [], [], [], [], 0
     for base in pages:
-        ids, status = fetched[base]
+        ids, status, final = fetched[base]
+        if final.rstrip("/") != base.rstrip("/"):
+            moved.append((base, final))
         if ids is None:
             unreachable.append((base, status))
             continue
@@ -164,17 +225,32 @@ def main() -> int:
             checked += 1
             if anchor not in ids:
                 broken.append((path, heading, anchor))
+        for anchor, extra, missing in _deduplicated(
+            (a for _, _, a in wanted[base]), ids
+        ):
+            where = next(p for p, _, a in wanted[base] if a == anchor)
+            duplicated.append((where, anchor, extra, missing))
 
+    for base, final in moved:
+        print(f"  MOVED  {base}\n     now: {final}")
     for base, status in unreachable:
         print(f"  UNREACHABLE ({status})  {base}")
     for path, heading, anchor in broken:
         print(f"  BROKEN  {path}\n     heading: {heading[:80]}\n     anchor : #{anchor}")
+    for path, anchor, extra, missing in duplicated:
+        published = ", ".join(f"#{i}" for i in extra)
+        never = ", ".join(f"#{i}" for i in missing)
+        print(
+            f"  DUPLICATED  {path}\n     site has: #{anchor}, {published}"
+            f"\n     uncited : {never}"
+        )
 
     print(
         f"\nchecked {checked} anchors on {len(pages) - len(unreachable)} pages: "
-        f"{len(broken)} broken, {len(unreachable)} pages unreachable"
+        f"{len(broken)} broken, {len(duplicated)} deduplicated by mkdocs, "
+        f"{len(unreachable)} pages unreachable, {len(moved)} pages moved"
     )
-    return 1 if broken or unreachable else 0
+    return 1 if broken or duplicated or unreachable else 0
 
 
 if __name__ == "__main__":

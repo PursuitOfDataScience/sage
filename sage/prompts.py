@@ -150,9 +150,14 @@ def last_round_instruction(identity: Identity | None = None) -> str:
     keywords and search again", has no stopping condition, and a fact that is recorded in
     one clause looks like a miss for as long as you keep looking for a page about it.
 
-    So the last request goes out with the tools withdrawn, and this says why — the same
-    move, for the same reason, as `grounded_instruction`: with nothing left to call, the
-    only thing a model can do is answer. The partial-coverage sentence matters as much as
+    So the last request forbids a tool call, and this says why — the same move, for the
+    same reason, as `grounded_instruction`: with nothing left to call, the only thing a
+    model can do is answer. (It used to WITHDRAW the schemas to do that; it now sends
+    them with `tool_choice: "none"`, because a request carrying no tools is the only
+    kind a free router can hand to a model that does not support the parameter. Same
+    stopping condition; see the call site in `ui.turn`. This instruction is unchanged by
+    that, and it has to be: the choice is a fact about the request, and the model is
+    owed a sentence about why the thing it did last round is no longer available.) The partial-coverage sentence matters as much as
     the rest, because the honest reply to that question is three answers and one gap, and
     a model that believes it has failed writes nothing at all.
     """

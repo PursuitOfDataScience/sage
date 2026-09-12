@@ -418,7 +418,18 @@ def review(entry: ProviderEntry, catalogue: list[str], ledger: dict) -> dict:
     free = [model_id for model_id in catalogue if is_free(entry, model_id)]
     known_paid = set(slot["paid"])
 
-    appeared = [model_id for model_id in free if model_id not in listed]
+    # Not a name this deployment has already DENIED. `deny` and `models` answer
+    # different questions — "does it work" against "what to fall back on if discovery
+    # fails" — so a denied name is legitimately absent from `models`, and reporting it
+    # as newly appeared invites `--update` to add it back. Measured against the live
+    # catalogue: a dispatch today would have appended `muse-spark-1.3-contributor-free`,
+    # denied by hand earlier the same day for answering 500 to everything, to the
+    # fallback list of the provider that is refusing to offer it.
+    denied = set(entry.deny)
+    appeared = [
+        model_id for model_id in free
+        if model_id not in listed and model_id not in denied
+    ]
     vanished = [model_id for model_id in listed if model_id not in catalogue]
 
     # Every served name the rule calls not-free and the ledger has not already priced.
@@ -641,18 +652,24 @@ def retire_models(text: str, provider: str, removals: list[str]) -> str:
 def set_deny(text: str, provider: str, names: list[str]) -> str:
     """Rewrite one provider's `deny = [...]` to exactly `names`.
 
-    Wholesale rather than surgical, because unlike `models` this array is machine
-    state: it has no ordering to preserve — nothing ranks off it — and no per-entry
-    comments to orphan, so the simplest edit is also the safest one. The array is
-    created if the provider has none, immediately above `free_marks`, which is the
-    other question about which models get offered.
+    Wholesale rather than surgical, because unlike `models` this array has no ordering
+    to preserve — nothing ranks off it — so the simplest edit is also the safest one.
+    The array is created if the provider has none, immediately above `free_marks`, which
+    is the other question about which models get offered.
 
     Sorted, so a day with no change produces no diff and the pull request stays a
     signal. An empty list is written as `deny = []` rather than removed, because the
     line going missing reads as a profile that never had one.
+
+    **Comment lines above the array are kept.** This docstring used to say the array had
+    "no per-entry comments to orphan", and that stopped being true the day someone wrote
+    down why a model was denied: `profiles/rcc.toml` now carries nine lines explaining
+    the difference between "cannot be paid for" and "does not answer", and a wholesale
+    rewrite deleted fourteen lines of it. The reasoning is the only thing that makes a
+    denylist reviewable — the array without it is a list of names nobody can argue with.
     """
     lines = text.splitlines(keepends=True)
-    wanted = f'deny = [{", ".join(sorted(chr(34) + n + chr(34) for n in names))}]\n'
+    flat = f'deny = [{", ".join(sorted(chr(34) + n + chr(34) for n in names))}]\n'
     start = _array_line(lines, provider, "deny")
     if start is not None:
         indent = lines[start][: len(lines[start]) - len(lines[start].lstrip())]
@@ -663,14 +680,16 @@ def set_deny(text: str, provider: str, names: list[str]) -> str:
             )
             if close is None:
                 raise ValueError(f"unterminated `deny` for provider {provider!r}")
-            return "".join(lines[:start] + [indent + wanted] + lines[close + 1:])
-        return "".join(lines[:start] + [indent + wanted] + lines[start + 1:])
+            kept = _entry_comments(lines[start + 1 : close])
+            body = _deny_body(names, kept, indent)
+            return "".join(lines[:start] + body + lines[close + 1:])
+        return "".join(lines[:start] + [indent + flat] + lines[start + 1:])
 
     marks = _array_line(lines, provider, "free_marks")
     if marks is None:
         raise ValueError(f"nowhere to put `deny` for provider {provider!r}")
     indent = lines[marks][: len(lines[marks]) - len(lines[marks].lstrip())]
-    return "".join(lines[:marks] + [indent + wanted] + lines[marks:])
+    return "".join(lines[:marks] + [indent + flat] + lines[marks:])
 
 
 def _entry_id(line: str) -> str | None:
@@ -727,6 +746,51 @@ def failing(report: dict, after_days: int) -> list[str]:
 def _models_line(lines: list[str], provider: str) -> int | None:
     """Index of the `models = [` line inside `provider`'s `[[providers]]` block."""
     return _array_line(lines, provider, "models")
+
+
+_DENY_NAME = re.compile(r'^\s*"([^"]+)"\s*,?\s*$')
+
+
+def _entry_comments(body: list[str]) -> dict[str, list[str]]:
+    """Comment lines inside a `deny` array, keyed by the name they sit above.
+
+    A floating block belongs to the entry that FOLLOWS it, which is how a reader reads
+    one: the paragraph explaining why `muse-spark-1.3-contributor-free` is denied is
+    written above that line, not beside it.
+    """
+    kept: dict[str, list[str]] = {}
+    pending: list[str] = []
+    for line in body:
+        name = _DENY_NAME.match(line)
+        if name:
+            if pending:
+                kept[name.group(1)] = pending
+                pending = []
+            continue
+        if line.strip().startswith("#"):
+            pending.append(line)
+    return kept
+
+
+def _deny_body(
+    names: list[str], kept: dict[str, list[str]], indent: str
+) -> list[str]:
+    """The `deny` array, one name per line, each under whatever explained it.
+
+    One line per name only when something is explained. A profile whose denylist
+    carries no comments keeps the flat form it had, so a day with no change still
+    produces no diff — which is the property that makes the pull request a signal.
+    """
+    ordered = sorted(names)
+    if not any(name in kept for name in ordered):
+        joined = ", ".join(f'"{name}"' for name in ordered)
+        return [f"{indent}deny = [{joined}]\n"]
+    out = [f"{indent}deny = [\n"]
+    for name in ordered:
+        out.extend(kept.get(name, []))
+        out.append(f'{indent}    "{name}",\n')
+    out.append(f"{indent}]\n")
+    return out
 
 
 def _array_line(lines: list[str], provider: str, key: str) -> int | None:

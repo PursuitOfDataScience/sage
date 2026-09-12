@@ -99,6 +99,21 @@ REQUEST_RETRIES = _env_int("SAGE_REQUEST_RETRIES", 2, minimum=0)
 # matters more than the answer. Set this to 1 to switch failover off entirely, which is
 # what `evals/harness.py` does so a per-model benchmark measures the model it asked.
 MAX_MODEL_ATTEMPTS = _env_int("SAGE_MAX_MODEL_ATTEMPTS", 0, minimum=0)
+# How many times one turn may ask a ROUTER again after it produced no answer.
+#
+# Separate from MAX_MODEL_ATTEMPTS above because it is a different move. That one walks
+# to the NEXT model, which is the only sensible response to a model that has nothing to
+# give; this one asks the SAME id again, and it is only sensible where that id is a
+# router resolving to a different model per request — `ProviderEntry.routers` is where a
+# deployment says which ids those are, and `View.reroutes` is the test. On a pinned model
+# a re-ask is a second helping of the same nothing.
+#
+# 2 from the measurement: the free router served 14 distinct models over 33 rolls with a
+# 6% bad-roll rate, where two attempts is 99.6% and even a pessimistic 20% rate reaches
+# 96%. A third adds a rounding error and a second of latency. 0 switches it off, and so
+# does MAX_MODEL_ATTEMPTS = 1 — `evals/harness.py` sets that to measure the model it
+# asked, and a silent re-roll would measure a different one.
+ROUTER_RETRIES = _env_int("SAGE_ROUTER_RETRIES", 2, minimum=0)
 
 # --- chunking --------------------------------------------------------------
 #
@@ -212,14 +227,24 @@ STREAM_REPAINT_MS = _env_int("SAGE_STREAM_REPAINT_MS", 40, minimum=0)
 # and the block is rewritten in full on every step — a 4 KB query string would be 4 KB
 # of markup per repaint, for a line 40 characters of which are visible.
 #
-# 96 is about twice the widest line the block draws at a 1440 viewport, so the clip is
-# never the thing a reader notices; the ellipsis is.
+# 160, raised from 96, and measured rather than guessed. Since the row resolves a
+# section id to the section's own title, the value is a sentence, and this corpus's
+# headings are frequently whole questions: the longest label the shipped docs produce is
+# 146 characters ("Running Jobs FAQ — Why does my sinteractive job fail with ssh: symbol
+# lookup error: …"). At 96 it arrived ellipsed, which is the complaint the CSS ellipsis
+# had already drawn once — "why can't it show the complete cot?" — reappearing in Python
+# after being fixed in the stylesheet. 160 clears every real label whole.
+#
+# Not unbounded, because this is the number `render_check.py` builds its worst case from
+# and the block still has to fit inside a line cap at a 500px viewport. The worst case
+# is an unbroken run of this length, which wraps to about four lines there — which is
+# what the harness's cap is set to, and what it checks.
 #
 # Here rather than in `sage/ui/turn.py` so `tools/render_check.py` can render the worst
 # case the app can actually produce. That harness runs in a CI job with no Streamlit
 # installed, so it cannot import the module that draws the block — and a worst case
 # written out twice is a worst case that goes stale on one side.
-STATUS_ARGUMENT_CHARS = _env_int("SAGE_STATUS_ARGUMENT_CHARS", 96, minimum=1)
+STATUS_ARGUMENT_CHARS = _env_int("SAGE_STATUS_ARGUMENT_CHARS", 160, minimum=1)
 
 # --- uploads ---------------------------------------------------------------
 
@@ -237,6 +262,25 @@ IMAGE_MAX_BYTES = _env_int("SAGE_IMAGE_MAX_BYTES", 256 * 1024, minimum=1)
 # conversation got too long. Clear the chat", about a conversation of one question.
 MAX_ATTACHED_BYTES = _env_int("SAGE_MAX_ATTACHED_BYTES", 20 * 1024 * 1024, minimum=1)
 MAX_FILE_TEXT_CHARS = _env_int("SAGE_MAX_FILE_TEXT_CHARS", 30000, minimum=1)
+# And the same arithmetic on the REQUEST side, which the upload cap above does not
+# reach. Base64 inflates by a third, so the 20 MiB of uploads that cap permits
+# assembles a 26.6 MB request — measured, with 87 legal 240 KB images — and
+# `history._length` scores the lot as 4,200 characters, because a data URL counted
+# against a character budget would evict a whole conversation to make room for one
+# screenshot. So nothing bounded it but the provider, and the way a provider bounds one
+# is a 413 that the reader is shown as "This conversation got too long. Clear the chat
+# and ask again" — advice that cannot work, because the picture is attached to the
+# question they just asked.
+#
+# 4 MiB is about four worst-case downscaled screenshots (one 9.4 MB upload becomes a
+# 968,071-character data URL), so the common case of one or two is untouched. What goes
+# over is not refused: `history._with_images` sends what fits and names the rest in the
+# text, so the model can answer about the pictures it was given and say which it was
+# not. Lowering `MAX_ATTACHED_BYTES` instead would refuse a legal 10 MB PDF whose text
+# is capped at MAX_FILE_TEXT_CHARS anyway.
+MAX_IMAGE_REQUEST_BYTES = _env_int(
+    "SAGE_MAX_IMAGE_REQUEST_BYTES", 4 * 1024 * 1024, minimum=1
+)
 
 # --- limits ----------------------------------------------------------------
 #

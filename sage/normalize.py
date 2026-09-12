@@ -242,12 +242,29 @@ _ESCAPE = re.compile(r"\\([!\"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~])")
 # without ever answering, and shipping under a Sources strip of six real sections. No
 # recorded answer contains a `<think>` tag, so the tag form is here for the shape rather
 # than from evidence.
+# A model thinking out loud instead of answering, by the openers it actually uses.
+#
+# The second group was added after one arrived from the live free router: 24,326
+# characters beginning "We need to answer: …", `finish_reason: length`, no answer
+# anywhere in it — the same shape `evals.checks.reasoning_shape` was written for (one
+# turn in 554, 34,645 characters of a model quoting its own instructions) under a
+# phrasing the first group does not match. What these four have in common is a model
+# addressing ITSELF, or addressing the reader in the third person as "the user", and
+# neither is something an answer to that reader ever does.
+#
+# Measured before being trusted, exactly as `_MODERATION_VERDICT` below was: over the
+# 1,324 recorded answers in `report/transcripts*.jsonl` these four patterns match twice,
+# and both matches are themselves reasoning leaks. No false positives.
 _DELIBERATION = re.compile(
     r"(?i)^\s*(?:<think>"
     r"|(?:here(?:'s| is)|this is) (?:a|my) thinking process"
     r"|thinking process\s*:"
     r"|chain[- ]of[- ]thought"
-    r"|let me (?:think|reason)(?: this| it)? through)"
+    r"|let me (?:think|reason)(?: this| it)? through"
+    r"|we need to (?:answer|figure|determine|explain|find)"
+    r"|the user (?:is asking|wants|asks|is requesting)"
+    r"|(?:let's|we should) (?:think|reason|consider|figure)"
+    r"|so the (?:question|user))"
 )
 
 
@@ -307,6 +324,71 @@ def is_written_out_tool_call(text: str) -> bool:
     return bool(_WRITTEN_OUT_CALL.match(text or ""))
 
 
+# A safety classifier's verdict, arriving where an answer should be.
+#
+# Third sibling of the two above, and the only one that is not the model misbehaving: it
+# is the wrong model entirely. A free-models router picks per request from whatever the
+# provider is serving, and one of the names in that pool is a content-safety
+# CLASSIFIER — `nvidia/nemotron-3.5-content-safety:free`, whose whole output is a verdict
+# on the text it was given. Asked "How do I submit a batch job with sbatch?" it answers,
+# in full:
+#
+#     User Safety: safe
+#
+# Seventeen characters, and every check upstream of this one passes them: not
+# deliberation, not a written-out call, not empty, not a refusal. Measured at 2 of 33
+# router rolls (6%) on 2026-09-11, always that exact shape, streamed and not.
+#
+# Why the router can reach it at all is worth writing down, because it bounds the
+# exposure: 18 of the 19 free models list `tools` in `supported_parameters` and the
+# classifier is the one that does not, so a request carrying a tool schema structurally
+# cannot be routed to it (asked directly it answers `404 No endpoints found that support
+# tool use`). What is left is the requests this app deliberately sends WITHOUT tools —
+# the last round of a turn, and `grounded()` — which is exactly where a verdict would be
+# shipped to a reader as the answer. Neither the router's `plugins.excluded_models` nor
+# `provider.ignore` can exclude it; both were tried.
+#
+# Anchored like the others. An answer that discusses safety in prose is not this: this is
+# a labelled verdict at position zero, or the bare word and nothing else. Read over every
+# recorded answer this repository holds before being trusted — 1,324 texts across the
+# five `report/transcripts*.jsonl` sets, including the ones that discuss whether storing
+# data somewhere is safe — and it matches none of them. A check with false positives is a
+# check somebody switches off.
+_MODERATION_VERDICT = re.compile(
+    r"(?i)^\s*(?:[\{\[]?\s*\"?"
+    r"(?:user|response|prompt|content|conversation|assistant)[ _-]safety\"?\s*[:=]"
+    r"|\"?safety[ _-]categor(?:y|ies)\"?\s*[:=]"
+    r"|(?:un)?safe[.\s]*$)"
+)
+
+
+def is_moderation_verdict(text: str) -> bool:
+    """Is this a classifier's ruling on the question rather than an answer to it?
+
+    Goes the same two places as its siblings — `ui.turn` raises `empty` rather than
+    shipping it, `evals.checks` counts it — because the reader's recovery is the same
+    one: the error card, and a turn that can be asked again. A router that reached the
+    classifier once will route somewhere else on the next request, so "again" is a real
+    fix here rather than a hope.
+    """
+    return bool(_MODERATION_VERDICT.match(text or ""))
+
+
+# An explicit id, written by the attr_list extension: `## Using renv {#using-the-renv}`.
+#
+# mkdocs publishes that id VERBATIM and derives nothing, so a slug computed from the
+# heading text is simply a different anchor — the reader lands at the top of the page and
+# the link looks like it worked. Upstream added one to `software/apps-and-envs/r.md`
+# between this snapshot and 2026-09-04, which `tools/anchor_check.py` caught as the
+# published `#using-the-renv` against our derived
+# `#using-the-renv-r-package-…-environment`.
+#
+# NOT folded into `_ATTR_LIST`, which would be the obvious place: `_clean_prose` runs
+# that over heading lines before `_split_sections` ever sees them, so stripping it there
+# destroys the id before anything can read it. Kept separate and read by `slugify`.
+_HEADING_ID = re.compile(r"[ \t]*\{#([A-Za-z][-\w:.]*)\}[ \t]*$")
+
+
 def plain_heading(text: str) -> str:
     r"""Heading text as a reader sees it: links unwrapped, emphasis dropped.
 
@@ -322,7 +404,10 @@ def plain_heading(text: str) -> str:
     geocoding tutorial, which numbers all four. `slugify` is built on this function and
     is unaffected: it strips the backslash anyway as punctuation.
     """
-    cleaned = _INLINE_LINK.sub(r"\1", text.strip())
+    # The explicit-id marker first, so the citation label is the heading a reader sees
+    # rather than `Using renv {#using-the-renv}`. `slugify` reads it before this runs.
+    cleaned = _HEADING_ID.sub("", text.strip())
+    cleaned = _INLINE_LINK.sub(r"\1", cleaned)
     cleaned = re.sub(r"[`*]+", "", cleaned)
     cleaned = _ESCAPE.sub(r"\1", cleaned)
     return re.sub(r"\s+", " ", cleaned).strip()
@@ -339,6 +424,12 @@ def slugify(text: str) -> str:
     `EVP_KDF_ctrl` is `evp_kdf_ctrl`. Mapping it to `-` here is the same lost anchor
     as deleting it, one character further on.
     """
+    # An id the page states outright beats one derived from its text, because mkdocs
+    # publishes the stated one and derives nothing. Read before `plain_heading`, which
+    # strips the marker so the label does not carry it.
+    stated = _HEADING_ID.search(text.strip())
+    if stated:
+        return stated.group(1)
     slug = plain_heading(text).lower()
     slug = re.sub(r"[^\w\s-]", "", slug)
     slug = re.sub(r"\s+", "-", slug.strip())

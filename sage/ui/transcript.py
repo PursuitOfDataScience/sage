@@ -6,7 +6,7 @@ import html
 
 import streamlit as st
 
-from .. import config, feedback, links
+from .. import config, feedback, links, progress
 from .state import may_start_turn, start_new_turn
 from .view import View
 
@@ -356,10 +356,52 @@ def _evidence(view: View, sources: list[dict]) -> dict[str, str]:
     return found
 
 
+def render_steps(steps: list[dict], seconds: float | None = None) -> None:
+    """What the turn did, folded, above the answer it produced.
+
+    ABOVE the text, which is where the live row already sits — so the answer does not
+    move when the turn ends and the stored version replaces the painted one. Same rule
+    the copy button's gutter follows: a reader begins reading at the moment the turn
+    finishes, and anything that reflows then reflows under their eyes.
+
+    `turn.summary_html` builds the identical markup mid-turn from `Step` objects; this
+    takes the dicts a stored message carries, so the two cannot drift into two designs
+    for one control. Folded by default: the answer is what the reader came for.
+
+    `seconds` is the turn's own clock, frozen where the live line left it — see
+    `turn.Status.total_seconds` for why summing the steps instead made the number drop
+    the moment the turn ended. Summing is still the fallback, for a message stored
+    before that field existed: wrong by the wait for the first word, and the
+    alternative is a summary line with no time on it at all.
+    """
+    if not steps:
+        return
+    total = (
+        seconds
+        if seconds is not None
+        else sum(step.get("seconds") or 0.0 for step in steps)
+    )
+    st.markdown(
+        progress.summary_html(
+            [
+                progress.Step(
+                    name=str(step.get("name", "")),
+                    detail=str(step.get("detail", "")),
+                    seconds=float(step.get("seconds") or 0.0),
+                )
+                for step in steps
+            ],
+            total,
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def render_assistant(view: View, position: int, message: dict) -> None:
     sources = message.get("sources", [])
     with st.container(key=f"answer-{position}"):
         with st.chat_message("assistant"):
+            render_steps(message.get("steps") or [], message.get("step_seconds"))
             text = message.get("text", "")
             if text:
                 # Resolve the paths the model wrote, then number them against the
@@ -428,7 +470,17 @@ def render_error_card(view: View) -> None:
     # "Switch to another model" is only useful if switching is one click away from
     # where the advice appears. Sending the user hunting for a control elsewhere on
     # the page is how a spent quota became a dead end.
-    alternative = view.fallback
+    #
+    # And only where switching is the remedy. `context` is the one kind it is not:
+    # the request itself is too long, so every model in the lineup refuses the same
+    # message the same way — which is why `turn.FAILOVER_KINDS` leaves it out and the
+    # turn asks exactly one provider. The card drew "→ Use <model>" beside "clear the
+    # chat and ask again" anyway, which is a button guaranteed to fail offered next to
+    # the sentence explaining why. Measured: one provider call, two buttons, one of
+    # them useless.
+    alternative = (
+        None if st.session_state.get("error_kind") == "context" else view.fallback
+    )
     with st.container(key="error-actions"):
         # Half-width each, flush with the error card above: narrower columns wrapped
         # the model name onto a second line, which looks broken.
@@ -463,8 +515,15 @@ def render_error_card(view: View) -> None:
             # asking for another attempt, and leaving the guard set means the retry
             # cannot fail over even though this is a fresh attempt at the question.
             st.session_state.tried = []
+            st.session_state.rerolls = 0
             st.session_state.error = None
             st.session_state.error_detail = ""
+            # The third of the three, for the reason `state.start_new_turn` clears all
+            # three: they are one fact about the card on screen, and the card is going.
+            # `rerolls` goes with `tried` for the same reason the comment above gives —
+            # this is a fresh attempt at the question, so a re-roll budget spent by the
+            # attempt that failed is not this one's to have already used.
+            st.session_state.error_kind = ""
             if st.session_state.messages[-1]["role"] == "user":
                 st.session_state.processing = True
         st.rerun()

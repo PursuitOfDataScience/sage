@@ -154,6 +154,22 @@ class TestWhatLeaksToday:
         "how do I enrol in a computer science course",
         "how much does the university spend on computing each year",
         "how many users does the cluster have",
+        # Arrived with title-field length normalisation, and it is a trade taken with
+        # its eyes open rather than a surprise — the same change caveated the two above
+        # this line, so the list is one shorter than it was and `caveat_recall` went
+        # 87.0% → 89.1%. What this one costs: `docs/software/apps-and-envs/alphafold.md`
+        # is titled "AlphaFold Documentation", two tokens, and a two-token title
+        # containing the reader's word now earns most of the title boost instead of the
+        # same flat share as a fifteen-token heading trail. So a meta-question about who
+        # writes the documentation scores 23.1 on a page about a protein-folding tool.
+        #
+        # Kept rather than tuned away: it is the one leak in the set with a *real* title
+        # match, the alternative measured (b = 0.5 rather than BM25_B) buys this back and
+        # 1.1pp of caveat recall at the price of three of the seven pages that could not
+        # be found by their own title, and no threshold pair separates it — the two it
+        # replaced scored 18.8 and 18.2 against a floor of 20, so the gap either way is
+        # smaller than the spread inside this list.
+        "is the documentation written by staff or by users",
     ]
 
     @pytest.mark.parametrize("question", LEAKING, ids=LEAKING)

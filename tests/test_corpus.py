@@ -182,6 +182,47 @@ def test_duplicate_headings_get_distinct_ids(docs_source):
     assert len(ids) == len(set(ids)) == 2
 
 
+def test_duplicate_headings_cite_the_anchors_the_site_publishes(docs_source):
+    """Distinct ids were not enough: the URLs were the same.
+
+    mkdocs runs Python-Markdown's `toc.unique`, so a heading repeated on one page is
+    published at `slug`, `slug_1`, `slug_2`. Every chunk here cited the bare slug, which
+    an anchor check cannot catch — the anchor exists, it is just the wrong one of three.
+    Measured on the real corpus: `software/apps-and-envs/alphafold.md` carries
+    `AlphaFold 2` and `AlphaFold 3` three times each, so six chunks pointed at two
+    anchors and four sections of that page could not be reached from any citation.
+
+    The ids keep their own `-1`/`-2` scheme on purpose. They are this repository's names
+    for a chunk and nothing outside it reads them; the anchor has to match what the site
+    emits, underscore and all.
+    """
+    source = (
+        "# T\n\n## Notes\n\nFirst body here, long enough.\n\n"
+        "## Notes\n\nSecond body, also long enough to keep.\n\n"
+        "## Notes\n\nThird body, long enough as well.\n"
+    )
+    _document, chunks = corpus_mod.read(docs_source, "d.md", source)
+    anchors = [c.url.split("#")[-1] for c in chunks if "notes" in c.id]
+    assert anchors == ["notes", "notes_1", "notes_2"]
+
+
+def test_an_oversized_section_cites_the_one_heading_it_is_under(docs_source, monkeypatch):
+    """The occurrence counter counts HEADINGS, not chunks.
+
+    An oversized section is split into several chunks, and all of them belong to the
+    same heading — so they must cite the same anchor. Counting chunks instead would
+    give the second part `notes_1`, an anchor the page does not have.
+    """
+    monkeypatch.setattr(config, "MAX_CHUNK_CHARS", 400)
+    body = "Sentence about the thing. " * 60
+    _document, chunks = corpus_mod.read(
+        docs_source, "d.md", f"# T\n\n## Notes\n\n{body}\n"
+    )
+    parts = [c for c in chunks if "notes" in c.id]
+    assert len(parts) > 1, "the section did not split, so this measures nothing"
+    assert {c.url.split("#")[-1] for c in parts} == {"notes"}
+
+
 def test_scraped_pages_window_and_keep_their_real_url(web_source):
     raw = (
         "URL: https://beag3.rcc.uchicago.edu/software\n"

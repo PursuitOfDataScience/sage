@@ -59,6 +59,20 @@ class Tool(Protocol):
     #: a tool that leaves it empty is named on the row with nothing beside it, which
     #: is the right outcome for a tool whose arguments would mean nothing on screen.
     argument: str
+    #: Whether that argument is a SECTION ID rather than something a reader could have
+    #: written. A search's argument is the model's own words and belongs on screen as
+    #: it is; a read's is `docs/allocations.md#how-do-i-check-…`, which is this
+    #: repository's name for a file — the corpus layout, not the documentation.
+    #:
+    #: It reached the page and was reported at once: "docs/allocations.md shouldn't be
+    #: disclosed in this way". Nothing else in the app shows one — the Sources strip
+    #: resolves every id to `Chunk.label` and `Chunk.url` first, and `links.fix_links`
+    #: does the same to the paths a model writes into an answer.
+    #:
+    #: True means `ui.turn.call_step` resolves it and shows the section's own title. An
+    #: id that resolves to nothing shows NOTHING: a model that invented a path has told
+    #: the reader nothing, and printing the invention is the disclosure itself.
+    argument_is_section: bool = False
 
     @property
     def schema(self) -> dict: ...
@@ -213,6 +227,9 @@ class ReadDoc:
     name = READ_DOC
     label = "read"
     argument = "path"
+    # `path` is a corpus id. See `Tool.argument_is_section`: the row shows the section's
+    # title, never this string.
+    argument_is_section = True
 
     def __init__(self, retriever: Retriever, identity: Identity) -> None:
         self.retriever = retriever
@@ -351,6 +368,19 @@ class Toolset:
             for tool in self.tools
             if getattr(tool, "argument", "")
         }
+
+    @property
+    def section_arguments(self) -> frozenset[str]:
+        """Which tools' shown argument is a section id — see `Tool.argument_is_section`.
+
+        Read off the tools for the same reason the two properties above are: a third
+        tool whose argument is an id says so by declaring it, and the row learns to
+        resolve it without this file or `ui.turn` naming the tool.
+        """
+        return frozenset(
+            tool.name for tool in self.tools
+            if getattr(tool, "argument_is_section", False)
+        )
 
     def runner(self) -> ToolRunner:
         return ToolRunner(self)

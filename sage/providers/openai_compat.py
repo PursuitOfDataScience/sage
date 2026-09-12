@@ -135,7 +135,8 @@ class OpenAICompatProvider:
             families.setdefault(family_of(model_id), []).append(model_id)
         return [model_id for members in families.values() for model_id in members]
 
-    def stream(self, model, messages, tools, thinking=False) -> Iterator[Chunk]:
+    def stream(self, model, messages, tools, thinking=False,
+               tool_choice="auto") -> Iterator[Chunk]:
         import httpx  # noqa: PLC0415
 
         payload: dict[str, Any] = {
@@ -147,7 +148,7 @@ class OpenAICompatProvider:
         }
         if tools:
             payload["tools"] = tools
-            payload["tool_choice"] = "auto"
+            payload["tool_choice"] = tool_choice
         # The Think toggle, and only where the provider has said it understands the
         # field. `kind = "openai"` covers OpenRouter and OpenCode Zen alike, and an
         # unknown key is a 400 from any endpoint entitled to be strict about its own
@@ -166,6 +167,19 @@ class OpenAICompatProvider:
         # `checks.reasoning_shape` classifies as `leaked-reasoning`. Asking for the
         # transcript is a decision to display it, and displaying it is the progress
         # block's job on the day someone wires `reasoning_details` through.
+        #
+        # Two things measured against the live free router (8 requests, 2026-09-11) that
+        # are worth not rediscovering. **The field does not starve the answer**, which
+        # was the fear worth checking, since reasoning is billed as output tokens and
+        # counts against `max_tokens`: four requests with it at MAX_TOKENS came back
+        # `finish_reason: stop` with 504-1455 reasoning tokens AND a complete answer,
+        # none empty. (At a 300-token cap the same models return no content at all with
+        # `finish_reason: length`, so the generous cap is load-bearing here — see
+        # `config.MAX_TOKENS`.) And **the models on this lineup reason whether or not
+        # this field is sent**: the four control requests without it reported 168-1684
+        # reasoning tokens each. So the toggle is a request, not a switch, and what it
+        # reliably changes is what the deployment is charged for rather than whether the
+        # model deliberates.
         if thinking and self.entry.reasoning:
             payload["reasoning"] = {"enabled": True, "exclude": True}
 

@@ -51,7 +51,7 @@ class Programmable:
     def models(self):
         return [providers.Model("mistral", "m1")]
 
-    def stream(self, model, messages, tools, thinking=False):
+    def stream(self, model, messages, tools, thinking=False, tool_choice="auto"):
         self.sent.append(messages)
         self.tools_seen.append(tools)
         if not self.turns:

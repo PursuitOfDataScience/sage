@@ -52,6 +52,11 @@ class View:
         return self.runtime.toolset.public_arguments
 
     @property
+    def section_arguments(self) -> frozenset[str]:
+        """Which tools' progress-row argument is a corpus id, not reader-facing text."""
+        return self.runtime.toolset.section_arguments
+
+    @property
     def can_think(self) -> bool:
         """Whether the model answering NOW takes a `reasoning` parameter.
 
@@ -70,6 +75,22 @@ class View:
         """
         entry = providers.entry(self.model.provider)
         return bool(entry and entry.reasoning)
+
+    @property
+    def reroutes(self) -> bool:
+        """Whether asking the model answering NOW again would reach a different model.
+
+        True only for an id the profile lists in `ProviderEntry.routers` — a router,
+        which resolves to whatever the provider is serving at that moment rather than to
+        one model. Same shape and same justification as `can_think` above: read off the
+        model in hand, because a failover can move the turn onto a pinned model without
+        asking, and a re-ask there is a second helping of the same nothing.
+
+        Nothing on the wire distinguishes a router from a model, which is why this is a
+        fact the deployment states rather than one the app can discover.
+        """
+        entry = providers.entry(self.model.provider)
+        return bool(entry and self.model.id in entry.routers)
 
     #: Failures whose remedy is a different model on the SAME provider, because the
     #: key is fine and only this model is unavailable. Each of these is the *model*

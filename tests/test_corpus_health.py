@@ -31,7 +31,7 @@ KNOWN_EMPTY = {
 MAXIMUM_SAME_PAGE_TWICE = 2          # measured 2 (web/midway2 under two URLs)
 MAXIMUM_SHARED_BOILERPLATE = 2       # measured 2 (bfi.md and booth.md)
 MAXIMUM_NEAR_DUPLICATE_PAIRS = 0     # measured 0
-MINIMUM_PAGES_FINDABLE_BY_TITLE = 0.92   # measured 0.939 (7 of 114 are not)
+MINIMUM_PAGES_FINDABLE_BY_TITLE = 1.0    # measured 1.00 (was 0.939, 7 of 114)
 
 
 @pytest.fixture(scope="module")
@@ -220,24 +220,102 @@ class TestFindability:
             f"only {rate:.1%} of pages can be found by their own title"
         )
 
-    def test_the_ones_that_are_not_are_the_ones_we_know_about(self, measured):
-        """Two of the seven are worth a reader's attention and neither is fixable here.
+    def test_every_page_is_retrievable_by_its_own_title(self, measured):
+        """There is nothing left on the list, so the list itself is the assertion.
 
-        `singularity.md` is titled `# Modules` upstream, so every citation chip for the
-        Singularity page reads "Modules — …"; the fix is in the User Guide. And
-        `MidwayGeoSpatial` retrieves *nothing* for its own title, because a CamelCase
-        compound is one token the page's own prose never uses — splitting CamelCase in the
-        tokenizer would touch every score in the index to rescue one page, which is a
-        worse trade than the page.
+        This used to name the two of seven worth a reader's attention and record that
+        neither was fixable here. Both were. `singularity.md` is still titled `# Modules`
+        upstream — the citation chip for the Singularity page still reads "Modules — …",
+        and that part is still the User Guide's to fix — but the page is now retrieved at
+        rank 5 for the word, behind the pages a reader typing it actually wants. The
+        seventh, `MidwayGeoSpatial`, matched nothing at all in the index: a term appearing
+        in no document *body* scores zero even where it does appear in the title and the
+        path, because `_inverse_document_frequency` returns 0 and the scorer skips the
+        term before reaching either boost. A synonym group in the profile connects the
+        compound to the `gis` and `geospatial` its own prose uses, which is cheaper than
+        the CamelCase split this test used to argue against — that would still touch every
+        score in the index to rescue one page.
         """
-        pages = {row["page"] for row in measured["self_reachability"]["unreachable"]}
-        assert "docs/software/apps-and-envs/singularity.md" in pages
-        assert "docs/tutorials/gis/MidwayGeoSpatial.md" in pages
-        titles = {
-            row["page"]: row["title"]
-            for row in measured["self_reachability"]["unreachable"]
+        rows = measured["self_reachability"]["unreachable"]
+        assert rows == [], "\n".join(
+            f"{row['title']!r} -> {row['page']} (rank {row['rank']}); got "
+            + ", ".join(f"{got['page']} {got['score']}" for got in row["found_instead"])
+            for row in rows
+        )
+
+    def test_a_miss_says_which_page_won_and_by_how_much(self):
+        """The diagnosis, held on a corpus that still has a miss in it.
+
+        `7 are not findable, incl. one titled 'Modules'` was the whole report for four
+        different causes, and a page name alone cannot tell "came seventh" from "matched
+        nothing" — which need opposite fixes. Asserted against a synthetic miss rather
+        than the shipped corpus, because the shipped corpus no longer has one and a check
+        that cannot fail reads as a pass.
+
+        Seven rivals, because `SEARCH_LIMIT` is six: a smaller corpus cannot produce a
+        ranking miss at all. The shape left is the one no title weighting can cure — the
+        page's own body never says the words in its title, and the rivals' bodies do.
+        """
+        from sage import retrieval
+        from sage.corpus import Chunk, Corpus
+
+        def chunk(path: str, title: str, breadcrumb: str, text: str) -> Chunk:
+            return Chunk(id=f"docs/{path}#a", source="docs", path=path, doc_title=title,
+                         heading="A", breadcrumb=breadcrumb, text=text,
+                         url=f"https://x/{path}")
+
+        built = Corpus(
+            chunks=[
+                chunk("wanted.md", "Xyzzy details",
+                      "Xyzzy details \u203a Set-up and general questions \u203a Are "
+                      "there any limits to running jobs",
+                      "storage quota information " * 12),
+            ] + [
+                chunk(f"rival{n}.md", f"Rival {n}", f"Rival {n} \u203a Xyzzy details",
+                      "xyzzy details are discussed at length here " * 12)
+                for n in range(7)
+            ],
+            documents={},
+        )
+        # By page, not a single row: the rivals are unfindable by their own titles too
+        # — a synthetic body says nothing about "Rival 3" — and that is beside the point.
+        rows = {
+            row["page"]: row
+            for row in corpus_health.self_reachability(
+                retrieval.build(built), built
+            )["unreachable"]
         }
-        assert titles["docs/software/apps-and-envs/singularity.md"] == "Modules"
+        row = rows["docs/wanted.md"]
+        assert row["title"] == "Xyzzy details"
+        assert row["rank"] == 8
+        assert len(row["found_instead"]) == 3
+        assert all(got["page"].startswith("docs/rival") for got in row["found_instead"])
+        assert row["found_instead"][0]["score"] > 0
+
+    def test_a_page_that_matches_nothing_is_told_apart_from_one_that_came_seventh(self):
+        """`rank` is None for the first and a number for the second.
+
+        `MidwayGeoSpatial` scored nothing anywhere while `web/faqs.txt` was one slot
+        short, and the old row printed both as a bare page name. A synonym group fixes
+        the first and a ranking change fixes the second; nothing in the report said which
+        was which.
+        """
+        from sage import retrieval
+        from sage.corpus import Chunk, Corpus
+
+        built = Corpus(
+            chunks=[
+                Chunk(id="docs/a.md#a", source="docs", path="a.md",
+                      doc_title="Qwghlm", heading="Qwghlm", breadcrumb="Qwghlm",
+                      text="storage quota " * 20, url="https://x/#a"),
+            ],
+            documents={},
+        )
+        [row] = corpus_health.self_reachability(
+            retrieval.build(built), built
+        )["unreachable"]
+        assert row["rank"] is None
+        assert row["found_instead"] == []
 
 
 class TestAdvertisedTopics:
@@ -283,7 +361,11 @@ class TestEveryUnreachablePageIsReportedTheSameWay:
     def test_an_untitled_page_is_a_row_like_any_other(self):
         index, built = self.index_of("")
         rows = corpus_health.self_reachability(index, built)["unreachable"]
-        assert rows == [{"page": "docs/x.md", "title": ""}]
+        # An untitled page has nothing to search for, so the diagnosis fields are the
+        # empty ones rather than absent — the shape is the point of this class.
+        assert rows == [
+            {"page": "docs/x.md", "title": "", "rank": None, "found_instead": []}
+        ]
         assert [row["page"] for row in rows] == ["docs/x.md"]
 
     def test_the_shipped_corpus_reports_one_shape_too(self, measured):

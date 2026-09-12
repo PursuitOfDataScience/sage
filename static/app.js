@@ -293,36 +293,6 @@
         return overlaid && !streamlitPins;
     }
 
-    // Where the model picker sits: inside the input box, immediately left of Streamlit's
-    // own send button. Measured from that button rather than written down, because it is
-    // the thing the picker has to stay beside and app.css places it in a corner of a box
-    // whose width tracks the viewport.
-    //
-    // The send button survives a turn — `markGenerating` leaves it in the DOM and paints
-    // the stop square over it — so this does not lurch mid-answer. Nothing is published
-    // when it cannot be found, which holds the last good position through the frames
-    // where Streamlit is rebuilding the composer instead of snapping the picker into the
-    // corner and back.
-    // Where the picker sits: the right-hand end of the band, just left of the send
-    // button, measured off that button rather than written down. It spent a revision at
-    // the other end of the band, past the paperclip, which is where ChatGPT and Claude
-    // put theirs — the ask was specific, so it is on the right.
-    //
-    // Its RIGHT edge is what is pinned, so the send button never moves. The control
-    // in this corner has changed twice — a trash can, then the model picker, now the
-    // Think pill — and the names `--pick-right`/`--pick-bottom` are historical for
-    // the same reason `.st-key-composer-strip` is: renaming them would touch the
-    // stylesheet, the layout harness's fixture and its selector table to say nothing
-    // new. Right-anchoring outlives all three: whatever sits here grows leftward into
-    // empty band instead of pushing the button beside it around.
-    function publishPickerSpot() {
-        var send = sendButton();
-        if (!send) return;
-        var rect = send.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) return;
-        publish('--pick-right', Math.round(view.innerWidth - rect.left) + 8);
-        publish('--pick-bottom', Math.round(view.innerHeight - rect.bottom));
-    }
 
     /* --- the box grows with the prompt ----------------------------------- */
 
@@ -382,7 +352,6 @@
         // were a band the bar had to pad itself by; what is left is one pill inside the
         // box beside the send button, so there is nothing below the input to reserve —
         // which is the ~4rem of vertical space this bought back.
-        publishPickerSpot();
         if (bar) {
             // Two numbers, and the difference between them matters.
             //
@@ -1159,6 +1128,108 @@
         btn.setAttribute('aria-label', text);
     }
 
+    /* --- keeping invisible things out of the tab order -------------------
+     *
+     * Measured on a fresh load at 1440x900 with the sidebar collapsed: SIXTEEN tab
+     * stops before the input box, THIRTEEN of them on something the reader cannot
+     * see. Every one is a control that is deliberately not painted but still laid
+     * out, so the browser still offers it focus — and a maroon focus ring landing on
+     * nothing, four times in a row, is the first thing a keyboard reader meets.
+     *
+     * Two groups, and neither is fixable from CSS, which is why this lives here:
+     * `inert` and `tabindex` are attributes, and `visibility: hidden` on the sidebar
+     * would cut the slide-out animation it is in the middle of.
+     *
+     * 1. The COLLAPSED sidebar. Streamlit translates it to `-300px` at width 0 and
+     *    sets `aria-expanded="false"`, but leaves it `visibility: visible` with no
+     *    `inert` — so New chat, every conversation row and every ✕ stay focusable at
+     *    x=-300. `inert` is exactly this: not focusable, not hit-testable, announced
+     *    to nobody, and no effect on paint.
+     *
+     * 2. The CLIPPED hooks — the stop button, the file uploader, the Think pill's
+     *    wire, and the pencil beside each question. app.css clips their painting to a
+     *    pixel because the control a reader presses is drawn elsewhere by this script,
+     *    and every one of those injected controls is a real focusable button. So the
+     *    hook is the duplicate: `tabindex="-1"` takes it out of the order and leaves
+     *    the visible counterpart as the keyboard path. Removing the hook itself is not
+     *    an option — it is the only thing with a channel back to Python.
+     *
+     * Re-applied every pass, because Streamlit rebuilds all of these nodes on rerun
+     * and an attribute set once is an attribute gone by the next answer. */
+    var CLIPPED_HOOKS = [
+        '.st-key-stop-generation button',
+        '.st-key-think-toggle button',
+        '[class*="st-key-edit-open-"] button',
+        '[data-testid="stFileUploader"] button',
+        '[data-testid="stFileUploaderDropzone"]',
+        // The iframe this script is served in: 660x0, focusable, and announced as
+        // "st.iframe". It has no content a reader can reach.
+        'iframe[title="st.iframe"]',
+    ];
+
+    function hideFromTabOrder() {
+        var panel = doc.querySelector('[data-testid="stSidebar"]');
+        if (panel) {
+            // `aria-expanded` is Streamlit's own state on the panel, so this follows
+            // it rather than guessing from a transform or a width.
+            if (panel.getAttribute('aria-expanded') === 'false') {
+                panel.setAttribute('inert', '');
+            } else {
+                panel.removeAttribute('inert');
+            }
+        }
+        CLIPPED_HOOKS.forEach(function (selector) {
+            doc.querySelectorAll(selector).forEach(function (node) {
+                if (node.getAttribute('tabindex') !== '-1') {
+                    node.setAttribute('tabindex', '-1');
+                }
+            });
+        });
+    }
+
+    /* --- giving the page landmarks to navigate by ------------------------
+     *
+     * A screen reader offers a landmark list as the fast way past the chrome, and this
+     * page had NOTHING in it. Measured on a fresh load: four elements that look like
+     * landmarks in the markup and one that is one. `<header data-testid="stHeader">` is
+     * a banner because it is a `<header>` at the top level; the other three are
+     * `<section>`s, and an unnamed `<section>` is not a landmark at all — no role, no
+     * label, so it is announced as nothing and does not appear in the list.
+     *
+     * The conversation is the worst of them, because Streamlit puts `tabindex="0"` on
+     * it to make the scroll region keyboard-scrollable. That is the right thing to do
+     * and the reason it must be named: it is a tab stop that announces itself as a
+     * blank. The `tabindex` stays; the name and the role are what was missing.
+     *
+     * Re-applied every pass, same as the labels above: Streamlit rebuilds these nodes.
+     * Named from the panel's own heading where there is one, so the word a reader hears
+     * is the word the profile chose rather than a second copy of it in this file. */
+    function nameTheLandmarks() {
+        // Named three ways, innermost name first, because the test id here has already
+        // changed once: `stMain` was the id through 1.53 and is the CLASS on 1.54,
+        // where the id says what the box does instead. Not `scroller()`, which answers
+        // a different question and can legitimately return `<html>` — a document
+        // element wearing `role="main"` would be a worse page than an unnamed one.
+        var conversation = doc.querySelector('[data-testid="stAppScrollToBottomContainer"]')
+            || doc.querySelector('[data-testid="stMain"]')
+            || doc.querySelector('section.stMain');
+        if (conversation && conversation.getAttribute('role') !== 'main') {
+            conversation.setAttribute('role', 'main');
+            conversation.setAttribute('aria-label', 'Conversation');
+        }
+        var panel = doc.querySelector('[data-testid="stSidebar"]');
+        if (panel) {
+            var heading = panel.querySelector('.chats-heading');
+            var name = heading && heading.textContent.trim();
+            if (panel.getAttribute('role') !== 'navigation') {
+                panel.setAttribute('role', 'navigation');
+            }
+            if (panel.getAttribute('aria-label') !== (name || 'Chats')) {
+                panel.setAttribute('aria-label', name || 'Chats');
+            }
+        }
+    }
+
     function labelPanelToggles() {
         PANEL_LABELS.forEach(function (pair) {
             var host = doc.querySelector('[data-testid="' + pair[0] + '"]');
@@ -1610,16 +1681,65 @@
         }
         view.__sageHistoryAt = -1;
         view.__sageHistoryDraft = '';
-        // And anything queued, which belongs to the conversation being left. This
-        // token moves on a clear, on New chat and on opening another chat — see
-        // `state._leave_conversation` — so it is exactly the signal for "the questions
-        // waiting behind that answer are not wanted any more". Without it, clearing the
-        // page and then watching a question you had queued arrive in the empty
-        // conversation a second later is the app answering something nobody asked.
+        handQueueBack(box);
+    }
+
+    // A question queued behind an answer the reader has just walked away from.
+    //
+    // It must not be SENT from here, and that part of the old behaviour is right: this
+    // token only moves when ANOTHER CONVERSATION OPENS — `state._leave_conversation` is
+    // reached from New chat, from opening a chat and from deleting the open one, and
+    // the trash that used to clear a conversation in place is gone — so a question
+    // typed behind one conversation's answer would be asked with another's history,
+    // into another's transcript. "The app answering something nobody asked", which is
+    // what the drop was written for.
+    //
+    // But dropping it lost the reader's question outright, and that is the bug this
+    // exists to fix. Measured in the running app at 1440 and at 500: queue a question
+    // mid-answer, click another chat in the panel, and 200ms later the `Queued` row is
+    // gone, `__sageQueue` is empty, the box is empty, neither conversation holds the
+    // question — and `tools/mock_provider.py`'s request log never saw it. Nothing on
+    // screen said it had been thrown away. The queue is the one place in this app a
+    // question lives outside session state, so nothing else could put it back.
+    //
+    // So it goes where a question the app could not send already goes: into the
+    // composer, in front of the reader, unsent. `flushQueue` gives up the same way
+    // after `SEND_PATIENCE_MS` — "a question the reader can see and send themselves,
+    // rather than one that vanished" — and this is the same promise kept on the other
+    // path out of the queue.
+    //
+    // All of them, joined, rather than the first: two queued questions are two things
+    // the reader typed, and half of them disappearing is the same bug in miniature. The
+    // box grows to fit (`setFieldValue` dispatches the `input` that `growComposer`
+    // autosizes on), and they can send it, edit it or delete it.
+    function handQueueBack(box) {
+        var held = view.__sageQueue || [];
+        // The draft the queue displaced goes back as well, in front of what displaced
+        // it: `flushQueue` holds it there while a queued question has the box, and the
+        // switch can land in that window.
+        var hold = view.__sageDraftHold || '';
+        var giveBack = (hold.replace(/^\s+|\s+$/g, '') ? [hold] : [])
+            .concat(held).join('\n\n');
         view.__sageQueue = [];
+        // NOT given back: the one already handed to the composer. Python may have
+        // accepted it a frame ago, in which case the question is in a transcript and
+        // `abandon_turn` has marked the turn for `resume_pending` — putting it in the
+        // box as well would be the reader's question asked twice.
         view.__sageSending = null;
         view.__sageSendTries = 0;
         view.__sageDraftHold = null;
+        // The box was emptied just above, so this cannot paper over anything; the
+        // guard is `restoreDraft`'s rule — if the reader has started typing since,
+        // theirs is the newer text and it stays.
+        if (!giveBack || !box || box.value) return;
+        setFieldValue(box, giveBack);
+        // And sized, not left at `height: auto`. Every other setFieldValue here writes
+        // an EMPTY string, where `auto` is the collapse that belongs with it; this one
+        // writes text, and `autosizeComposer` is what turns that into a height. It runs
+        // on the `input` event above as well, so this is belt and braces — but the
+        // braces matter, because `auto` set AFTER that listener has sized the box is a
+        // one-line box holding three lines of question.
+        autosizeComposer();
     }
 
     /* --- the Think pill ---------------------------------------------------
@@ -1645,31 +1765,87 @@
      * the app, so nothing is left to close. */
     var BRAIN_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-1 5.8V16a3 3 0 0 0 4 2.8V5Z"></path><path d="M12 5a3 3 0 0 1 3 3 3 3 0 0 1 1 5.8V16a3 3 0 0 1-4 2.8V5Z"></path></svg>';
 
-    function dressThinkToggle() {
-        var marker = doc.querySelector('#think-state');
-        var strip = doc.querySelector('.st-key-composer-strip');
-        var button = strip ? strip.querySelector('button') : null;
-        if (!button) return;
-        // State off the CONTAINER KEY, not off the marker's `data-on`. Both say the
-        // same thing, but this function runs from a mutation observer and the marker
-        // version was read a pass too early every time: measured in the running app,
-        // `data-on="1"` sat beside `aria-pressed="false"` five seconds after the
-        // click, because no later pass came to correct it. The key is on an ancestor
-        // of the button in the same DOM this pass is already looking at, so it cannot
-        // disagree with what the reader sees. app.css paints off the same key.
-        var on = !!button.closest('.st-key-think-on');
-        // The marker carries only the words now — the deployment's own hint text,
-        // which app.css cannot hold and this file must not hardcode.
-        var hint = marker ? (marker.getAttribute('data-hint') || '') : '';
-        button.setAttribute('aria-pressed', on ? 'true' : 'false');
-        if (hint) {
-            button.setAttribute('title', hint);
-            button.setAttribute('aria-label', (button.textContent || '').trim() + ' — ' + hint);
+    // Whether THIS copy of the script made the pill that is on the page. Same
+    // arrangement as the theme toggle's `built`, and for the same reason: the listener
+    // is the part that goes stale, so the node has to be rebuilt once per rerun — but
+    // only once. See `paintThinkButton` for what the alternative cost.
+    var thinkBuilt = false;
+
+    function paintThinkButton(btn, on, hint, label) {
+        btn.title = hint;
+        btn.setAttribute('aria-label', label + ' — ' + hint);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        if (on) {
+            btn.dataset.on = 'true';
+        } else {
+            btn.removeAttribute('data-on');
         }
-        if (button.dataset.sageThink === 'true') return;
-        var label = button.querySelector('p') || button;
-        label.insertAdjacentHTML('afterbegin', BRAIN_SVG);
-        button.dataset.sageThink = 'true';
+    }
+
+    function addThinkButton() {
+        var input = doc.querySelector('[data-testid="stChatInput"]');
+        var marker = doc.querySelector('#think-state');
+        var existing = doc.getElementById('think-btn');
+        // No marker means the control was not drawn for this model — see
+        // `View.can_think`. Anything already injected goes with it, or a failover onto
+        // a provider without reasoning leaves a pill with no widget behind it.
+        if (!input || !marker) {
+            if (existing) existing.remove();
+            thinkBuilt = false;
+            return;
+        }
+        // State off the container key, which Streamlit writes in the same run that
+        // changed it, and read on every pass — so the pill cannot be a frame behind
+        // whether it was rebuilt or kept.
+        var on = !!doc.querySelector('.st-key-think-on');
+        var hint = marker.getAttribute('data-hint') || '';
+        var label = marker.getAttribute('data-label') || 'Think';
+
+        // Repaint a pill this copy already made, rather than making another one.
+        //
+        // It used to be destroyed and rebuilt on EVERY sync pass, which is not once
+        // per rerun: `sync` runs on every DOM mutation and every 250ms while an answer
+        // is arriving, so a streaming turn rebuilt it around thirty times a second.
+        // A node replaced under a reader's focus is a node they cannot focus — Tab to
+        // the pill, and the next appended text node takes the focus ring off it and
+        // puts it back at the top of the document. The listener staleness this was
+        // guarding against is per-REALM, not per-mutation, and `thinkBuilt` is exactly
+        // that scope: it is a variable in this copy's closure, so a new copy of the
+        // script starts false and rebuilds once.
+        if (thinkBuilt && existing && existing.parentElement === input
+                && existing.dataset.label === label) {
+            paintThinkButton(existing, on, hint, label);
+            input.style.position = 'relative';
+            return;
+        }
+
+        if (existing) existing.remove();
+        var btn = injected('button');
+        btn.id = 'think-btn';
+        btn.type = 'button';
+        btn.innerHTML = BRAIN_SVG + '<span>' + label + '</span>';
+        // What the label was when the markup was built, so a profile whose copy
+        // changed under a live session gets a rebuild rather than a stale word.
+        btn.dataset.label = label;
+        paintThinkButton(btn, on, hint, label);
+        btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            // The clipped Streamlit button is the only thing with a channel back to
+            // the script, exactly as the stop square and the paperclip work.
+            var hook = doc.querySelector('[class*="st-key-think-toggle"] button');
+            if (hook) hook.click();
+        });
+
+        // INSIDE the box. It used to be a `position: fixed` container placed at a spot
+        // measured from the send button on every pass, and a fixed element chasing a
+        // measurement of the box can only ever follow it: "the toggle isn't part of the
+        // textbox... it can jump out of the box when scrolling up and down", while the
+        // send arrow never did because the arrow really is in the box. Being in the box
+        // removes the measurement rather than improving it.
+        input.style.position = 'relative';
+        input.appendChild(btn);
+        thinkBuilt = true;
     }
 
     function copyText(text) {
@@ -1722,20 +1898,26 @@
         return btn;
     }
 
-    function addCodeCopyButtons() {
-        var blocks = doc.querySelectorAll('.stChatMessage div[data-testid="stCodeBlock"]');
-        blocks.forEach(function (block) {
-            if (block.dataset.sageCopy === 'true') return;
-            var pre = block.querySelector('pre');
-            var code = block.querySelector('code');
-            if (!pre || !code) return;
-            block.dataset.sageCopy = 'true';
-            pre.style.setProperty('position', 'relative', 'important');
-            pre.appendChild(makeCopyButton(function () {
-                return code.innerText || code.textContent || '';
-            }, 'Copy code to clipboard'));
-        });
-    }
+    /* No `addCodeCopyButtons` here any more, and no rule in app.css hiding Streamlit's.
+     * The pair was one feature — put this app's copy button on every code block and
+     * hide the stock one — and both halves looked for `[data-testid="stCodeBlock"]`,
+     * which Streamlit 1.54 does not emit. Measured in the running app on an answer with
+     * a fenced block: `div[data-testid="stCodeBlock"]` is 0 elements, and the chain over
+     * the `pre` is `[data-testid="stCode"]` inside `[data-testid="stMarkdownPre"]`. So
+     * for as long as this deployment has been on 1.54 neither half has run.
+     *
+     * Deleted rather than repointed, because nothing is missing from the page. Streamlit
+     * 1.54 ships its own: `data-testid="stCodeCopyButton"`, in the code block's top-right
+     * corner, `transform: scale(0)` at rest and 36.8x36.8 on hover AND on focus —
+     * `tabIndex` 0 with a non-null `offsetParent`, so it is in the tab order and a
+     * keyboard reader gets it too. Repointing the CSS would take that working control
+     * away; repointing this would put a second button beside it, in the same corner.
+     *
+     * The one thing the deletion changes is on a Streamlit older than 1.54, which
+     * `requirements.txt` still allows (`>=1.42`) and nothing deploys: there a code block
+     * gets Streamlit's stock button instead of this app's. One button either way — which
+     * is why the two had to go together. Keeping the CSS rule alone would have hidden
+     * Streamlit's and added nothing: no copy button at all. */
 
     // What "copy this answer" would put on the clipboard. The `Stopped` marker is not
     // part of the answer — it is this app saying what happened to it — so it does not
@@ -2261,6 +2443,39 @@
     // which `restoreDraft` will not overwrite and the reader can simply delete.
     var SEND_PATIENCE_MS = 6000;
 
+    // Hand a question the queue could not get sent back to the reader, together with
+    // whatever draft it displaced on the way out.
+    //
+    // Both recovery paths below used to write `__sageDraftHold = null` and then put
+    // only the question back, which threw the draft away — and the draft is not always
+    // half a sentence. An EARLIER queued question restored by an earlier patience
+    // expiry is sitting in that box, so `flushQueue` picking up the next one holds it
+    // here, and dropping it lost a question the reader had pressed Enter on. Measured
+    // against `SAGE_RATE_BURST=1` with two questions queued behind one answer: at +6s
+    // the second question was in the box, at +12s the box held only the third, and the
+    // second never reached the provider's request log.
+    //
+    // Joined, oldest first, for the same reason `handQueueBack` joins: both strings are
+    // the reader's own typing and this is the last place either of them exists.
+    //
+    // Newer typing still wins, which is `restoreDraft`'s rule and a decision this file
+    // has already made: a box holding something that is neither the question nor the
+    // draft is a box the reader has started using again, and writing into it would move
+    // the caret out from under them.
+    function giveBackToComposer(area, text) {
+        var hold = view.__sageDraftHold || '';
+        view.__sageDraftHold = null;
+        if (!hold.replace(/^\s+|\s+$/g, '') || hold === text) hold = '';
+        var merged = hold ? hold + '\n\n' + text : text;
+        if (area.value === merged) return;
+        // `=== text` is the give-up path, where the box still holds the question this
+        // is about; empty is the patience path, where Streamlit cleared it on accepting
+        // the submit it then refused.
+        if (area.value && area.value !== text) return;
+        setFieldValue(area, merged);
+        autosizeComposer();
+    }
+
     function flushQueue() {
         var area = doc.querySelector('textarea[data-testid="stChatInputTextArea"]');
         if (!area) return;
@@ -2299,8 +2514,7 @@
                     // without a word.
                     view.__sageSending = null;
                     view.__sageSendTries = 0;
-                    view.__sageDraftHold = null;
-                    if (!area.value) setFieldValue(area, sending);
+                    giveBackToComposer(area, sending);
                 }
                 return;
             }
@@ -2310,10 +2524,12 @@
             view.__sageSendTries = tries;
             if (tries > SEND_GIVE_UP) {
                 // Give up and leave the text where the reader can see it and send it
-                // themselves, rather than losing the question.
+                // themselves, rather than losing the question. The box already holds
+                // it — this branch is only reached when it does — so the only thing
+                // left to do is put back the draft it displaced.
                 view.__sageSending = null;
                 view.__sageSendTries = 0;
-                view.__sageDraftHold = null;
+                giveBackToComposer(area, sending);
                 return;
             }
             handToComposer(area, sending);
@@ -2490,13 +2706,14 @@
         addPromptHistory();
         growComposer();
         resetComposerOnClear();
-        dressThinkToggle();
-        addCodeCopyButtons();
+        addThinkButton();
         addAnswerCopyButtons();
         addEditButtons();
         addQuestionCopyButtons();
         addSelectionAsk();
         addThemeToggle();
+        hideFromTabOrder();
+        nameTheLandmarks();
         labelPanelToggles();
         labelChatActions();
         enforceTheme();
@@ -2559,7 +2776,28 @@
     // laid out around the stylesheet's guess at the input bar rather than its
     // measured height, and that is a frame the reader sees.
     safeSync();
-    new MutationObserver(schedule).observe(doc.body, { childList: true, subtree: true });
+    // `class` as well as children, and that is not a nicety.
+    //
+    // Streamlit says a widget's state by swapping the class on a container it REUSES —
+    // `st-key-think-off` becomes `st-key-think-on`, same node — and a childList-only
+    // observer cannot see that. Measured in the running app on the landing screen:
+    // pressing Think reached Python, `.st-key-think-on` appeared, and the pill stayed
+    // unlit for as long as the page was left alone, because no pass ever ran to read
+    // the new class. It looked like a dead control and was reported as one.
+    //
+    // A transcript makes it INTERMITTENT rather than fixing it, which is worse: the
+    // rerun replaces the chat messages, which IS a childList mutation, so a pass
+    // usually follows the click — measured under childList-only, 2 of 3 toggles on a
+    // page with a transcript were still left unpainted. So the shape of the bug was a
+    // control that worked when tested by hand after asking something, and did nothing
+    // on the screen every reader starts on.
+    //
+    // Filtered to `class`, and nothing in `sync` writes a class to a node that is in
+    // the document (every `className =` here is on a node this script has just made
+    // and not yet inserted), so this cannot feed itself.
+    new MutationObserver(schedule).observe(doc.body, {
+        childList: true, subtree: true, attributes: true, attributeFilter: ['class']
+    });
     // Streaming appends text nodes that sometimes do not trigger the observer.
     //
     // And a queued question being handed to the composer needs the same poll, on a page

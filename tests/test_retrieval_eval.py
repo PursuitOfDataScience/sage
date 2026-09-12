@@ -94,7 +94,8 @@ RECALL_AT = 5
 # Ratchet. Raise it when retrieval improves; never lower it to make CI pass.
 MINIMUM_RECALL_AT_5 = 0.96      # measured 1.00; one of 33 cases is 3.0pp
 MINIMUM_RECALL_AT_3 = 0.96      # measured 1.00
-MINIMUM_PRECISION_AT_1 = 0.81   # measured 0.85
+MINIMUM_PRECISION_AT_1 = 0.87   # measured 0.91 (was 0.85, before the title field
+                                # was length-normalised)
 
 
 def pages(index, question, limit):

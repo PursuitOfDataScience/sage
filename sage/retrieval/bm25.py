@@ -31,6 +31,12 @@ from .text import (
     snippet,
 )
 
+#: The most of the title boost that title-length normalisation may take away, as a
+#: fraction. Not in `config` with the other dials on purpose: it is not a knob anybody
+#: should be turning per deployment, it is the bound that keeps `_title_weight` from
+#: moving a score across `MIN_CONFIDENT_SCORE`. See `_title_weight` for the measurement.
+TITLE_LENGTH_FLOOR = 0.75
+
 
 class Index:
     """In-memory BM25 index. Built once per process and cached by the UI layer."""
@@ -65,6 +71,50 @@ class Index:
         self.average_length = (
             sum(self._lengths) / self.total if self.total else 1.0
         )
+        self.average_title_length = (
+            sum(len(title) or 1 for title in self._titles) / self.total
+            if self.total
+            else 1.0
+        )
+        self._title_weights = [
+            self._title_weight(len(title) or 1) for title in self._titles
+        ]
+
+    def _title_weight(self, length: int) -> float:
+        """How much one matching title term is worth, given how long the title is.
+
+        The body field is length-normalised and the title field was not, so the title
+        boost was a flat `+idf * TITLE_BOOST` per matching term however much of the title
+        that term accounted for. A breadcrumb is the whole path of headings — "Running
+        Jobs FAQ › Set-up and general questions › Are there any limits to running jobs on
+        Midway?" — so a page that merely *contains* the reader's word somewhere in its
+        heading trail collected exactly the credit of a page whose title IS that word.
+
+        That is what "pages findable by their own title" was measuring. A reader typing
+        `FAQs` got four sections of three `faq.md` pages, all scoring an identical 19.769
+        on `faq` in a fifteen-token breadcrumb, and the page actually titled "FAQs" came
+        seventh. Same for the four pages titled "Software" and for `Accessing RCC
+        clusters`, which lost to two sections of a GIS tutorial whose breadcrumb happens
+        to read "Section I: Connecting to Midway Cluster".
+
+        So the title field gets BM25's own normalisation, against the mean title length
+        rather than the mean document length — `b` is `BM25_B`, the same shape the body
+        already uses.
+
+        `TITLE_LENGTH_FLOOR` is the part that is not textbook, and it is here because
+        this score is consumed by an absolute threshold as well as by a sort. Deflating a
+        long title's boost lowers the top score of queries that were never about
+        findability, and `MIN_CONFIDENT_SCORE` is a flat 20 on an unnormalised scale:
+        unclamped, "why did job 41235567 fail" fell from just above the floor to just
+        below it and started refusing a question the corpus answers. The floor bounds how
+        much of the boost normalisation may take away, which leaves the ranking win intact
+        — measured, the clamp costs nothing on any of the six Axis A numbers and holds the
+        same result anywhere in 0.68–0.80.
+        """
+        norm = 1 - config.BM25_B + config.BM25_B * length / (
+            self.average_title_length or 1.0
+        )
+        return max(TITLE_LENGTH_FLOOR, 1.0 / norm) if norm > 0 else 1.0
 
     def _inverse_document_frequency(self, term: str) -> float:
         frequency = self._document_frequency.get(term, 0)
@@ -84,6 +134,7 @@ class Index:
             length = self._lengths[position]
             title = self._titles[position]
             path = self._paths[position]
+            title_weight = self._title_weights[position]
             score = 0.0
             matched = False
 
@@ -101,7 +152,7 @@ class Index:
                     score += weight * idf * frequency * (config.BM25_K1 + 1) / denominator
                 if term in title:
                     matched = True
-                    score += weight * idf * config.TITLE_BOOST
+                    score += weight * idf * config.TITLE_BOOST * title_weight
                 if term in path:
                     matched = True
                     score += weight * idf * config.PATH_BOOST

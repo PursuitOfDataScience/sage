@@ -39,15 +39,34 @@ jobs:
       # space above the input bar, or low contrast — see the docstring in
       # tools/render_check.py. Every UI bug that has shipped from this repo was
       # pure CSS, and this runner's Chrome has caught one this sandbox's did not.
+      #
+      # A missing browser is a BROKEN check, not a passing one. This step used to
+      # print `::warning::` and `exit 0` when /usr/bin/google-chrome was not there,
+      # so the day the runner image moves Chrome, all 684 renders quietly stop being
+      # checked and the job still goes green — with an annotation nobody reads on a
+      # tick everybody does. That is the exact failure this repo is written against:
+      # a check that cannot fail reads as a pass, which is worse than no check. So
+      # the browser is searched for across the names runner images actually use, the
+      # one found is printed so the log says what was measured, and finding none is
+      # a hard failure with the remedy in it.
       - name: Check the layout renders correctly
-        env:
-          SAGE_CHROME: /usr/bin/google-chrome
         run: |
-          if [ ! -x "$SAGE_CHROME" ]; then
-            echo "::warning::No Chrome on the runner; skipping the layout check."
-            exit 0
+          for candidate in /usr/bin/google-chrome /usr/bin/google-chrome-stable \
+                           /opt/google/chrome/chrome /usr/bin/chromium-browser \
+                           /usr/bin/chromium \
+                           "$(command -v google-chrome || true)" \
+                           "$(command -v chromium || true)"; do
+            if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+              SAGE_CHROME="$candidate"
+              break
+            fi
+          done
+          if [ -z "${SAGE_CHROME:-}" ]; then
+            echo "::error title=Layout check did not run::No Chrome or Chromium on this runner, so tools/render_check.py rendered nothing. This is a required check: add a browser step (browser-actions/setup-chrome) rather than letting 684 renders pass without being rendered."
+            exit 1
           fi
-          python tools/render_check.py
+          echo "Layout check rendering with $SAGE_CHROME"
+          SAGE_CHROME="$SAGE_CHROME" python tools/render_check.py
 
   deps:
     name: Dependencies resolve

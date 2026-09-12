@@ -213,24 +213,68 @@ def self_reachability(index, corpus) -> dict:
             # `row["page"]` away from a crash — and that is exactly what `scorecard.py`
             # does with it: an untitled page would have taken the whole card down with
             # `TypeError: string indices must be integers` rather than printing a row.
-            unreachable.append({"page": page, "title": title})
+            unreachable.append(_miss(page, title, [], None))
             continue
-        found = {
-            f"{result.chunk.source}/{result.chunk.path}"
-            for result in index.search(title, SEARCH_LIMIT)
-        }
+        results = index.search(title, SEARCH_LIMIT)
+        found = {f"{result.chunk.source}/{result.chunk.path}" for result in results}
         if page not in found:
-            # The title travels with it: two of the seven are unreachable *because* of
-            # their title. `singularity.md` is titled "Modules" upstream, so every
-            # citation chip for it reads "Modules — …", and `MidwayGeoSpatial` returns
-            # nothing at all because a CamelCase compound is one token the page's own
-            # text never uses. Reporting the page alone hid both.
-            unreachable.append({"page": page, "title": title})
+            unreachable.append(_miss(page, title, results, _rank(index, title, page)))
     total = len(titles) or 1
     return {
         "pages": len(titles),
         "unreachable": unreachable,
         "rate": (total - len(unreachable)) / total,
+    }
+
+
+#: How deep to look for a page that lost, to tell "came seventh" from "never matched at
+#: all". Those two are different defects with different fixes and the check could not
+#: distinguish them: `MidwayGeoSpatial` scored nothing anywhere while `web/faqs.txt` was
+#: one slot short, and both printed as the same bare page name.
+RANK_DEPTH = 200
+
+
+def _rank(index, title: str, page: str) -> int | None:
+    """Where the page the reader asked for actually came, or None if it never matched."""
+    for position, result in enumerate(index.search(title, RANK_DEPTH)):
+        if f"{result.chunk.source}/{result.chunk.path}" == page:
+            return position + 1
+    return None
+
+
+def _miss(page: str, title: str, results: list, rank: int | None) -> dict:
+    """One unfindable page, with enough attached to say *why* without a second run.
+
+    `page` and `title` are what they always were — `tools/scorecard.py` and
+    `tools/corpus_check.py` both read them and neither may be edited from here — and the
+    three fields after them are the diagnosis.
+
+    This is the part that made the number unactionable. "7 are not findable, incl. one
+    titled 'Modules'" names one page out of seven and gives no cause for any of them, so
+    the four distinct defects underneath it were invisible: a title shared by four
+    different pages (`Software`), a one-word title losing to longer breadcrumbs that
+    merely contain the word (`FAQs`), a page that came seventh of six (`Accessing RCC
+    clusters`), and a CamelCase compound that matched nothing in the index at all
+    (`MidwayGeoSpatial`). Each needs a different fix and the list said only "seven".
+
+    `got` is the top three with their scores, because the competitor is the evidence: the
+    `FAQs` miss was four sections of three *other* FAQ pages tied at an identical 19.769
+    on one word of a fifteen-word breadcrumb, which says "the title field is not
+    length-normalised" and nothing else does.
+    """
+    return {
+        "page": page,
+        "title": title,
+        #: Rank of the page asked for, or None when nothing in it matched the title.
+        "rank": rank,
+        "found_instead": [
+            {
+                "page": f"{result.chunk.source}/{result.chunk.path}",
+                "breadcrumb": result.chunk.breadcrumb,
+                "score": round(result.score, 3),
+            }
+            for result in results[:3]
+        ],
     }
 
 

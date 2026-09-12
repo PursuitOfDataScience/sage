@@ -109,9 +109,15 @@ class Provider(Protocol):
     #: `**kwargs` on the one method every provider must implement, which makes a typo
     #: at a call site silent. Whether it is ever True is decided upstream by
     #: `ProviderEntry.reasoning`, so an adapter that ignores it is never handed it.
+    #: `tool_choice` is "auto" everywhere but the last round of a turn, where it is
+    #: "none": the schemas go up so the request still looks like a tool-calling one,
+    #: and the call is forbidden so the model answers. That is not a nicety on a free
+    #: ROUTER — see `ui.turn`, where the round is made. Named rather than passed as a
+    #: bare bool for the same reason `thinking` is a parameter and not `**kwargs`: a
+    #: typo at a call site should not be silent.
     def stream(
         self, model: str, messages: list[dict], tools: list[dict] | None,
-        thinking: bool = False,
+        thinking: bool = False, tool_choice: str = "auto",
     ) -> Iterator[Chunk]: ...
 
 
