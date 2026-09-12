@@ -899,6 +899,28 @@ def typed_out_tool_call(text: str) -> list[Finding]:
     return [Finding("typed-out-tool-call", f"{first} ({len(text)} chars)", DEFECT)]
 
 
+def moderation_verdict(text: str) -> list[Finding]:
+    """An answer that is a safety classifier's ruling on the question.
+
+    Third of the three, and the one that is not about the model this row describes: it is
+    a different model entirely. Where a deployment's lineup is a router, the name serving
+    a request changes per request, and one of the names in the free pool is a classifier
+    whose whole output is `User Safety: safe`. `ui.turn` raises on it now, so the reader
+    gets the error card — which is also why it has to be counted here, since the
+    delivered text cannot show it.
+
+    A defect: the turn produced no answer. It says something about the LINEUP rather than
+    about a model's manners, and that is worth seeing in the card rather than averaged
+    into a generic empty.
+
+    The pattern lives in `sage.normalize`, so the app and this check cannot drift apart.
+    """
+    if not normalize.is_moderation_verdict(text):
+        return []
+    first = text.strip().splitlines()[0][:60] if text.strip() else ""
+    return [Finding("moderation-verdict", f"{first} ({len(text)} chars)", DEFECT)]
+
+
 def caught_internals(redacted) -> list[Finding]:
     """Names `sage.redact` took out of this answer before the reader saw it.
 
@@ -1052,9 +1074,30 @@ def inspect(
     """
     text = str(record.get("text") or "")
     if not text.strip():
-        # Not a finding: an empty answer is an outcome, and the harness records it as
-        # one. Running content checks over nothing would report a clean answer.
-        return []
+        # Not a finding, for everything that judges an ANSWER: an empty answer is an
+        # outcome, and the harness records it as one. Running content checks over
+        # nothing would report a clean answer.
+        #
+        # Three checks are not about the answer, though, and returning here made all
+        # three unreachable on a live run — which is the shape of a check that cannot
+        # fail. `reasoning_shape`, `typed_out_tool_call` and `moderation_verdict` each
+        # describe something `ui.turn` REFUSES to ship: it raises `empty` and stores no
+        # text, so by the time a record exists the evidence has been thrown away. Their
+        # own docstrings say they exist because the delivered text cannot show the
+        # behaviour, and then the delivered text was the only thing they were given.
+        #
+        # `harness.run_turn` keeps `streamed_final` — the model's last words even where
+        # the app declined to print them — so the three are scored off that. Nothing
+        # else is: a model whose answer was refused has still not answered, and every
+        # other check here would be judging the reader's screen against text the reader
+        # never saw.
+        streamed = str(record.get("streamed_final") or "")
+        if not streamed.strip():
+            return []
+        refused = reasoning_shape(streamed)
+        refused += typed_out_tool_call(streamed)
+        refused += moderation_verdict(streamed)
+        return refused
     if ROUND_LIMIT_TEXT in text:
         # The app's own words when the tool loop ran out of rounds. Judging them as an
         # answer charges a bound of the app to the model — the same mistake `unfinished`
@@ -1081,6 +1124,7 @@ def inspect(
     findings += caught_internals(record.get("redacted"))
     findings += reasoning_shape(text)
     findings += typed_out_tool_call(text)
+    findings += moderation_verdict(text)
     findings += narrated_machinery(text)
     findings += stonewalled(text)
 

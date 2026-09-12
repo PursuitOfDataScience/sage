@@ -85,6 +85,9 @@ kind = "openai"                  # anything speaking /chat/completions
 key_env = "LOCAL_API_KEY"
 base_url = "http://127.0.0.1:8000/v1"
 models = ["qwen3-30b"]           # fallback if GET /models fails
+reasoning = false                # does it take OpenRouter's `reasoning` parameter?
+deny = ["qwen3-30b-preview"]     # served, free, and known not to answer
+routers = []                     # ids that are a router, not a model
 ```
 
 `kind = "openai"` covers Together, Groq, Fireworks, vLLM, llama.cpp and Ollama —
@@ -96,8 +99,34 @@ Order is preference order: it decides which provider a fresh session starts on w
 reaches for. A provider whose `key_env` is unset is skipped entirely.
 
 `free_marks` / `free_only` are for an endpoint that serves a paid lineup alongside a
-free one: only ids containing one of the marks are offered, so the picker cannot
-offer a model there is no balance for.
+free one: only ids containing one of the marks are offered, so a failover cannot land
+on a model there is no balance for and return a 402.
+
+`deny` is the other half of that and a different question — not "can this deployment
+pay for it" but "does it answer at all". A free tier goes on listing a name in `GET
+/models` long after the thing behind it has stopped responding, and `free_marks`
+cannot express that, because the name is genuinely free and genuinely served. It is
+maintained by `tools/lineup_check.py` and self-clearing: an id goes on when it has
+failed every probe for the retirement threshold and comes off the moment it answers
+again.
+
+`routers` names the ids that are a ROUTER rather than a model — one name that
+resolves to a different model on every request. It changes what recovery means. A
+model that returned nothing will return nothing again, so a failed turn walks to the
+next name in the lineup and never asks the same one twice; a router asked again is a
+different model, which makes it the cheapest recovery there is and one the walk
+structurally cannot reach. Nothing on the wire distinguishes the two, which is why the
+deployment says it here. `SAGE_ROUTER_RETRIES` bounds the re-asks.
+
+`reasoning` says whether this provider takes OpenRouter's `reasoning` request
+parameter, which is what the Think toggle sends. It is declared here rather than
+inferred from `kind`, because `kind = "openai"` covers both OpenRouter and endpoints
+that have never heard of the field and are entitled to reject an unknown one. **It is
+also what decides whether the toggle is drawn at all**: on a profile where no
+reachable provider declares it, there is no control under the input box, because a
+control that is present and does nothing is the failure this repo has a rule against.
+A deployment whose endpoint speaks the parameter opts in by setting it `true`; one
+that does not, leaves it out.
 
 ## Retrieval
 

@@ -39,8 +39,13 @@ _MESSAGES = {
     # models on the same key answer immediately, and sending the reader to a second
     # provider — whose key may itself be out of credit — walks them into another
     # dead end.
+    # No "try one from the model button": the picker is gone and there is no such
+    # control. The sibling `empty` message below was reworded when it went and this one
+    # was missed — it is the last user-facing string in the app that names it. A reader
+    # cannot switch model by hand any more, so what is useful is that another attempt
+    # may land somewhere else, which the Try again button on the error card does.
     "allowance": "This model has used up its free allowance for now. "
-                 "Another model can answer it — try one from the model button.",
+                 "Try again — another model may answer it.",
     "context": "This conversation got too long for the model. "
                "Clear the chat and ask again.",
     # Not a transport failure: the request succeeded and the stream carried no text.
@@ -96,7 +101,30 @@ def classify(exc: BaseException) -> AssistantError:
 
     if status in (401, 403) or "unauthorized" in text or "invalid api key" in text:
         kind = "auth"
-    elif any(needle in text for needle in ("usage limit", "usagelimit", "usage_limit")):
+    elif any(
+        needle in text
+        for needle in ("usage limit", "usagelimit", "usage_limit",
+                       # OpenRouter's account-wide cap on free models, whose body is
+                       # the trap this branch exists for: `429
+                       # free-models-per-day-high-balance`, with prose reading
+                       # "purchase credits to raise your free-model daily limit". The
+                       # word `credit` in that sentence sent it to the `quota` branch
+                       # below — which matches `credit` and is checked before 429 — so
+                       # the reader was told "This model is out of credit or its quota
+                       # is used up. Switch to another model", and every clause was
+                       # wrong: the key held $4.44, the limit is a request count that
+                       # resets at midnight UTC, and this deployment offers one model
+                       # row to switch between. Measured when a 28-turn bench run hit
+                       # the cap at turn 19.
+                       #
+                       # Matched on the limit's NAME, like the two above, because the
+                       # name is the one part of that body that means what it says.
+                       # `allowance` is the right kind for it: the remedy is not
+                       # waiting a moment and not buying credit, it is another
+                       # provider — which is exactly what this kind fails over to.
+                       "free-models-per-day", "free_models_per_day",
+                       "free-model daily limit")
+    ):
         # A free tier's allowance, spent. It arrives as a 429 whose body names
         # `FreeUsageLimitError` and whose *message* reads "Rate limit exceeded. Please
         # try again later." — so both the status and the prose say "wait", and waiting
@@ -123,13 +151,59 @@ def classify(exc: BaseException) -> AssistantError:
         ("context" in text and ("length" in text or "token" in text))
         or "too large" in text
         or status == 413
+        # Only OpenAI says "context length". The three other shapes below are the
+        # same failure worded by providers this deployment actually talks to, and
+        # every one of them landed in `unknown` — which is in `turn.FAILOVER_KINDS`,
+        # so an oversized conversation walked the WHOLE lineup, one certain refusal
+        # per model, and ended on "Something went wrong reaching the assistant"
+        # instead of the one sentence that helps: clear the chat. Measured against
+        # the running app; `context` is the single kind that must not walk, because
+        # every model gets the same oversized request.
+        #
+        #   Anthropic (and so OpenRouter, which fronts it):
+        #     "prompt is too long: 214747 tokens > 200000 maximum"
+        #   Gemini's OpenAI-compatible endpoint:
+        #     "The input token count (1204587) exceeds the maximum number of
+        #      tokens allowed (1048576)."
+        #   Mistral: "Too many tokens in prompt: 40000 > 32000"
+        #
+        # Matched as a prompt-side word beside a size complaint rather than on any
+        # of those sentences, because the wording is the provider's to change and
+        # the shape is not. `max_tokens` is excluded by name: that field is this
+        # app's own request ceiling (`config.MAX_TOKENS`), so a gateway rejecting
+        # it is a misconfiguration for an operator to read in the details panel,
+        # not a conversation for the reader to clear. And "string too long" — which
+        # is OpenAI refusing one oversized FIELD — carries no prompt-side word, so
+        # it stays out.
+        or (
+            ("token" in text or "prompt" in text)
+            and any(mark in text for mark in ("too long", "too many", "exceed"))
+            and "max_tokens" not in text
+        )
     ):
         kind = "context"
     elif isinstance(status, int) and 500 <= status < 600:
         kind = "unavailable"
-    elif any(
+    elif status == 408 or any(
         needle in text
-        for needle in ("timeout", "timed out", "connection", "network", "dns", "ssl")
+        for needle in ("timeout", "timed out", "connection", "network", "dns", "ssl",
+                       # `httpx.RemoteProtocolError("Server disconnected without
+                       # sending a response.")` — a gateway closing a pooled socket,
+                       # which is the ordinary way a long stream dies. "connection"
+                       # is not a substring of "disconnected", so it read as
+                       # `unknown`: the reader was told nothing went wrong in
+                       # particular, and `llm.start` did not retry it even though a
+                       # dead keepalive socket is the textbook case for retrying.
+                       # The mid-stream form ("peer closed connection without
+                       # sending complete message body") always did classify,
+                       # because that one says "connection".
+                       "disconnect",
+                       # A DNS failure that reaches here unwrapped is
+                       # `socket.gaierror(-2, "Name or service not known")`, whose
+                       # class name and message between them contain neither "dns"
+                       # nor "connection". httpx normally wraps it in a ConnectError
+                       # that does; nothing guarantees the wrapper.
+                       "name or service not known", "name resolution")
     ):
         kind = "network"
     else:
@@ -241,14 +315,15 @@ def _parse(arguments: str) -> dict:
 
 
 def start(provider, model: str, messages: list[dict],
-          tools: list[dict] | None = None, thinking: bool = False) -> Turn:
+          tools: list[dict] | None = None, thinking: bool = False,
+          tool_choice: str = "auto") -> Turn:
     """Open a streaming turn, retrying transient failures before any output."""
     attempts = max(config.REQUEST_RETRIES, 0) + 1
     last: AssistantError | None = None
 
     for attempt in range(attempts):
         try:
-            stream = provider.stream(model, messages, tools, thinking)
+            stream = provider.stream(model, messages, tools, thinking, tool_choice)
             # `stream` is a generator, so the request has not been made yet. Pull
             # the first chunk here so connection and auth failures surface where
             # they can still be retried, rather than mid-render.

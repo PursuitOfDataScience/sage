@@ -25,6 +25,7 @@ Everything network-bound is in the provider. Point `OPENCODE_BASE_URL` at
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import sys
 import time
@@ -44,6 +45,7 @@ import stub_streamlit  # noqa: E402
 from sage import config, links, llm, providers, redact, runtime  # noqa: E402
 from sage import tools as tools_module  # noqa: E402
 from sage.profile import active as _active  # noqa: E402
+from sage.providers import openai_compat  # noqa: E402
 
 # How many script runs one question may take. A turn that fails over asks the next
 # model on the *following* run — that is what `failover_to` and `st.rerun()` mean — so a
@@ -82,6 +84,18 @@ class Trace:
     #: missing most of what the turn saw and the answer checks reported flags as
     #: "unsupported" that the model had read three paragraphs earlier.
     tool_results: list[str] = field(default_factory=list)
+    #: One entry per provider request, in the order they went out. `calls` above counts
+    #: them; this says what each one was and what came back — which model actually
+    #: served it, whether the schemas were sent and whether the call was forbidden, the
+    #: text it streamed, and whether a tool call arrived anyway.
+    #:
+    #: The text is the reason this is per request rather than per turn. `ui.turn` raises
+    #: `empty` on three shapes it refuses to ship — a reasoning monologue, a typed-out
+    #: tool call, a safety classifier's verdict — so the record's `text`, `raw` and
+    #: `said` are all blank on exactly the turns those shapes happened, and every check
+    #: that reads an answer is blind to them. This is the one place the model's own last
+    #: words survive the app's refusal to print them.
+    requests: list[dict] = field(default_factory=list)
     started: float = 0.0
     # The last request's shape. Kept rather than the request itself: a multi-turn
     # conversation carrying two attachments is most of a megabyte, and what is wanted
@@ -105,6 +119,45 @@ class Trace:
 
 
 _TRACE = Trace()
+
+#: The request currently being consumed, so `_tee_served` can hang the served model's
+#: name on it. A module global rather than an argument because the name is read one
+#: layer below the provider's own `stream()` — inside its SSE parser — and nothing in
+#: that signature could carry it up. Set and cleared by `Recorder.stream` around the
+#: iteration; the app consumes one stream at a time, so there is never a second.
+_ACTIVE: dict | None = None
+
+
+def _tee_served(lines):
+    """Pass an SSE stream through, reading the served model's name out on the way.
+
+    `Chunk` carries text and tool calls and nothing else, so by the time the app sees a
+    stream the name of the model that produced it is gone. On a pinned id that loses
+    nothing — the id IS the model. On a **router** it is the whole measurement:
+    `openrouter/free` resolves to a different model per request, so a benchmark row
+    named after the router is an average over whatever it routed to, and a row that
+    cannot say which models those were is a number nobody can act on.
+
+    Every OpenRouter event carries `model` and `provider` at the top level; the app's
+    `parse_sse` reads `choices[0].delta` and drops the rest. This is a wrapper around
+    that parser rather than a change to it, because the app has no use for the name and
+    the harness's whole claim is that instrumentation lives at the seams.
+    """
+    for raw in lines:
+        line = raw.strip() if isinstance(raw, str) else raw.decode().strip()
+        if _ACTIVE is not None and line.startswith("data:"):
+            body = line[len("data:"):].strip()
+            if body and body != "[DONE]":
+                with contextlib.suppress(Exception):
+                    event = json.loads(body)
+                    if isinstance(event, dict) and event.get("model"):
+                        served = str(event["model"])
+                        if served not in _ACTIVE["served"]:
+                            _ACTIVE["served"].append(served)
+                        upstream = str(event.get("provider") or "")
+                        if upstream and upstream not in _ACTIVE["upstream"]:
+                            _ACTIVE["upstream"].append(upstream)
+        yield raw
 
 
 class Recorder:
@@ -133,19 +186,49 @@ class Recorder:
                 self._models = []
         return self._models
 
-    def stream(self, model, messages, tools, thinking=False):
+    def stream(self, model, messages, tools, thinking=False, tool_choice="auto"):
         _TRACE.calls += 1
-        _TRACE.tools_offered.append(bool(tools))
+        # A schema the model may not call is not an offer. `ui.turn` sends the schemas
+        # on the last round of every turn now, with `tool_choice: "none"`, to keep a
+        # free router off the one free model that does not support the parameter — so
+        # `bool(tools)` alone would report every turn as a tool turn, the grounded path
+        # included, and `record["path"]` would stop distinguishing the two things this
+        # benchmark exists to compare.
+        _TRACE.tools_offered.append(bool(tools) and tool_choice != "none")
         _TRACE.record_request(messages)
+        global _ACTIVE
+        call = {
+            "asked": model,
+            # "" where no schemas went up, because `tool_choice` means nothing then —
+            # the app does not send the parameter without them, and printing "auto" for
+            # a request that offered nothing would read as a tool round.
+            "tool_choice": tool_choice if tools else "",
+            "schemas_sent": bool(tools),
+            "offered": bool(tools) and tool_choice != "none",
+            "served": [],
+            "upstream": [],
+            "text": "",
+            "tool_call_chunks": 0,
+            "error": "",
+        }
+        _TRACE.requests.append(call)
+        _ACTIVE = call
         try:
-            for chunk in self._inner.stream(model, messages, tools, thinking):
+            for chunk in self._inner.stream(model, messages, tools, thinking,
+                                            tool_choice):
                 _TRACE.stamp("first_byte")
                 if getattr(chunk, "text", ""):
                     _TRACE.stamp("first_text")
+                    call["text"] += chunk.text
+                if getattr(chunk, "tool_calls", None):
+                    call["tool_call_chunks"] += 1
                 yield chunk
         except Exception as exc:
+            call["error"] = f"{type(exc).__name__}: {exc}"
             _TRACE.errors.append(f"{type(exc).__name__}: {exc}")
             raise
+        finally:
+            _ACTIVE = None
 
 
 _PROVIDERS: dict[str, Recorder] = {}
@@ -165,6 +248,7 @@ def restore() -> None:
         return
     providers.build = _ORIGINALS["providers.build"]
     runtime.build = _ORIGINALS["runtime.build"]
+    openai_compat.parse_sse = _ORIGINALS["parse_sse"]
     tools_module.ToolRunner.run = _ORIGINALS["ToolRunner.run"]
     links.strip_inline_citations = _ORIGINALS["strip_inline_citations"]
     redact.apply = _ORIGINALS["redact.apply"]
@@ -197,6 +281,7 @@ def prepare(build_provider=None, *, fresh: bool = False) -> runtime.Runtime:
         {
             "providers.build": providers.build,
             "runtime.build": runtime.build,
+            "parse_sse": openai_compat.parse_sse,
             "ToolRunner.run": tools_module.ToolRunner.run,
             "strip_inline_citations": links.strip_inline_citations,
             "redact.apply": redact.apply,
@@ -215,6 +300,13 @@ def prepare(build_provider=None, *, fresh: bool = False) -> runtime.Runtime:
     # it would leak: a test file that prepared the harness and did not restore would
     # hand a lineup-of-one to every test that ran afterwards, `tests/test_app_smoke.py`
     # included, where failing over is the thing being measured.
+    #
+    # This also switches the ROUTER RE-ROLL off, and deliberately: `ui.turn` reads
+    # `config.MAX_MODEL_ATTEMPTS != 1` rather than `attempts_allowed`, so one lever turns
+    # off both ways a turn can substitute a different model for the one that was asked.
+    # A re-roll is a second request to the same router id, which resolves to a different
+    # model — the same "asked A, recorded B's answer" defect the walk would produce, and
+    # harder to see, because nothing in the record would name a second model at all.
     config.MAX_MODEL_ATTEMPTS = 1
     make = build_provider or _ORIGINALS["providers.build"]
 
@@ -224,6 +316,20 @@ def prepare(build_provider=None, *, fresh: bool = False) -> runtime.Runtime:
         return _PROVIDERS[name]
 
     providers.build = build
+
+    inner_sse = openai_compat.parse_sse
+
+    def parse_sse(lines):
+        # Patched on the module rather than wrapped around the adapter, because the name
+        # of the served model exists only in the raw events: `stream()` yields `Chunk`s,
+        # which carry text and tool calls and nothing else. `OpenAICompatProvider.stream`
+        # resolves this as a module global at call time, so the tee lands under every
+        # provider of kind `openai` — which is where a router lives. In `_ORIGINALS`
+        # because `sage.providers.openai_compat` survives `forget_importers()`, so an
+        # un-restored patch would follow the process into the next test file.
+        return inner_sse(_tee_served(lines))
+
+    openai_compat.parse_sse = parse_sse
     # The app asks for a Runtime once per script run, and indexing 572 chunks per
     # question would dominate the wall clock of a benchmark that is measuring models.
     runtime.build = lambda profile=None: _RUNTIME
@@ -286,6 +392,21 @@ def _reinstall(stub) -> None:
     sys.modules["streamlit"] = stub
     sys.modules["streamlit.components"] = stub.components
     sys.modules["streamlit.components.v1"] = stub.components.v1
+
+
+def _distinct_served(requests: list[dict]) -> list[str]:
+    """Every model that served any request of one turn, first appearance first.
+
+    Ordered rather than a set: the sequence is the interesting part on a router, where
+    the model that ran the searches and the model that wrote the answer are usually not
+    the same one.
+    """
+    seen: list[str] = []
+    for call in requests:
+        for name in call["served"]:
+            if name not in seen:
+                seen.append(name)
+    return seen
 
 
 def _kinds_by_message() -> dict[str, str]:
@@ -529,6 +650,34 @@ def _drive(
         "script_runs": runs,
         "unfinished": unfinished,
         "provider_calls": _TRACE.calls,
+        # Per request, not per turn — see `Trace.requests`. Three things in the card are
+        # only answerable from here.
+        "requests": list(_TRACE.requests),
+        # Which models a ROUTER actually served this turn, in the order it served them.
+        # A row named `openrouter/free` is an average over these, and the average is
+        # unreadable without them.
+        "served_models": _distinct_served(_TRACE.requests),
+        # And the one that produced the answer, which is the only request whose model
+        # the row's answer-shaped cells — defects, refusals, gold — are about. The
+        # earlier requests of a tool loop were served by other models.
+        "served_answer": (
+            (_TRACE.requests[-1]["served"] or [""])[-1] if _TRACE.requests else ""
+        ),
+        # The last request's own text, kept whatever the app decided to do with it.
+        # `text` above is empty on every turn `ui.turn` refused to ship — a monologue, a
+        # typed-out tool call, a classifier's verdict — and `checks.inspect` returns no
+        # findings at all for an empty answer, so those three shapes are invisible to
+        # every check that reads an answer. This is what they happened to.
+        "streamed_final": _TRACE.requests[-1]["text"] if _TRACE.requests else "",
+        # A tool call that arrived on a request which forbade one. `ui.turn` sends the
+        # last round's schemas with `tool_choice: "none"` — to keep a free router off
+        # the one free model that does not support tools — and a provider that honours
+        # the schema while ignoring the choice lands here. The count is of requests, not
+        # of calls.
+        "forbidden_tool_calls": sum(
+            1 for call in _TRACE.requests
+            if call["tool_choice"] == "none" and call["tool_call_chunks"]
+        ),
         "tools_offered": any(_TRACE.tools_offered),
         # Which of the app's two answering paths this turn went down, named rather than
         # left to be inferred from the flag above. Read off what the provider was offered,

@@ -168,7 +168,20 @@ class Copy:
     #: and those two stage phrases have nothing left to describe. The reversal is
     #: recorded rather than quietly applied: the phrases were deliberate, and the
     #: reasoning for them is in this file's history if a deployment wants it back.
+    #: `status_searching` and `status_reading` name the STAGE a turn is in, vaguely and
+    #: on purpose. They were removed when the row started naming each tool call with its
+    #: argument, and what that produced once several rounds had run was six rows of
+    #: history stacked over an empty answer, one of them a repository path. Both were
+    #: reported: "it's everything showing, which looks bad", and "it should be like what
+    #: we had before with the cool status message with gradients".
+    #:
+    #: So the two jobs are split rather than merged. WHILE a turn runs, one of these in
+    #: the sweeping row — a progress cue, which is what a reader waiting on an empty
+    #: answer needs. AFTER it, the detail: every step with its section title and its
+    #: time, folded under the answer where it can be opened against what it produced.
     status_thinking: str = "Thinking"
+    status_searching: str = "Searching the documentation"
+    status_reading: str = "Reading the relevant sections"
     status_working: str = "Working"
     #: The toggle in the corner of the input box, where the model picker used to be.
     #:
@@ -195,7 +208,12 @@ class Copy:
         chose, which has no longest form to measure; `tools/render_check.py` holds
         that row with a width bound instead of a length one.
         """
-        return (self.status_thinking, self.status_working)
+        return (
+            self.status_thinking,
+            self.status_searching,
+            self.status_reading,
+            self.status_working,
+        )
 
 
 @dataclass(frozen=True)
@@ -276,6 +294,12 @@ class ProviderEntry:
     #: Model ids never offered, however the provider lists them. See the class
     #: docstring: this is "known not to work", not "cannot be paid for".
     deny: tuple[str, ...] = ()
+    #: Ids that are a ROUTER rather than a model: one name that resolves to a
+    #: different model per request. Asking one of these again is not asking the same
+    #: thing again, which makes it the cheapest recovery there is — and the app cannot
+    #: work that out for itself, because on the wire a router is an id like any other.
+    #: See `ui.view.View.reroutes` and `ui.turn`'s `REROLL_KINDS`.
+    routers: tuple[str, ...] = ()
     #: Whether this provider takes OpenRouter's `reasoning` request parameter — the
     #: thing the Think toggle sends. Declared per provider rather than assumed from
     #: `kind`, because `kind = "openai"` covers both OpenRouter and OpenCode Zen and
@@ -465,6 +489,10 @@ def _provider(raw: dict) -> ProviderEntry:
     deny_env = str(raw.get("deny_env", "")).strip()
     if deny_env:
         deny = env.items(deny_env, deny)
+    routers = _strings(raw.get("routers"))
+    routers_env = str(raw.get("routers_env", "")).strip()
+    if routers_env:
+        routers = env.items(routers_env, routers)
     # No `labels_env`, unlike every field above it. The others are lists of ids or a
     # flag, which an environment variable can carry; a mapping cannot be spelled in one
     # without inventing a syntax to get it wrong in. A deployment that wants different
@@ -484,6 +512,7 @@ def _provider(raw: dict) -> ProviderEntry:
         free_marks=marks,
         free_only=free_only,
         deny=deny,
+        routers=routers,
         reasoning=bool(raw.get("reasoning", False)),
         labels=labels,
         hint=str(raw.get("hint", "")),

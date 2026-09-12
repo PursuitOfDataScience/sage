@@ -44,6 +44,14 @@ class _Section:
     level: int
     heading: str
     trail: list[str]
+    #: The heading line exactly as the file wrote it, before `plain_heading` tidied it.
+    #:
+    #: Kept because one thing in a heading is not decoration: an attr_list id,
+    #: `## Using renv {#using-the-renv}`, which mkdocs publishes verbatim. `slugify`
+    #: reads it and `plain_heading` strips it, so handing the cleaned title to `slugify`
+    #: — which is what happened — meant the marker was gone before anything could act on
+    #: it and the citation pointed at a derived anchor the page does not have.
+    raw_heading: str = ""
     lines: list[str] = field(default_factory=list)
 
     @property
@@ -79,7 +87,8 @@ def _split_sections(text: str) -> list[_Section]:
         while stack and stack[-1][0] >= level:
             stack.pop()
         sections.append(
-            _Section(level=level, heading=title, trail=[name for _, name in stack])
+            _Section(level=level, heading=title, raw_heading=heading.group("text"),
+                     trail=[name for _, name in stack])
         )
         stack.append((level, title))
 
@@ -195,6 +204,18 @@ def read_markdown(
 
     chunks: list[Chunk] = []
     seen_anchors: dict[str, int] = {}
+    # Occurrences of each heading SLUG, which is not what `seen_anchors` counts: that
+    # one numbers chunk ids and so also counts the parts an oversized section is split
+    # into. This counts headings, because it is reproducing what the site does to them.
+    #
+    # mkdocs runs Python-Markdown's `toc.unique`, so a heading repeated on one page
+    # publishes at `slug`, `slug_1`, `slug_2` — and every chunk here used to cite the
+    # bare slug. Measured on `software/apps-and-envs/alphafold.md`, which carries
+    # `AlphaFold 2` and `AlphaFold 3` three times each: six chunks pointing at two
+    # anchors, so FOUR sections of that page were unreachable from any citation and two
+    # citations landed the reader at the first occurrence of the right name. Invisible
+    # to an anchor check that only asks whether the anchor exists, because it does.
+    heading_anchors: dict[str, int] = {}
 
     for section in sections:
         body = section.body
@@ -206,7 +227,18 @@ def read_markdown(
         if not section.heading and len(body) < config.MIN_CHUNK_CHARS:
             continue
 
-        anchor = slugify(section.heading) if section.heading else ""
+        # From the RAW heading, so an explicit `{#id}` is still there to be read.
+        anchor = slugify(section.raw_heading or section.heading) if section.heading else ""
+        # The anchor as the SITE publishes it. Counted per heading rather than per
+        # chunk, so every part of one oversized section cites the one heading it is
+        # under — which is what the reader wants from a citation and what the page
+        # actually offers.
+        if anchor:
+            nth = heading_anchors.get(anchor, 0)
+            heading_anchors[anchor] = nth + 1
+            published = anchor if nth == 0 else f"{anchor}_{nth}"
+        else:
+            published = ""
         trail: list[str] = []
         for part in (doc_title, *section.trail, section.heading):
             # The page H1 usually repeats as the first section heading.
@@ -229,7 +261,7 @@ def read_markdown(
                     heading=heading_text,
                     breadcrumb=breadcrumb or doc_title,
                     text=part,
-                    url=urls.build(source, rel_path, anchor),
+                    url=urls.build(source, rel_path, published),
                 )
             )
 

@@ -68,10 +68,14 @@ httpx. Outbound HTTPS works. Chromium is at
 `~/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome`.
 
 - **Lint**: `ruff check .`
-- **Tests**: `python -m pytest -q` — all pass. The xfails are the refusal gate's recorded
-  leaks plus one lexical gap in the retrieval eval, and an xpass there is news rather than
-  a failure. No total is written down here: it went stale three times in a week, and the
-  number the suite reports is the one that is true.
+- **Tests**: `python -m pytest -q` — all pass. Three things are xfailed: the refusal
+  gate's recorded leaks, one lexical gap in the retrieval eval, and one corpus-health
+  check (`test_every_topic_is_answerable_without_a_caveat` — a one-word query for a topic
+  `search_docs` advertises scores under the confidence floor, because the score is an
+  unnormalised sum and a single common term earns very little of it). An xpass on either
+  of the last two is news rather than a failure; `-rxX` prints the list. No total is
+  written down here: it went stale three times in a week, and the number the suite
+  reports is the one that is true.
 - **Layout**: `SAGE_CHROME=~/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome
   python tools/render_check.py` — ~8 minutes for 684 renders.
 - **Anchors**: `python tools/anchor_check.py` — network-bound, so not in the suite.
@@ -149,8 +153,9 @@ Three things now stand between an edit and a silent repaint, in the order they f
 
 **The dark palette is written twice, and that is on purpose.** `app.css` holds it once
 under `@media (prefers-color-scheme: dark)` — for the reader who has not chosen — and
-once under `:root[data-sage-theme="dark"]`, for the reader who pressed the toggle under
-the input. There is no way in CSS to hand one declaration list to both conditions, and
+once under `:root[data-sage-theme="dark"]`, for the reader who pressed the theme toggle
+in the top-right corner of the page — it was under the input until `#76` moved it there.
+There is no way in CSS to hand one declaration list to both conditions, and
 the two constructs that would (`light-dark()`, style queries) are recent enough that a
 reader's browser may not have them. So `tests/test_palette.py` holds the two blocks
 identical, token for token, and **a token added to one must be added to the other**. The
@@ -158,7 +163,7 @@ failure mode if they drift breaks nothing and fails no bound: the reader picks d
 gets most of it, with one value still light on a near-black page.
 
 **The composer is TWO ROWS: the text, and a band of controls under it.** The paperclip,
-the model picker and the send button are absolutely positioned inside `--composer-band`,
+the Think pill and the send button are absolutely positioned inside `--composer-band`,
 which the box reserves as `padding-bottom`. That shape is not decoration — a control in
 the text's own row is a control the text runs underneath, which is what the reader
 photographed: a question disappearing behind the model picker. So the rule is that
@@ -166,13 +171,76 @@ photographed: a question disappearing behind the model picker. So the rule is th
 both sides: every control must be inside the box, level with the others, clear of its
 neighbours, and below the text.
 
-Two things about that band are worth not rediscovering. The picker is anchored on the
-**left**, past the paperclip, because its width follows the name in it — and a
-left-anchored control that changes width moves nothing, while a right-anchored one moves
-itself. And its width follows the name rather than the longest name the lineup can
-offer, which is what it used to do to stop it resizing on selection: on the deployment
-that made a ~210px button to show the word "enigma", and it and the send button took a
-quarter of the box between them.
+**Two things this file used to say about that band were decided for the model picker,
+and both have been reversed.** They are kept as history because the reasoning is still
+the kind that gets rediscovered. The picker was anchored on the **left**, past the
+paperclip, because its width followed the name in it — a left-anchored control that
+changes width moves nothing, while a right-anchored one moves itself. `#81` crossed it
+to the right-hand end of the band anyway, left of the send button and pinned by its
+RIGHT edge so the send button never moves: the left placement was one revision copying
+where ChatGPT and Claude put theirs, and the ask to move it was specific and a
+preference rather than a bug. Then `#84` removed the picker altogether — "we don't need
+users to pick a model or anything like that" — and gave its corner to the Think pill.
+What is left of the old width rule is why the new label is the shape it is: the picker's
+trigger was sized to the longest name the lineup could offer so it would not resize on
+selection, and on the deployment that made a ~210px button to show the word "enigma" —
+it and the send button took a quarter of the box between them.
+
+**So the control in that corner is `#think-btn`, and it is INSIDE the box.** app.js
+injects it into `[data-testid="stChatInput"]`, which is where the paperclip and the stop
+square already live, and app.css parks it at `right: 52px` — the send button's inset plus
+its width plus a gap, arithmetic done once against numbers that file already owns. The
+pill inherited the picker's arrangement first, and that is what came apart:
+`.st-key-composer-strip`, a `position: fixed` container placed at
+`--pick-right`/`--pick-bottom`, which app.js re-measured from Streamlit's own send button
+on every pass. It looked right in every settled render and moved the moment the page did
+— "the toggle isn't part of the textbox and it can jump out of the box when scrolling up
+and down", while the send arrow stayed put because the arrow genuinely is in the box. A
+fixed element chasing a measurement can only follow it; being in the box deletes the
+measurement rather than improving it, so both of those custom properties are gone and
+app.js no longer publishes them.
+
+**The pill has no width rule at all, and needs none:** its label is one word from the
+profile (`Copy.think_label`) and the SAME word in both states, so a right-anchored
+control has nothing to grow by. "Think" becoming "Thinking" on click would move the pill
+out from under the cursor that had just pressed it, so the state is said by the fill, and
+by `aria-pressed` for a reader who cannot see it. **That fill is keyed on a container
+key, not on an attribute app.js computes from a marker.** `#think-btn[data-on="true"]`
+reads a value app.js copies from `.st-key-think-on`, the key
+`composer.render_think_toggle` puts on the container, which Streamlit writes in the same
+run that changed the state. It was `aria-pressed`, set from the `#think-state` marker on
+every `sync()` pass, and the paint was a frame behind for good: `sync()` runs off a
+mutation observer, so the pass that set the attribute saw the state before the click and
+the pass that would have corrected it never came — measured in the running app as a
+marker reading `data-on="1"` above a button still saying `aria-pressed="false"` five
+seconds later. app.js still sets `aria-pressed` itself, for the accessibility tree, where
+being a frame late costs nothing a reader can see.
+
+**That was only half the fix, and the missing half is the observer.** A container key
+cannot be a frame behind *in the DOM*, which is what makes it right for CSS — but the
+pill's fill is not CSS reading the key, it is app.js copying it, and app.js only reads
+anything on a `sync()` pass. Streamlit says this state by swapping the class on a
+container it REUSES (`st-key-think-off` → `st-key-think-on`, same node), and the observer
+was `{childList: true, subtree: true}`, which cannot see an attribute change at all. So
+on the landing screen the pill stayed unlit for as long as the page was left alone:
+measured with the click reaching Python, `.st-key-think-on` present, and
+`aria-pressed="false"` on a pill that had never been repainted. It worked on a page with
+a transcript — the rerun replaces the chat messages, which IS a childList mutation — so
+it worked in every test that asked a question first, which was every test — and only
+INTERMITTENTLY even there: 2 of 3 toggles on a page with a transcript were still left
+unpainted. The observer now also takes `attributes: true, attributeFilter: ['class']`. Nothing in `sync` writes a
+class to a node already in the document, so it cannot feed itself; every `className =`
+in that file is on a node the script has just made and not yet inserted, and a new one
+that is not would make this loop.
+
+**And the pill is rebuilt once per RERUN, not once per `sync()` pass.** The distinction
+is the one the listener rule above turns on: staleness belongs to the realm, so
+`thinkBuilt` — a variable in this copy's closure, false in every new copy — is the right
+scope, and `addThemeToggle`'s `built` flag is the same arrangement. Rebuilding on every
+pass is what it did first, and `sync` runs on every DOM mutation and every 250ms while
+an answer streams: around thirty rebuilds a second, and a node replaced under a reader's
+focus is a node they cannot focus. Tab to the pill mid-answer and the focus ring left it
+on the next appended text node.
 
 **Nothing of Streamlit's may appear in the theme toggle's corner, and one thing did.**
 Its running indicator (`[data-testid="stStatusWidget"]`) mounts and unmounts around every
@@ -215,6 +283,22 @@ queued-question feature lives there: a question typed mid-answer is held on the 
 window and handed to `st.chat_input` once the turn ends, because telling the server
 about it any earlier would end the answer it is queued behind.
 
+**On Streamlit 1.54 the iframe is NOT rebuilt on every rerun, and the paragraph below
+was written believing it was.** Measured across seven kinds of rerun — a pill click, the
+sidebar opening and closing, a starter card, a submit, ＋ New chat, and a chat switch —
+with three independent witnesses: a property set on the iframe's inner `window`, an
+attribute on the iframe element, and the identity of `__sageSync`. All three survived
+every one of them; only a page reload cleared them. A forced realm swap
+(`contentWindow.location.reload()`) behaves as the paragraph below describes — the new
+copy starts with its flags false and rebuilds once — so the mechanism is right for the
+case that does occur and for the versions that do rebuild, and **nothing in the code
+changes on this finding**. What changes is what you can conclude from it: "the listener
+is stale" is no longer the first explanation to reach for when an injected control stops
+working, and per-run teardown is insurance rather than the thing keeping the page alive.
+The A/B recorded below (reuse the node and the theme toggle is dead from the first
+click) is left standing because it was measured too — on an earlier version, and the two
+have not been reconciled. Measure before relying on either.
+
 **A DOM listener added by this script dies on the next rerun.** Streamlit destroys and
 rebuilds the `components.html` iframe `app.js` is served in on every rerun, and a
 listener registered from inside it is a closure belonging to that copy's realm — once
@@ -222,11 +306,12 @@ the realm is gone the listener never fires again. Nothing announces this: the el
 still there, still painted, still hit-tests as itself, and does nothing. It is how the
 theme toggle shipped completely dead. **So every listener on a node that outlives a
 rerun must be re-registered per run**, which is what `__sageHistoryOff`,
-`__sageEnterOff`, `__sageTypeOff`, `__sagePasteOff`, `__sageDropOff` and `__sageAskOff`
-are for — tear down, re-add, every run. For an element this script *creates* and parents
-to `<body>`, rebuild the element itself once per run (`addThemeToggle`); adding a fresh
-listener to a kept node has the same problem, because the listener is the part that goes
-stale. Verified by A/B: reuse the node and the toggle is dead from the first click.
+`__sageEnterOff`, `__sageTypeOff`, `__sagePasteOff`, `__sageDropOff`, `__sageAskOff` and
+`__sageGrowOff` are for — tear down, re-add, every run. For an element this script
+*creates* and parents to `<body>`, rebuild the element itself once per run
+(`addThemeToggle`); adding a fresh listener to a kept node has the same problem, because
+the listener is the part that goes stale. Verified by A/B: reuse the node and the toggle
+is dead from the first click.
 
 **Anything you put in the top 60px of the page needs a z-index above 999995, and needs
 hit-testing.** That band is `[data-testid="stHeader"]`, transparent and at 999990, and

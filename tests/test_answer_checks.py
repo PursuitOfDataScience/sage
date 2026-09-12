@@ -1315,6 +1315,14 @@ class TestAnAnswerThatIsThinkingOutLoud:
         "Here's a thinking process:", "Here is my thinking process:",
         "Thinking process:", "<think>", "Let me think this through:",
         "Chain of thought:",
+        # The second family, from a live turn on the free router: 24,326 characters
+        # opening "We need to answer: …", `finish_reason: length`, no answer anywhere
+        # in it. None of the six above match that, so it would have shipped. What all
+        # of these have in common is a model addressing itself, or addressing the
+        # reader in the third person as "the user".
+        "We need to answer:", "We need to figure out what", "The user is asking",
+        "The user wants", "Let's think about", "We should consider",
+        "So the question is",
     ])
     def test_the_shapes_that_announce_deliberation(self, opener):
         found = checks.reasoning_shape(f"{opener}\n\nThe user asks about quotas.")
@@ -1330,6 +1338,11 @@ class TestAnAnswerThatIsThinkingOutLoud:
         "Let me be clear: the documentation does not cover Frontera.",
         "I look things up in the RCC documentation and link the pages I used.",
         "Think of a service unit as an hour of one core ([SUs](docs/allocations.md)).",
+        # The near misses of the second family, which is why it is anchored on the verb
+        # rather than on "we need to" or "the user". Each of these is a real answer.
+        "We need to know your account name — run `sacctmgr show user $USER`.",
+        "The user guide covers this ([Guide](docs/storage/main.md)).",
+        "So the answer is two SUs per core-hour ([SUs](docs/allocations.md)).",
         "",
     ])
     def test_an_ordinary_answer_is_not_deliberation(self, answer):
@@ -1397,6 +1410,117 @@ class TestAnAnswerThatIsATypedOutToolCall:
         }
         kinds = [item.kind for item in checks.inspect(record, real_corpus, haystack)]
         assert "typed-out-tool-call" in kinds
+
+
+class TestARefusedShapeIsStillScored:
+    """The three checks the app's own protection made unreachable.
+
+    `reasoning_shape`, `typed_out_tool_call` and `moderation_verdict` all exist because
+    `ui.turn` refuses to ship what they describe — it raises `empty` and stores no text.
+    So on a live run the record they were handed had an empty `text`, `inspect` returned
+    early on that, and all three could never fire: `moderation-verdict` was unreachable
+    from the day it was added. Found by a bench run against the free router, which had
+    to score the shapes off the model's own stream by hand.
+
+    `harness.run_turn` keeps `streamed_final`, and these three are scored off it. Only
+    these three: a model whose answer was refused has still not answered, and every
+    other check would be judging the reader's screen against text they never saw.
+    """
+
+    EMPTY = {
+        "text": "", "raw": "", "question": "how do I submit a job?",
+        "sources": [], "evidence": {}, "expect": "answer", "must_mention": [],
+    }
+
+    @pytest.mark.parametrize("streamed,kind", [
+        ("User Safety: safe", "moderation-verdict"),
+        ("We need to answer: the user asks about quotas.", "leaked-reasoning"),
+        ("<tool_call>\n<function=search>", "typed-out-tool-call"),
+    ])
+    def test_what_the_app_refused_is_still_counted(
+        self, streamed, kind, real_corpus, haystack
+    ):
+        record = {**self.EMPTY, "streamed_final": streamed}
+        found = checks.inspect(record, real_corpus, haystack)
+        assert [item.kind for item in found] == [kind]
+
+    def test_a_turn_that_produced_nothing_at_all_is_still_not_a_finding(
+        self, real_corpus, haystack
+    ):
+        """An empty stream is an outcome the harness records, not a defect in an
+        answer — which is what the early return was right about."""
+        assert checks.inspect({**self.EMPTY, "streamed_final": ""},
+                              real_corpus, haystack) == []
+
+    def test_an_answer_the_reader_saw_is_judged_on_what_they_saw(
+        self, real_corpus, haystack
+    ):
+        """`streamed_final` is the fallback, not an extra source. A delivered answer is
+        scored on its own text, or a model would be charged twice for one turn."""
+        record = {
+            **self.EMPTY,
+            "text": "Run `sbatch job.sh` ([Batch jobs](docs/slurm/sbatch.md)).",
+            "raw": "Run `sbatch job.sh` ([Batch jobs](docs/slurm/sbatch.md)).",
+            "streamed_final": "User Safety: safe",
+        }
+        kinds = [item.kind for item in checks.inspect(record, real_corpus, haystack)]
+        assert "moderation-verdict" not in kinds
+
+
+class TestASafetyVerdictIsNotAnAnswer:
+    """The classifier in the router's pool, answering a documentation question.
+
+    `openrouter/free` picks a free model per request and one of the names in that pool
+    is `nvidia/nemotron-3.5-content-safety:free`, whose entire output is a ruling on the
+    text it was given. Measured at 2 of 33 rolls: asked how to submit a batch job it
+    replied `User Safety: safe`, and every check upstream passed it — not deliberation,
+    not a typed-out call, not empty, not a refusal — so the reader got seventeen
+    characters of verdict under a Sources strip.
+    """
+
+    REAL = "User Safety: safe"
+
+    @pytest.mark.parametrize("verdict", [
+        "User Safety: safe",
+        "user safety: unsafe\nSafety Categories: S2",
+        "Response Safety: safe",
+        "Prompt Safety = safe",
+        '{"User Safety": "safe"}',
+        "Safety Categories: S1, S4",
+        "safe",
+        "Unsafe.",
+    ])
+    def test_the_shapes_a_classifier_answers_in(self, verdict):
+        found = checks.moderation_verdict(verdict)
+        assert [item.kind for item in found] == ["moderation-verdict"]
+        assert found[0].severity == checks.DEFECT
+
+    def test_it_reports_its_length(self):
+        found = checks.moderation_verdict(self.REAL)
+        assert f"({len(self.REAL)} chars)" in found[0].detail
+
+    @pytest.mark.parametrize("answer", [
+        # An answer that is ABOUT safety, which is a real question about a cluster.
+        "Storing PHI on scratch is not safe ([Storage](docs/storage/main.md)).",
+        "The safe choice is `--partition=amd` ([Partitions](docs/slurm/sbatch.md)).",
+        # The word inside a sentence rather than as the whole of one.
+        "Your data is safe for 30 days ([Scratch](docs/storage/main.md)).",
+        # And the two shapes its siblings own, so the three cannot be confused.
+        "<tool_call>\n<function=search>",
+        "Let me think this through: the quota is",
+        "",
+    ])
+    def test_an_ordinary_answer_is_not_a_verdict(self, answer):
+        assert checks.moderation_verdict(answer) == []
+
+    def test_inspect_reports_it(self, real_corpus, haystack):
+        record = {
+            "text": self.REAL, "raw": self.REAL,
+            "question": "how do I submit a batch job?",
+            "sources": [], "evidence": {}, "expect": "answer", "must_mention": [],
+        }
+        kinds = [item.kind for item in checks.inspect(record, real_corpus, haystack)]
+        assert "moderation-verdict" in kinds
 
 
 class TestARewrittenSentenceIsNotADeletedOne:

@@ -20,6 +20,7 @@ script can switch scenarios between turns without restarting anything:
 
     echo '{"mode": "tools"}'            > /tmp/mock_provider.json   # search → read → answer
     echo '{"mode": "empty"}'            > /tmp/mock_provider.json   # a completion with no text
+    echo '{"mode": "empty", "empty_first": 1}' > /tmp/mock_provider.json  # empty once, then answers
     echo '{"mode": "empty", "empty_except": ["mock-toolless-free"]}' \
                                         > /tmp/mock_provider.json   # …except one model
     echo '{"status": 402}'              > /tmp/mock_provider.json   # out of credit
@@ -98,6 +99,11 @@ def call(index: int, identifier: str, name: str, arguments: str) -> dict:
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+
+    #: Completions served since this process started, for `empty_first`. On the class
+    #: rather than the instance: this server is threaded and a new handler is built per
+    #: request, so an instance counter would count to one for ever.
+    requests = 0
 
     def log_message(self, *_args):
         """Quiet: the driver reads the request log, not the console."""
@@ -219,6 +225,19 @@ class Handler(BaseHTTPRequestHandler):
                 text = "" if request.get("model") not in (
                     settings.get("empty_except") or []
                 ) else text
+                # `empty_first: N` is the other axis, and the app needs both because it
+                # now has two recoveries. `empty_except` varies by MODEL, which drives
+                # the lineup walk; this varies by REQUEST NUMBER, which is the only way
+                # to be a router — one id that says nothing this time and answers the
+                # next, with nothing in the lineup having changed. Counted per process,
+                # so rewriting the control file resets nothing and a fresh server is how
+                # a second scenario starts.
+                first = int(settings.get("empty_first") or 0)
+                if first:
+                    Handler.requests += 1
+                    text = "" if Handler.requests <= first else (
+                        settings.get("text") or ANSWER
+                    )
             words = text.split(" ") if text else []
             for start in range(0, len(words), 3):
                 yield sse(delta(text=" ".join(words[start:start + 3]) + " "))

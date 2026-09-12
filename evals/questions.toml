@@ -103,6 +103,14 @@ must_mention = ["mem"]
 kind = "asked"
 # The exceeded-memory FAQ outranks the page documenting `--mem`. Symptom beats
 # mechanism here, which is the opposite of what the synonym groups are meant to do.
+#
+# Re-measured 2026-09-12, after the title field was length-normalised: `sbatch.md` has
+# climbed to RANK 5, so `tools/gate_check.py` now reports this as "NOW PASSES" and its
+# note says a gap that passes is one to promote. Not promoted, and the rank is the
+# reason — passing recall@5 from fifth place is one scoring change away from failing
+# again, and a ratchet set on that would break on the next honest improvement. The
+# diagnosis above is still exactly right: `slurm/faq.md` leads at 36.6 against 25.2 for
+# the page that documents the flag. Promote it when `sbatch.md` reaches the top three.
 known_gap = true
 
 [[question]]
@@ -364,6 +372,13 @@ kind = "asked"
 # The golden set's barer phrasing ("use a container image") passes; adding "how do I"
 # dilutes the two words that carry the meaning enough to lose both pages. Worth
 # keeping visible: real questions are phrased the long way.
+#
+# Re-measured 2026-09-12: it no longer loses BOTH. `charliecloud.md` is at rank 2 (23.6)
+# so the gate counts this as a pass — either listed page satisfies it — while
+# `singularity.md`, which is the page a reader asking about containers is most often
+# after, is still outside the top six entirely. Kept as a gap for that reason: the
+# entry passing while half of what it asks for is unreachable is precisely the state
+# this list exists to keep visible rather than average away.
 known_gap = true
 
 [[question]]

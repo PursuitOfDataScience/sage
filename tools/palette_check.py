@@ -44,6 +44,7 @@ import tomllib
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 CSS = os.path.join(ROOT, "static", "app.css")
+JS = os.path.join(ROOT, "static", "app.js")
 CONFIG = os.path.join(ROOT, ".streamlit", "config.toml")
 BASELINE = os.path.join(HERE, "palette_baseline.json")
 
@@ -165,6 +166,133 @@ def config_inventory(settings: dict) -> dict[str, str]:
     return found
 
 
+# --- static/app.js, which the inventory above cannot see --------------------------
+#
+# `.claude/hooks/ui-guard.sh` fires on an edit to app.js and then runs this file.
+# Measured: an app.js edit that repainted the page came back "271 declared colours
+# and tokens, all unchanged" — the only check the hook has never opened the file that
+# had just been edited, and said so in the words of a pass. Reassurance from a check
+# that did not look is the thing this repo is written against.
+#
+# There is no colour literal in app.js to inventory. The appearance it decides travels
+# in custom properties it measures and publishes, which app.css reads with a fallback:
+# `right: var(--toggle-right, 16px)`. That is a contract across two files and nothing
+# held it, and its failure mode is the quiet kind — rename or drop one side and the
+# `var()` takes its fallback for ever, which renders, breaks no bound, fails no
+# baseline, and is wrong at every width app.js was measuring for. CLAUDE.md records
+# the half that went right (`--pick-right`/`--pick-bottom`, removed from both sides
+# together) and app.css holds the near miss: `--strip-h` survives there only inside a
+# comment, which is why the comments come out before anything is counted.
+#
+# So this is not an inventory and has no baseline: the two files are read and held
+# against each other. There is nothing here for `--update` to accept, because a broken
+# contract is a bug rather than a repaint.
+
+
+def _strip_js_comments(js: str) -> str:
+    """Block comments and whole-line comments out of app.js.
+
+    Deliberately not a JavaScript parser: the only thing read out afterwards is token
+    names inside string literals, and no comment in that file quotes one. Line
+    comments are taken only where they start a line, so a `https://` inside a string
+    is left alone.
+    """
+    js = re.sub(r"/\*.*?\*/", "", js, flags=re.DOTALL)
+    return re.sub(r"^[ \t]*//.*$", "", js, flags=re.MULTILINE)
+
+
+def js_publishes(js: str) -> set[str]:
+    """The custom properties app.js writes onto the page."""
+    return set(re.findall(r"""['"](--[A-Za-z0-9-]+)['"]""", _strip_js_comments(js)))
+
+
+def css_custom_properties(css: str) -> tuple[set[str], set[str]]:
+    """`(declared, read)`: the properties app.css states, and the ones it reads."""
+    css = _strip_comments(css)
+    declared = {prop for _, _, body in _blocks(css)
+                for prop, _ in _declarations(body) if prop.startswith("--")}
+    read = set(re.findall(r"var\(\s*(--[A-Za-z0-9-]+)", css))
+    return declared, read
+
+
+#: A colour written as a value, in any of the notations CSS takes one in.
+COLOUR_LITERAL = re.compile(
+    r"#[0-9a-fA-F]{3,8}\b"
+    r"|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix|color)\s*\("
+    r"|['\"](?:red|blue|green|yellow|orange|purple|white|black|maroon|pink|grey|gray"
+    r"|silver|navy|teal|olive|lime|aqua|fuchsia|crimson|tomato)['\"]"
+)
+
+
+def js_colour_decisions(js: str) -> list[str]:
+    """Lines where app.js decides a colour rather than measuring a position.
+
+    The contract above catches a *name* going out of step. It cannot catch app.js
+    setting a name that is in step to a colour of its own: measured, appending
+    `setProperty('--brand', '#ff00ff')` to app.js and running this file reported
+    everything unchanged, because `--brand` is declared in app.css and read there and
+    nothing was asking where its value came from at runtime.
+
+    So the rule is that colour is decided in `static/app.css` and
+    `.streamlit/config.toml`, which the baseline above covers, and app.js measures
+    geometry. That is already true of every line in the file — it holds no hex, no
+    `rgb(`, no named colour and no write to a colour-bearing property, only `opacity`
+    twice and `position` once — so this costs nothing today and fails the first time a
+    colour is introduced where the baseline cannot see it. Deciding to paint from
+    JavaScript is then a decision somebody makes here, out loud.
+    """
+    problems: list[str] = []
+    for number, line in enumerate(_strip_js_comments(js).splitlines(), 1):
+        if COLOUR_LITERAL.search(line):
+            problems.append(
+                f"  colour   static/app.js:{number} names a colour, which belongs in "
+                f"app.css\n           or config.toml where the baseline can see it: "
+                f"{line.strip()[:72]}")
+            continue
+        match = re.search(
+            r"\.style\.([A-Za-z]+)\s*=|setProperty\(\s*['\"]([a-z-]+)['\"]", line)
+        if not match:
+            continue
+        name = match.group(1) or match.group(2) or ""
+        kebab = re.sub(r"([A-Z])", lambda m: "-" + m.group(1).lower(), name)
+        if kebab in COLOUR_PROPERTIES:
+            problems.append(
+                f"  colour   static/app.js:{number} writes `{kebab}` from JavaScript, "
+                f"which\n           puts a colour outside everything this check "
+                f"reads: {line.strip()[:60]}")
+    return problems
+
+
+def token_contract() -> list[str]:
+    """Every way static/app.css and static/app.js can disagree about appearance."""
+    with open(CSS, encoding="utf-8") as handle:
+        declared, read = css_custom_properties(handle.read())
+    with open(JS, encoding="utf-8") as handle:
+        js = handle.read()
+    published = js_publishes(js)
+    problems: list[str] = js_colour_decisions(js)
+    for name in sorted(read - declared - published):
+        problems.append(
+            f"  orphan   static/app.css reads {name}, and neither app.css nor "
+            f"app.js\n           ever sets it, so every use of it takes its "
+            f"var() fallback")
+    for name in sorted(published - read):
+        problems.append(
+            f"  unread   static/app.js publishes {name}, and static/app.css never "
+            f"reads\n           it, so whatever it measures reaches nothing")
+    return problems
+
+
+CONTRACT_REMEDY = """
+Nothing to accept here and no baseline to update: these are two files disagreeing, or
+one of them deciding something the other owns. Either app.css is reading a property
+nobody sets — in which case it has been silently drawing its fallback — or app.js is
+measuring something no rule consumes, or app.js is naming a colour, which belongs in
+app.css or .streamlit/config.toml where the baseline above can see it. Rename both
+sides together, drop both sides together, or move the colour.
+"""
+
+
 def inventory() -> dict[str, dict[str, str]]:
     with open(CSS, encoding="utf-8") as handle:
         css = handle.read()
@@ -218,6 +346,24 @@ which declaration did it before going any further.
 
 
 def main() -> int:
+    # Before either mode and in both of them, because this is the only thing here that
+    # reads static/app.js — which the hook fires on and the inventory cannot see — and
+    # because a broken contract is a bug rather than a repaint, so `--update` is not
+    # how it gets accepted.
+    #
+    # Reported and then fallen through rather than returned on: one edit can do both,
+    # and the first version of this stopped at the contract. Deleting the whole
+    # `#theme-toggle` rule breaks the contract (nothing reads `--toggle-right` any
+    # more) AND removes three colours from the baseline, and the run that says only
+    # the first of those has told you the smaller half of what you did.
+    contract = token_contract()
+    if contract:
+        noun = "thing" if len(contract) == 1 else "things"
+        print(f"palette_check: {len(contract)} {noun} static/app.css and "
+              "static/app.js do not agree on:\n")
+        print("\n".join(contract))
+        print(CONTRACT_REMEDY)
+
     if "--update" in sys.argv[1:]:
         current = inventory()
         before = load_baseline() if os.path.exists(BASELINE) else {}
@@ -230,7 +376,7 @@ def main() -> int:
         else:
             print("palette_check: baseline unchanged.")
         print(f"palette_check: {counted} declarations recorded.")
-        return 0
+        return 1 if contract else 0
 
     if not os.path.exists(BASELINE):
         print("palette_check: no baseline. Run with --update to write the first one.")
@@ -240,7 +386,7 @@ def main() -> int:
     if not drift:
         counted = sum(len(v) for v in inventory().values())
         print(f"palette_check: {counted} declared colours and tokens, all unchanged.")
-        return 0
+        return 1 if contract else 0
 
     plural = "declaration" if len(drift) == 1 else "declarations"
     print(f"palette_check: {len(drift)} {plural} changed the way this app looks, "

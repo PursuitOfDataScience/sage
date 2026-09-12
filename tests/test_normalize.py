@@ -179,6 +179,43 @@ def test_pretty_title_of_an_index_page_names_its_directory():
     assert normalize.pretty_title("index.md") == "Index"
 
 
+class TestAnExplicitHeadingId:
+    """attr_list writes the anchor outright, and mkdocs publishes it verbatim.
+
+    `## Using renv {#using-the-renv}` is not a heading with decoration on the end — the
+    braces ARE the anchor, and a slug derived from the text beside them is a different
+    one. `tools/anchor_check.py` caught it as the site's `#using-the-renv` against our
+    `#using-the-renv-r-package-for-project-environments`: a link that resolves, looks
+    right, and lands the reader at the top of the page.
+
+    Zero chunks in today's snapshot carry one; upstream added this one after the
+    snapshot was taken, so the check is against the next `refresh-docs.sh`.
+    """
+
+    HEADING = "Using the renv R Package for Project Environments {#using-the-renv}"
+
+    def test_the_stated_id_is_the_anchor(self):
+        assert normalize.slugify(self.HEADING) == "using-the-renv"
+
+    def test_the_label_does_not_carry_the_marker(self):
+        assert normalize.plain_heading(self.HEADING) == (
+            "Using the renv R Package for Project Environments"
+        )
+
+    @pytest.mark.parametrize("heading", [
+        # Not an id: a kramdown attribute list, which `_clean_prose` already drops, and
+        # a brace that is part of the prose.
+        "Formatting {: .note }",
+        "Using ${SLURM_JOB_ID} in a script",
+        "A heading with {braces} in it",
+        "Plain heading",
+    ])
+    def test_an_ordinary_heading_is_slugified_as_before(self, heading):
+        assert normalize.slugify(heading) == normalize.slugify(
+            normalize.plain_heading(heading)
+        )
+
+
 class TestTheUrlAScrapeClaims:
     """That string becomes the `href` of every citation to the page.
 

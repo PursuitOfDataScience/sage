@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-import html
 import logging
 import time
-from dataclasses import dataclass
 
 import streamlit as st
 
 from .. import config, feedback, history, links, llm, normalize, prompts, redact
-from ..tools import gather_context
+from ..progress import (
+    Step,
+    shown,
+    status_html,
+    summary_html,
+)
+from ..tools import READ_DOC, SEARCH_DOCS, gather_context
 from .access import get_provider
 from .state import get_limiter
 from .transcript import citations, render_user
@@ -30,7 +34,11 @@ REASONS = {
     "rate_limit": "it is refusing requests for now",
     "unavailable": "it is not responding",
     "network": "it could not be reached",
-    "unknown": "it failed",
+    # Not "it failed": the sentences these fill already say a model was unavailable, so
+    # "That model is unavailable (it failed)" tells a reader the same thing twice. This
+    # is the kind with nothing to go on, and saying so is more use than repeating the
+    # verb — the real exception is in the error card's technical-details panel.
+    "unknown": "no reason given",
 }
 
 # Failures worth trying a different model for, rather than showing a card about. Each
@@ -51,6 +59,28 @@ REASONS = {
 # refuses it the same way. Walking them is a certain failure per model, and the remedy
 # is the reader's — clear the chat — which is what the card says.
 FAILOVER_KINDS = llm.KINDS - {"context"}
+
+#: Failures whose remedy is asking the SAME id again, where that id is a router.
+#:
+#: One kind, and it is the one where a re-ask is not a repeat: `empty` means the request
+#: succeeded and carried no answer — an empty stream, a reasoning monologue, a typed-out
+#: tool call, a safety classifier's verdict — which is a fact about the model that
+#: happened to serve this request and not about the router that chose it. The rest are
+#: not eligible on purpose: a spent allowance, a rejected key and an unreachable host
+#: belong to the provider, so they are the same on the next request, and `rate_limit` is
+#: a reason to wait rather than to knock again.
+REROLL_KINDS = frozenset({"empty"})
+
+#: What a tool result says when `config.TOOL_RESULT_CHAR_BUDGET` cut it short.
+#:
+#: A constant so the budget's arithmetic can account for its own length, and so a test
+#: can measure the ceiling without hard-coding the sentence. Clipped-and-told rather
+#: than dropped: a model handed a truncated section can answer from it or ask for a
+#: narrower one, where a silent empty result reads as "no such page".
+TRUNCATED = (
+    "\n\n[Truncated: this turn has reached its reading limit. Answer from what you "
+    "have, or say which section you still need.]"
+)
 
 # Streamlit signals "stop this script and start again" by raising. Matched by class
 # name rather than imported, because the module those classes live in has moved
@@ -92,50 +122,10 @@ def is_control_flow(exc: BaseException) -> bool:
     return type(exc).__name__ in CONTROL_FLOW_NAMES
 
 
-def shown(value) -> str:
-    """One tool argument, as a line of the block can hold it.
-
-    Coerced rather than trusted. `llm._parse` guarantees a dict and nothing whatever
-    about what is in it, and a model that types its query as a number — `{"query":
-    123}` — must not be able to end a turn with an AttributeError dressed up as
-    "something went wrong reaching the assistant", which is the failure the previous
-    version of this row avoided by printing nothing at all.
-
-    Whitespace is collapsed because a newline in a value is a newline in the middle of
-    a row that is one line tall, and `None` becomes empty rather than the word "None".
-
-    The clip is `config.STATUS_ARGUMENT_CHARS` and is about the size of the DOM rather
-    than the width of the line — app.css ellipses what is still too wide. It lives in
-    `config` because `tools/render_check.py` renders the worst case this produces and
-    cannot import this module: its CI job has no Streamlit in it.
-    """
-    text = " ".join(str("" if value is None else value).split())
-    if len(text) <= config.STATUS_ARGUMENT_CHARS:
-        return text
-    return text[: config.STATUS_ARGUMENT_CHARS - 1] + "…"
 
 
-def elapsed(seconds: float) -> str:
-    """How long something took, in the shortest form that is still honest."""
-    if seconds < 60:
-        return f"{seconds:.1f}s"
-    minutes, rest = divmod(int(seconds), 60)
-    return f"{minutes}m{rest:02d}s"
 
 
-@dataclass
-class Step:
-    """One thing the turn did, as the block reports it.
-
-    `started` is where its clock started, which is where the previous step's stopped —
-    see `Status._mark`. `seconds` is None while it is running and the measurement once
-    it has stopped, which is also how the block knows which line is the live one.
-    """
-
-    name: str
-    detail: str = ""
-    started: float = 0.0
-    seconds: float | None = None
 
 
 def call_step(view: View, call: dict) -> tuple[str, str]:
@@ -157,96 +147,58 @@ def call_step(view: View, call: dict) -> tuple[str, str]:
     arguments = call.get("input")
     key = view.public_arguments.get(name, "")
     value = arguments.get(key) if key and isinstance(arguments, dict) else None
+    if name in view.section_arguments:
+        # A section id is this repository's name for a file, not the documentation's.
+        # `docs/allocations.md#how-do-i-check-…` reached the page and was reported at
+        # once — "docs/allocations.md shouldn't be disclosed in this way" — and it was
+        # the only place in the app where one did: the Sources strip resolves every id
+        # to `Chunk.label` first, and `links.fix_links` does it to the paths a model
+        # writes into an answer.
+        #
+        # Resolved to the section's own title, which is the same phrase the citation
+        # under the answer already shows, so the row discloses nothing new. A read with
+        # no anchor is a whole page, has no chunk id, and falls back to the page title.
+        # Neither resolving shows nothing rather than the string: a model that invented
+        # a path has told the reader nothing, and printing the invention is the
+        # disclosure this exists to prevent.
+        wanted = str(value or "")
+        found = view.corpus.chunk(wanted)
+        if found is not None:
+            value = found.label
+        else:
+            page = view.corpus.document(wanted.split("#", 1)[0])
+            value = page.title if page is not None else ""
     return view.public_names.get(name) or view.copy.status_working, shown(value)
 
 
-def status_html(text: str) -> str:
-    """The line a turn opens with, and the one it waits on between rounds.
+def stage_phrase(view: View, tool: str) -> str:
+    """The vague phrase for the stage a turn is in — what the sweeping row says.
 
-    Byte for byte what this app has always drawn there, and deliberately so: it is the
-    first thing a reader sees on every turn, and the block below only ever adds to it.
+    Keyed on the tool's own name rather than its reader-facing label, because this is
+    the machinery choosing a phrase for itself. A tool this does not know gets
+    `status_working`, the same fallback `call_step` uses for one that declares no name.
+
+    Says nothing about WHAT is being searched for or read, and that is the point: the
+    detail is in the folded block after the answer, and a title per call accumulating
+    on this row is what the reader asked to be rid of.
     """
-    return (
-        '<div class="status-row" role="status" aria-live="polite">'
-        '<span class="status-dot" aria-hidden="true"></span>'
-        f'<span class="status-text">{html.escape(text)}</span>'
-        '<span class="status-dots" aria-hidden="true"><span></span><span></span>'
-        "<span></span></span></div>"
-    )
+    return {
+        SEARCH_DOCS: view.copy.status_searching,
+        READ_DOC: view.copy.status_reading,
+    }.get(tool, view.copy.status_working)
 
 
-def _argument_html(detail: str) -> str:
-    """The machine's half of a line: a path, a query. Monospace, and nothing else.
-
-    Its own element rather than part of the text beside it, because the live line's
-    text is painted as a gradient clipped to the glyphs — a child of it inherits
-    `-webkit-text-fill-color: transparent` with no background of its own to show
-    through, which is a value the reader cannot see at all.
-    """
-    return f'<span class="status-arg">{html.escape(detail)}</span>' if detail else ""
 
 
-def _live_html(step: Step) -> str:
-    """The step that is running now: the same row, minus the live region.
-
-    No `role` on it, because the block around it is the one live region — two nested
-    ones is the same line announced twice.
-
-    No elapsed time on it either. A number already wrong by the time it is painted
-    would have to be driven by a timer to be worth reading, and every frame of that
-    timer is a repaint of the block during the one part of a turn a reader is watching.
-    The dots are what say this line is the live one; its time arrives with the line
-    after it.
-    """
-    return (
-        '<div class="status-row">'
-        '<span class="status-dot" aria-hidden="true"></span>'
-        f'<span class="status-text">{html.escape(step.name)}</span>'
-        f"{_argument_html(step.detail)}"
-        '<span class="status-dots" aria-hidden="true"><span></span><span></span>'
-        "<span></span></span></div>"
-    )
 
 
-def _done_html(step: Step) -> str:
-    """A step that has finished: what it was, on what, and how long it took."""
-    return (
-        '<div class="status-step">'
-        '<span class="status-mark" aria-hidden="true">✓</span>'
-        f'<span class="status-name">{html.escape(step.name)}</span>'
-        f"{_argument_html(step.detail)}"
-        f'<span class="status-time">{elapsed(step.seconds or 0.0)}</span>'
-        "</div>"
-    )
 
 
-def steps_html(steps: list[Step], *, live: Step | None) -> str:
-    rows = [_done_html(step) for step in steps if step.seconds is not None]
-    if live is not None:
-        rows.append(_live_html(live))
-    return (
-        '<div class="status-block" role="status" aria-live="polite">'
-        + "".join(rows)
-        + "</div>"
-    )
 
 
-def summary_html(steps: list[Step], seconds: float) -> str:
-    """The one line the block becomes once the answer starts arriving.
 
-    A `<details>`, which is the whole reason the steps can still be opened during a
-    turn: it is the browser's own disclosure, so expanding it never reaches the server.
-    A Streamlit control here would be a widget, a widget click is a rerun, and a rerun
-    during a turn aborts the answer the summary is about.
-    """
-    count = len(steps)
-    label = "1 step" if count == 1 else f"{count} steps"
-    return (
-        '<details class="status-done">'
-        f'<summary class="status-summary">{label} · {elapsed(seconds)}</summary>'
-        + steps_html(steps, live=None)
-        + "</details>"
-    )
+
+
 
 
 class Status:
@@ -290,6 +242,9 @@ class Status:
         #: not the sum of the steps: the wait for the first word of the answer belongs
         #: to no step, and it is part of what the reader sat through.
         self._opened = time.monotonic()
+        #: That clock, stopped at the fold. A `None` here means the turn is still
+        #: running and the number is read live.
+        self._total: float | None = None
         #: Where the next step's clock starts: when the last one stopped.
         #:
         #: A step is therefore the WAIT for that call and not the call itself, and that
@@ -330,7 +285,49 @@ class Status:
             self.clear()
             return
         self._collapsed = True
+        self._total = time.monotonic() - self._opened
         self._paint()
+
+    @property
+    def total_seconds(self) -> float:
+        """What the summary line reports, live and stored: the same measurement.
+
+        The two used to be computed in two places from two things — the painted line
+        read wall time since the block opened, and `transcript.render_steps` summed the
+        steps, because the wall clock was not on the stored message to read. The reader
+        watched `2 steps · 12.9s` become `2 steps · 9.7s` the moment the turn ended,
+        with nothing having happened in between. The 3.2s difference was real: it is the
+        wait for the first word of the answer, which belongs to no step.
+
+        So the wall clock is frozen at the fold and carried on the message. Read live
+        only while the turn is still in flight, which is the one case where a number
+        that keeps growing is the honest one.
+        """
+        if self._total is not None:
+            return self._total
+        return time.monotonic() - self._opened
+
+    def record(self) -> list[dict]:
+        """What this turn did, as plain data for the stored message to carry.
+
+        The block dies with the turn — it is painted into an `st.empty()` belonging to
+        the run — so a reader who looked away lost the account of which sections were
+        read. This is the arrangement `sources` already has: the turn produces it, the
+        message keeps it, `transcript.render_steps` draws it again.
+
+        Only finished steps: one still running when the turn ended has no duration, and
+        a line with no time on it in a settled answer reads as a measurement that
+        failed rather than one never taken.
+
+        Dicts and not `Step`, because this goes into `session_state` and out to
+        `feedback` — a dataclass would be one refactor away from a stored message the
+        next version cannot read back.
+        """
+        return [
+            {"name": step.name, "detail": step.detail, "seconds": step.seconds}
+            for step in self._steps
+            if step.seconds is not None
+        ]
 
     def clear(self) -> None:
         self._slot.empty()
@@ -355,11 +352,20 @@ class Status:
 
     def _html(self) -> str:
         if self._collapsed:
-            return summary_html(self._steps, time.monotonic() - self._opened)
-        if not self._steps:
-            return status_html(self._phrase)
-        live = self._live or (Step(self._phrase) if self._phrase else None)
-        return steps_html(self._steps, live=live)
+            return summary_html(self._steps, self.total_seconds)
+        # THE SWEEPING ROW, and nothing else, for as long as the turn is in flight.
+        #
+        # It drew a step per tool call, accumulating: by the third round that was six
+        # rows of history over an empty answer. Reported twice — "it's everything
+        # showing, which looks bad", then "it should be like what we had before with
+        # the cool status message with gradients."
+        #
+        # So the jobs are split. This is the progress cue: one line, one phrase, the
+        # gradient crossing it. The record is `record()` plus `summary_html` — every
+        # step with its section title and its time, folded when text arrives and kept
+        # on the stored message afterwards. `self._steps` is still filled by `begin()`;
+        # it is no longer painted here.
+        return status_html(self._phrase)
 
     def _paint(self) -> None:
         if self._line is None:
@@ -540,16 +546,25 @@ def run(view: View) -> None:
             caveats=runner.caveats, seconds=time.monotonic() - started,
         )
 
-    def fail(message: str, why: str) -> None:
+    def fail(message: str, why: str, kind: str = "") -> None:
         """Surface a failure — and drop any notice, which can only contradict it.
 
         A leftover "retrying with X…" sitting above "could not complete that
         request" is how the UI ended up arguing with itself.
+
+        `kind` is kept because the card is not the same card for every failure. The
+        message says what to do and the buttons are what does it, so a kind whose
+        remedy is NOT another model must not be offered one: `context` means the
+        request is too long, every model in the lineup gets the same oversized
+        message, and "→ Use <model>" beside "clear the chat and ask again" is a button
+        that cannot work. `transcript.render_error_card` reads this.
         """
         st.session_state.error = message
         st.session_state.error_detail = why
+        st.session_state.error_kind = kind
         st.session_state.notice = ""
         st.session_state.switched_from = None
+        st.session_state.rerolls = 0
 
     def grounded(messages: list[dict]) -> list[dict]:
         """Retrieve up front, for models that cannot call tools."""
@@ -575,7 +590,7 @@ def run(view: View) -> None:
     # Cumulative across every round of this turn — see TOOL_RESULT_CHAR_BUDGET.
     tool_chars = 0
 
-    def start(msgs, schemas):
+    def start(msgs, schemas, tool_choice="auto"):
         # Charged as each request is made, not tallied and committed at the end. A
         # turn that fails halfway, or that the reader abandons by touching the page,
         # still cost the provider the calls it made — and a counter that only commits
@@ -591,6 +606,7 @@ def run(view: View) -> None:
         return llm.start(
             provider, model.id, msgs, schemas,
             thinking=bool(st.session_state.thinking),
+            tool_choice=tool_choice,
         )
 
     try:
@@ -676,11 +692,13 @@ def run(view: View) -> None:
                 break
             if round_number == config.MAX_TOOL_ROUNDS:
                 # A backstop now, not the ordinary way out. The request that produced
-                # this round was sent with no tools at all (see the bottom of the loop),
-                # so reaching here means the model wrote a tool call anyway, against an
-                # empty tool list — which happens, and is the one case left where the
-                # turn genuinely has no prose to show. Kept rather than deleted for
-                # exactly that reason; `tests/test_app_smoke.py` holds it.
+                # this round went out with `tool_choice: "none"` (see the bottom of the
+                # loop), so reaching here means the model called a tool anyway, against
+                # an explicit refusal — which happens, and is the one case left where
+                # the turn genuinely has no prose to show. More reachable than when the
+                # schemas were withdrawn, not less: a provider that ignores the choice
+                # will honour the schema. Kept rather than deleted for exactly that
+                # reason; `tests/test_app_smoke.py` holds it.
                 logger.warning("Tool-round limit reached without a final answer")
                 final_text = final_text or (
                     "I wasn't able to finish looking that up. Please try rephrasing "
@@ -698,6 +716,9 @@ def run(view: View) -> None:
                 # per round — a round of parallel calls runs them in this order and
                 # reports each one's own.
                 status.begin(*call_step(view, call))
+                # The vague phrase for the stage, in the sweeping row. The step the
+                # line above records is for the folded block after the answer.
+                status.show(stage_phrase(view, call.get("name") or ""))
                 result = runner.run(call["name"], call["input"])
                 # The budget is cumulative across rounds, which is the whole point:
                 # each result is individually legal at MAX_DOC_CHARS and it is the
@@ -707,12 +728,21 @@ def run(view: View) -> None:
                 # one — whereas a silent empty result reads as "no such page".
                 room = config.TOOL_RESULT_CHAR_BUDGET - tool_chars
                 if len(result) > room:
-                    result = (
-                        result[: max(0, room)]
-                        + "\n\n[Truncated: this turn has reached its reading limit. "
-                        "Answer from what you have, or say which section you still "
-                        "need.]"
-                    )
+                    # The note comes OUT of the room, not on top of it. It used to be
+                    # appended after the clip, so every truncated call put its own
+                    # length past the budget — measured 595 characters over with five
+                    # clipped calls and 1,071 with nine, because the overshoot did not
+                    # depend on how much room was left. Small against 60,000 and wrong
+                    # in the one direction that matters, since the whole purpose of
+                    # this budget is that the loop cannot overrun what `history.build`
+                    # trimmed for before it started.
+                    #
+                    # What is left is bounded and deliberate: once the room is smaller
+                    # than the note, a call returns the note alone, so a turn can end
+                    # up to MAX_TOOL_ROUNDS notes over. That is the trade this note
+                    # exists to make — a model handed nothing at all reads it as "no
+                    # such page" and asks again, which costs a whole round.
+                    result = result[: max(0, room - len(TRUNCATED))] + TRUNCATED
                 tool_chars += len(result)
                 messages.append(llm.tool_result_message(call, result))
 
@@ -722,7 +752,27 @@ def run(view: View) -> None:
             # and no live line anywhere, which reads as a turn that has stalled — and
             # this wait is most of what the reader is waiting for, because the model
             # thinking about what it just read is the slow part of a round.
-            status.show(view.copy.status_thinking)
+            # NOT reset to `status_thinking` here, which is what this line used to do
+            # and why the stage phrases never reached a reader.
+            #
+            # The sequence was: show the stage phrase, run the tool, reset to Thinking.
+            # A search of an in-memory index is 10-40ms, so all three paints went into
+            # the same `st.empty()` inside one script run with nothing yielding between
+            # them — and Streamlit only ships the last one. Measured with a mutation
+            # observer at 25ms across four turns: the row read `Thinking` and nothing
+            # else, ever, including on a turn that made two tool calls over twelve
+            # seconds. The phrases were restored to the profile, wired up, unit-tested,
+            # and invisible.
+            #
+            # So the stage phrase STAYS while the model thinks about what it just read.
+            # That is not a compromise, it is the more honest line: the wait a reader is
+            # sitting through belongs to the round that is happening, and "Reading the
+            # relevant sections" describes that round until the next one starts. The
+            # bare `Thinking` still opens every turn, before any tool has been called.
+            #
+            # What the old line was for — a live line so the block does not read as
+            # stalled — is unchanged: the phrase in the row keeps its animated dots and
+            # its sweep whatever the words are.
 
             # The last request of the turn goes out with the tools withdrawn.
             #
@@ -751,7 +801,32 @@ def run(view: View) -> None:
                     "role": "system",
                     "content": prompts.last_round_instruction(runtime.identity),
                 })
-                turn = start(messages, None)
+                # THE SCHEMAS GO UP; THE CALL IS FORBIDDEN. Not a nicety: this is
+                # the only request of a turn that used to carry no tools, and that made
+                # it the app's whole exposure to a free router's safety CLASSIFIER.
+                #
+                # Of the 19 free models OpenRouter serves, 18 list `tools` in
+                # `supported_parameters` and `nvidia/nemotron-3.5-content-safety:free`
+                # is the one that does not — and the router filters to models that
+                # support the parameters the request carries. So a request with a schema
+                # on it structurally cannot be routed to the classifier, and a request
+                # without one can: measured at 2 of 33 text rolls and 3 of 9 rolls with
+                # an image attached, each time answering the reader's question with the
+                # whole of `User Safety: safe`.
+                #
+                # `tool_choice: "none"` keeps that filter and forbids the call, which is
+                # exactly what this round needs — the loop has no round left to service
+                # one, which is why the tools were withdrawn in the first place.
+                # Measured against the live router, 5 requests: 5 answers, 0 tool calls,
+                # 0 classifier. Withdrawing them and hoping the instruction holds was
+                # the other option and it is weaker, because a router serves a different
+                # model every time and a call arriving here is dropped — an empty answer
+                # for the reader.
+                #
+                # `normalize.is_moderation_verdict` and `REROLL_KINDS` stay: they are
+                # the recovery for the classifier reached any other way, and for every
+                # other kind of empty answer. This makes this particular door shut.
+                turn = start(messages, runtime.tool_schemas, tool_choice="none")
             else:
                 turn = start(messages, runtime.tool_schemas)
 
@@ -784,8 +859,8 @@ def run(view: View) -> None:
 
         # A tool call the model typed instead of making. The same shape of failure one
         # line up, and it arrives by the same door the round limit used to: the last
-        # request of a turn goes out with no tools, and a model that wanted to call one
-        # anyway has nowhere to put it but the stream. Caught here rather than left to
+        # request of a turn forbids a call, and a model that wanted to make one anyway
+        # has nowhere to put it but the stream. Caught here rather than left to
         # `redact`, which swaps a tool's *name* out of a sentence and would turn a
         # screenful of angle brackets into a slightly more readable screenful of angle
         # brackets. Before the redaction for that reason.
@@ -793,6 +868,17 @@ def run(view: View) -> None:
             logger.warning(
                 "%s wrote a tool call out as its answer (%d chars); treating as no answer",
                 model.key, len(final_text),
+            )
+            raise llm.AssistantError("empty")
+
+        # And a safety classifier's verdict, which is not the model misbehaving but the
+        # wrong model answering — see `normalize.is_moderation_verdict`. It reached a
+        # reader as `User Safety: safe` under a Sources strip, because it is short,
+        # well-formed prose and every check above lets it through.
+        if normalize.is_moderation_verdict(final_text):
+            logger.warning(
+                "%s answered with a safety verdict (%r); treating as no answer",
+                model.key, final_text[:60],
             )
             raise llm.AssistantError("empty")
 
@@ -837,6 +923,16 @@ def run(view: View) -> None:
                     sources,
                 ),
                 "sources": sources,
+                # What the turn actually did, so the block survives the turn that drew
+                # it — asked for as "is it possible for us to expand it to see what's
+                # in the content after the answer is generated?" The Sources strip says
+                # what was CITED; this says what was searched for, in the words the
+                # model chose, and what was read without being cited.
+                "steps": status.record(),
+                # The summary line's clock, stopped where the reader last saw it. Not
+                # derivable from the steps above: the wait for the first word of the
+                # answer is part of it and belongs to no step.
+                "step_seconds": status.total_seconds,
                 "rating": None,
                 "model": model.key,
                 # What `redact.apply` took out, kept with the turn rather than only
@@ -847,14 +943,30 @@ def run(view: View) -> None:
             }
         )
         st.session_state.tried = []
+        # Per turn, unlike `tried` which is per walk — see `state` for why they are two
+        # counters. A turn that took a re-roll and then answered has spent it.
+        st.session_state.rerolls = 0
         # Only now is a failover a fact worth reporting: the replacement model
         # has produced this answer. Any older notice belongs to an older turn.
         switched = st.session_state.switched_from
         st.session_state.switched_from = None
         st.session_state.notice = (
-            f"{switched[0]} was unavailable ({REASONS.get(switched[1], switched[1])}), "
-            f"so {model.label} answered instead. Pick a different one from the "
-            f"model button under the input box."
+            # No model names, and no instruction. This read "<name> was unavailable
+            # (<reason>), so <name> answered instead. Pick a different one from the
+            # model button under the input box" — and every clause is now wrong for a
+            # reader. There is no model button: the picker is gone, so the instruction
+            # sends them hunting for a control that does not exist. And the names were
+            # only ever actionable BECAUSE of that control; without it they are operator
+            # information on a reader's screen. "we don't have a model picker, why do we
+            # need this?"
+            #
+            # What survives is the one thing a reader can use: why this answer took
+            # longer than the last. The ids are not lost — `feedback.record_turn` gets
+            # `model.key` and the error card's technical-details panel prints the real
+            # one, which is where an operator looks.
+            f"The first model was unavailable "
+            f"({REASONS.get(switched[1], switched[1])}), so another answered. "
+            f"This turn took longer than usual."
             if switched
             else ""
         )
@@ -893,7 +1005,53 @@ def run(view: View) -> None:
         # key was *also* out of credit — that one hop landed on the second dead end and
         # stopped, with every model that would have answered still on the list.
         may_switch = len(tried) + 1 < attempts_allowed(view)
-        if exc.kind in FAILOVER_KINDS and alternative is not None and may_switch:
+        # `.get`, not an attribute, and the difference matters here and nowhere else in
+        # this function: this line runs INSIDE an except clause, and the last-resort
+        # `except Exception` below is a sibling of that clause rather than a wrapper
+        # around it. A KeyError raised here would not be caught by anything — it would
+        # take the page down on the one path whose whole job is to recover.
+        rerolls = int(st.session_state.get("rerolls", 0) or 0)
+        # ASK THE SAME ID AGAIN, before considering a different one.
+        #
+        # Only where that id is a router — see `View.reroutes` — and only for a turn
+        # that produced no answer. Everywhere else a repeat is pointless and the walk
+        # is right; here the walk is the expensive move and cannot reach the cheap one,
+        # because `alternative` excludes everything in `tried` by construction and the
+        # router is in it the moment it fails once. Measured: 14 distinct models over 33
+        # rolls, a repeat twice in 32 consecutive pairs.
+        #
+        # `tried` is deliberately NOT appended to. A re-roll is not another model asked,
+        # so it must not consume a slot of `attempts_allowed` that belongs to a model
+        # still unasked — and `alternative` would skip the router for the rest of the
+        # turn if it did, which is the opposite of the point. `switched_from` is
+        # deliberately not set either: it is what makes the settled notice say another
+        # model answered, and the whole claim here is that the same id did.
+        if (
+            exc.kind in REROLL_KINDS
+            and view.reroutes
+            and rerolls < config.ROUTER_RETRIES
+            # The harness's off switch, read directly rather than through
+            # `attempts_allowed`. That function folds in the size of the lineup, and a
+            # lineup of ONE — a deployment with a single key, where the router is the
+            # only thing there is — is the case where a re-roll is worth most and the
+            # only case where nothing else can rescue the turn. `MAX_MODEL_ATTEMPTS = 1`
+            # means "ask exactly what I asked for", which `evals/harness.py` needs and
+            # which a re-roll would quietly break; a short lineup does not mean that.
+            and config.MAX_MODEL_ATTEMPTS != 1
+        ):
+            logger.info("%s produced no answer (%s); asking it again (%d of %d)",
+                        model.key, exc.kind, rerolls + 1, config.ROUTER_RETRIES)
+            st.session_state.rerolls = rerolls + 1
+            # The SAME key. `finally` reassigns it, keeps `processing` True, clears the
+            # error and reruns — so the identical question goes back to the router and
+            # is served by whatever it picks this time.
+            st.session_state.failover_to = model.key
+            st.session_state.notice = (
+                # No model name and no arithmetic. The reader is owed an account of the
+                # extra seconds and can do nothing with either.
+                "That attempt came back empty. Trying again…"
+            )
+        elif exc.kind in FAILOVER_KINDS and alternative is not None and may_switch:
             # Out of credit on one provider is exactly what the second one is for.
             logger.info("%s unusable (%s); failing over to %s",
                         model.key, exc.kind, alternative.key)
@@ -903,8 +1061,11 @@ def run(view: View) -> None:
             # Present tense: the retry has not happened yet. The past-tense
             # version is written only once an answer actually arrives.
             st.session_state.notice = (
-                f"{model.label} is unavailable ({REASONS.get(exc.kind, exc.kind)}). "
-                f"Retrying with {alternative.label}…"
+                # The fact, not the names — same reasoning as the settled notice. A
+                # reader watching a turn take eight seconds is owed an account of why,
+                # and can do nothing with which model it was.
+                f"That model is unavailable ({REASONS.get(exc.kind, exc.kind)}). "
+                "Retrying…"
             )
         else:
             # An "unknown" kind means classify() had nothing to go on, so log the
@@ -916,7 +1077,8 @@ def run(view: View) -> None:
                 exc_info=exc.original if exc.kind == "unknown" else None,
             )
             record_failure(exc.kind)
-            fail(exc.user_message, detail(view, exc.original or exc))
+            fail(exc.user_message, detail(view, exc.original or exc),
+                 exc.kind)
     except Exception as exc:  # last-resort guard so the UI never dies
         if is_control_flow(exc):
             # Streamlit's own control flow, not a failure. Re-raised so the rerun or
@@ -930,7 +1092,7 @@ def run(view: View) -> None:
         logger.exception("Unexpected failure")
         classified = llm.classify(exc)
         record_failure(classified.kind)
-        fail(classified.user_message, detail(view, exc))
+        fail(classified.user_message, detail(view, exc), classified.kind)
     except BaseException:
         # Streamlit's control flow does NOT derive from Exception. On 1.54
         # `RerunException.__mro__` is (RerunException, ScriptControlException,

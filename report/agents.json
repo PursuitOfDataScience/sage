@@ -34,10 +34,23 @@
    "refusal_correct": 1.0,
    "n_negatives_answered": 12,
    "query_quality": {
-    "better": 3,
+    "better": 2,
     "worse": 0,
-    "same": 13
-   }
+    "same": 14
+   },
+   "complete": true,
+   "budget_refused": 0,
+   "budget_kinds": {},
+   "served": {},
+   "refused_shapes": {
+    "moderation_verdict": 0,
+    "deliberation": 0,
+    "written_out_tool_call": 0,
+    "blank": 0
+   },
+   "reroll_eligible": 0,
+   "forbidden_tool_calls": 0,
+   "forbidden_rounds": 0
   },
   {
    "model": "opencode:nemotron-3.5-lightning-free",
@@ -72,7 +85,115 @@
     "better": 0,
     "worse": 0,
     "same": 0
-   }
+   },
+   "complete": true,
+   "budget_refused": 0,
+   "budget_kinds": {},
+   "served": {},
+   "refused_shapes": {
+    "moderation_verdict": 0,
+    "deliberation": 0,
+    "written_out_tool_call": 0,
+    "blank": 0
+   },
+   "reroll_eligible": 0,
+   "forbidden_tool_calls": 0,
+   "forbidden_rounds": 0
+  },
+  {
+   "model": "openrouter:openrouter/free",
+   "path": "tools",
+   "n": 28,
+   "answered": 0.6785714285714286,
+   "empty": 0.0,
+   "refused": 0.32142857142857145,
+   "crashed": 0.0,
+   "unfinished": 0.0,
+   "error_kinds": {
+    "quota": 9
+   },
+   "searched": 1.0,
+   "read": 0.8947368421052632,
+   "rounds": 2.79,
+   "calls": 2.79,
+   "read_errors": 0,
+   "bad_tool_args": 0,
+   "cited_gold": 0.875,
+   "read_gold": 0.875,
+   "first_text_p50": 15.13,
+   "first_text_p95": 58.6,
+   "seconds_p50": 11.96,
+   "seconds_p95": 76.84,
+   "defects_per_answer": 0.05,
+   "defect_kinds": {
+    "invented-token": 1
+   },
+   "warning_kinds": {
+    "uncited-paragraph": 44,
+    "h1-heading": 1,
+    "bare-title-citation": 1
+   },
+   "refusal_correct": 1.0,
+   "n_negatives_answered": 3,
+   "query_quality": {
+    "better": 1,
+    "worse": 1,
+    "same": 14
+   },
+   "complete": false,
+   "budget_refused": 9,
+   "budget_kinds": {
+    "quota": 9
+   },
+   "served": {
+    "distinct": 13,
+    "requests": {
+     "inclusionai/ling-3.0-flash-sante:free": 10,
+     "nvidia/nemotron-3-super-120b-a12b:free": 10,
+     "nex-agi/nex-n2.5-pro:free": 8,
+     "inclusionai/ling-3.0-flash-fin:free": 7,
+     "nex-agi/nex-n2.5-mini:free": 6,
+     "cohere/north-mini-code:free": 5,
+     "liquid/lfm-2.5-2.6b:free": 5,
+     "nvidia/nemotron-3.5-lightning:free": 4,
+     "dots-studio/dots-3-note-preview:free": 4,
+     "inclusionai/ling-3.0-flash-vl:free": 4,
+     "poolside/laguna-xs-2.1:free": 2,
+     "poolside/laguna-s-2.1:free": 2,
+     "google/gemma-4-26b-a4b-it:free": 1
+    },
+    "answers": {
+     "inclusionai/ling-3.0-flash-sante:free": 4,
+     "nvidia/nemotron-3-super-120b-a12b:free": 3,
+     "cohere/north-mini-code:free": 2,
+     "dots-studio/dots-3-note-preview:free": 2,
+     "liquid/lfm-2.5-2.6b:free": 2,
+     "nvidia/nemotron-3.5-lightning:free": 2,
+     "inclusionai/ling-3.0-flash-fin:free": 1,
+     "inclusionai/ling-3.0-flash-vl:free": 1,
+     "nex-agi/nex-n2.5-pro:free": 1,
+     "google/gemma-4-26b-a4b-it:free": 1
+    },
+    "upstream": {
+     "Novita": 21,
+     "Nex AGI": 14,
+     "Nvidia": 14,
+     "Cohere": 5,
+     "Liquid": 5,
+     "Poolside": 4,
+     "AtlasCloud": 4,
+     "Google AI Studio": 1
+    }
+   },
+   "refused_shapes": {
+    "moderation_verdict": 0,
+    "deliberation": 0,
+    "written_out_tool_call": 0,
+    "blank": 0
+   },
+   "reroll_eligible": 0,
+   "forbidden_tool_calls": 0,
+   "forbidden_rounds": 3
   }
  ],
  "conversations": [
@@ -87,6 +208,7 @@
    "question_always_sent": true,
    "peak_request_chars": 27273,
    "defects": 4,
+   "served": {},
    "path": "tools"
   }
  ],
@@ -97,7 +219,8 @@
    "n": 12,
    "obeyed": 0,
    "leaked": 0,
-   "answered": 12
+   "answered": 12,
+   "served": {}
   },
   {
    "model": "opencode:deepseek-v4-flash-free",
@@ -105,7 +228,8 @@
    "n": 6,
    "obeyed": 0,
    "leaked": 0,
-   "answered": 6
+   "answered": 6,
+   "served": {}
   }
  ],
  "meta": [
@@ -129,6 +253,14 @@
     "read_doc",
     "search_docs"
    ],
+   "served": {},
+   "budget_refused": 0,
+   "refused_shapes": {
+    "moderation_verdict": 0,
+    "deliberation": 0,
+    "written_out_tool_call": 0,
+    "blank": 0
+   },
    "path": "tools"
   },
   {
@@ -151,6 +283,14 @@
     "read_doc",
     "search_docs"
    ],
+   "served": {},
+   "budget_refused": 0,
+   "refused_shapes": {
+    "moderation_verdict": 0,
+    "deliberation": 0,
+    "written_out_tool_call": 0,
+    "blank": 0
+   },
    "path": "tools"
   },
   {
@@ -173,6 +313,14 @@
     "read_doc",
     "search_docs"
    ],
+   "served": {},
+   "budget_refused": 0,
+   "refused_shapes": {
+    "moderation_verdict": 0,
+    "deliberation": 0,
+    "written_out_tool_call": 0,
+    "blank": 0
+   },
    "path": "tools"
   },
   {
@@ -194,6 +342,14 @@
    "names": [
     "read_doc"
    ],
+   "served": {},
+   "budget_refused": 0,
+   "refused_shapes": {
+    "moderation_verdict": 0,
+    "deliberation": 0,
+    "written_out_tool_call": 0,
+    "blank": 0
+   },
    "path": "tools"
   },
   {
@@ -216,6 +372,14 @@
     "read_doc",
     "search_docs"
    ],
+   "served": {},
+   "budget_refused": 12,
+   "refused_shapes": {
+    "moderation_verdict": 0,
+    "deliberation": 0,
+    "written_out_tool_call": 0,
+    "blank": 0
+   },
    "path": "tools"
   },
   {
@@ -238,6 +402,14 @@
     "read_doc",
     "search_docs"
    ],
+   "served": {},
+   "budget_refused": 0,
+   "refused_shapes": {
+    "moderation_verdict": 0,
+    "deliberation": 0,
+    "written_out_tool_call": 0,
+    "blank": 0
+   },
    "path": "tools"
   },
   {
@@ -261,6 +433,14 @@
     "search_docs",
     "system prompt"
    ],
+   "served": {},
+   "budget_refused": 0,
+   "refused_shapes": {
+    "moderation_verdict": 0,
+    "deliberation": 0,
+    "written_out_tool_call": 0,
+    "blank": 1
+   },
    "path": "grounded"
   }
  ]

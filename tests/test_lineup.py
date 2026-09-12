@@ -717,6 +717,61 @@ class TestAModelThatIsServedAndCannotAnswer:
         )
         assert "Taken out of the picker" in body
 
+    COMMENTED = (
+        '[[providers]]\nname = "opencode"\nkind = "openai"\n'
+        'models = ["good-free"]\n'
+        "deny = [\n"
+        '    "a-free",\n'
+        "    # Added by hand, and how it got here is the point: the router returned an\n"
+        "    # empty answer on 9 of 13 real turns and every failover to this one\n"
+        "    # answered HTTP 500.\n"
+        '    "b-free",\n'
+        "]\n"
+        'free_marks = ["-free"]\n'
+    )
+
+    def test_rewriting_the_denylist_keeps_the_reasoning(self):
+        """The only thing that makes a denylist reviewable is why each name is on it.
+
+        This rewrote the array to one line, and on the profile as it stands that deleted
+        fourteen lines explaining the difference between "cannot be paid for" and "does
+        not answer" — written by hand the same day. A list of names nobody can argue
+        with is a list nobody can take off.
+        """
+        out = lineup_check.set_deny(self.COMMENTED, "opencode",
+                                    ["a-free", "b-free", "c-free"])
+        assert "answered HTTP 500" in out
+        # Still attached to the name it explains, not floated to the top.
+        lines = [line.strip() for line in out.splitlines()]
+        assert lines.index("# answered HTTP 500.") < lines.index('"b-free",')
+        first_comment = next(i for i, line in enumerate(lines)
+                             if line.startswith("# Added by hand"))
+        assert lines.index('"a-free",') < first_comment
+
+    def test_a_name_removed_takes_its_reasoning_with_it(self):
+        out = lineup_check.set_deny(self.COMMENTED, "opencode", ["a-free"])
+        assert "answered HTTP 500" not in out
+        assert '"a-free"' in out
+
+    def test_a_denylist_with_no_comments_keeps_its_one_line_form(self):
+        """A day with no change has to produce no diff, or the pull request stops being
+        a signal — which is why the flat form survives where there is nothing to keep."""
+        plain = ('[[providers]]\nname = "opencode"\n'
+                 'deny = ["a-free"]\nfree_marks = ["-free"]\n')
+        out = lineup_check.set_deny(plain, "opencode", ["b-free", "a-free"])
+        assert 'deny = ["a-free", "b-free"]' in out
+
+    def test_the_shipped_profile_round_trips_unchanged(self):
+        """Sorted output against a hand-sorted file: a dispatch that changes nothing
+        must leave the profile byte-identical, comments and all."""
+        import os  # noqa: PLC0415
+
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(here, "profiles", "rcc.toml"), encoding="utf-8") as fh:
+            text = fh.read()
+        current = list(profile.active().provider("opencode").deny)
+        assert lineup_check.set_deny(text, "opencode", current) == text
+
     def test_a_denied_model_is_put_back_when_it_answers(self, monkeypatch, tmp_path):
         """The property that makes a blocklist safe to have at all. `hy3-free` was
         down for two days and came back; a list that could not let go would have kept

@@ -2,7 +2,7 @@ import pytest
 
 from sage import config, retrieval
 from sage.corpus import Chunk, Corpus
-from sage.retrieval import text
+from sage.retrieval import bm25, text
 
 # The shipped profile's vocabulary: its protected terms and its synonym groups. That
 # split is the seam under test here — the stemming rules are about English and live in
@@ -126,6 +126,66 @@ class TestRanking:
 
     def test_limit_is_respected(self, real_index):
         assert len(real_index.search("storage", limit=3)) == 3
+
+
+class TestTheTitleFieldIsLengthNormalised:
+    """A title that IS the query beats a heading trail that merely contains it.
+
+    The body field was length-normalised and the title field was not, so the title
+    boost was a flat `+idf * TITLE_BOOST` per matching term however long the title
+    was. A `breadcrumb` is the whole path of headings, so a page with fifteen words
+    of heading trail collected exactly the credit of a page whose entire title is
+    the reader's word — and then won on its body.
+
+    Measured on the shipped corpus, that was seven of 114 pages not retrievable by
+    their own title: three of the four pages titled `Software`, the page titled
+    `FAQs` (beaten by four sections of three other FAQ pages tied at an identical
+    19.769), `Accessing RCC clusters` and the section-wise misses behind them.
+    """
+
+    #: Neither path carries the word, so the two chunks are separated by the title
+    #: field and the body field alone — which is the comparison under test. The long
+    #: title is the real shape of the breadcrumb that won: `docs/slurm/faq.md`'s.
+    def corpus(self):
+        return make_corpus(
+            ("a.txt", "FAQs", "Frequently asked questions about cloud bursting."),
+            (
+                "b.md",
+                "Running Jobs FAQ › Set-up and general questions › Are there any "
+                "limits to running jobs on Midway?",
+                "This FAQ covers limits on how many jobs one account may run.",
+            ),
+        )
+
+    def test_the_page_whose_whole_title_is_the_query_wins(self):
+        results = retrieval.Index(self.corpus()).search("FAQs")
+        assert [result.chunk.path for result in results][0] == "a.txt"
+
+    def test_and_it_lost_while_the_boost_was_flat(self, monkeypatch):
+        """The defect itself, held somewhere it can fail.
+
+        A floor above every achievable `1 / norm` makes the factor one constant for
+        every chunk, which is arithmetically the old flat boost with a larger
+        `TITLE_BOOST` — same ranking, and it is the ranking that was wrong. Without
+        this the fix has no witness: a check that cannot fail reads as a pass.
+        """
+        monkeypatch.setattr(bm25, "TITLE_LENGTH_FLOOR", 50.0)
+        results = retrieval.Index(self.corpus()).search("FAQs")
+        assert [result.chunk.path for result in results][0] == "b.md"
+
+    def test_the_floor_bounds_what_normalisation_may_take_away(self):
+        """Load-bearing, and not for ranking: `MIN_CONFIDENT_SCORE` is a flat 20.
+
+        Deflating a long title's boost lowers the top score of queries that have
+        nothing to do with findability, and the confidence gate compares that score
+        against an absolute threshold. Unclamped, "why did job 41235567 fail" fell
+        from just above 20 to just below it and the app began refusing a question
+        the corpus answers. The floor is what keeps the gate's calibration intact.
+        """
+        index = retrieval.Index(self.corpus())
+        endless = index._title_weight(10_000)
+        assert endless == pytest.approx(bm25.TITLE_LENGTH_FLOOR)
+        assert index._title_weight(1) > 1.0
 
 
 class TestSnippet:

@@ -25,12 +25,21 @@ class Chunk:
     heading: str
     breadcrumb: str
     text: str
-    #: Where the reader goes, which is **not** `id` with the prefix swapped. A repeated
-    #: heading publishes at one anchor on the site — mkdocs-material's own duplicate
-    #: suffix is `_1`, not `-1` — so `alphafold.md#alphafold-2-1` is a real id whose URL
-    #: ends `#alphafold-2`, and `links.resolve` goes through the index to get from one to
-    #: the other rather than rewriting the string. Comparing an *id* against the published
-    #: page's ids reports working citations as broken; `tools/anchor_check.py` checks these.
+    #: Where the reader goes, which is **not** `id` with the prefix swapped. The two use
+    #: different suffixes for a repeated heading and neither is a typo: mkdocs-material
+    #: numbers its second `AlphaFold 2` `#alphafold-2_1`, while an id here counts the
+    #: parts an oversized section splits into as well and so reads `alphafold-2-1`. So
+    #: `alphafold.md#alphafold-2-1` is a real id whose URL ends `#alphafold-2_1`, and
+    #: `links.resolve` goes through the index to get from one to the other rather than
+    #: rewriting the string. Comparing an *id* against the published page's ids reports
+    #: working citations as broken; `tools/anchor_check.py` checks these.
+    #:
+    #: This used to say a repeated heading "publishes at one anchor on the site", and it
+    #: does not — `alphafold.md` carries `AlphaFold 2` and `AlphaFold 3` three times
+    #: each, the site publishes six anchors, and every chunk cited the bare two. Four of
+    #: those sections were unreachable from any citation and two citations landed a
+    #: reader at the first occurrence of the right name. `corpus.readers` numbers them
+    #: the way `toc.unique` does now.
     url: str
 
     @property

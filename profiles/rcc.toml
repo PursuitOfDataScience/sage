@@ -166,6 +166,20 @@ synonyms = [
     ["cnetid", "account", "username"],
     ["midway", "cluster", "hpc"],
     ["snapshot", "backup", "restore", "recover"],
+    # `MidwayGeoSpatial` is the User Guide's own title for the GIS tutorial, and it was
+    # the one page in the corpus that retrieved *nothing at all* for its own title: a
+    # CamelCase compound is a single token, the page's prose never writes it that way,
+    # and a term that appears in no document body scores zero even where it does appear
+    # in the title and the path — the scorer skips a term with no IDF before it reaches
+    # either boost. So the word has to be connected to words the pages do use.
+    #
+    # A group rather than splitting CamelCase in the tokenizer, which was the other
+    # candidate and is a worse trade: `MidwayGeoSpatial` would split to `midway` +
+    # `spatial`, which is "midway" (a term in 200-odd sections) plus the word that
+    # titles `r.md`'s "Spatial Packages" — one page rescued by making every score in
+    # the index noisier. `gis` and `geospatial` are what this page and its siblings
+    # actually say, and they are synonyms of each other whatever happens to this title.
+    ["midwaygeospatial", "geospatial", "gis"],
 ]
 
 # --- where models come from ------------------------------------------------
@@ -233,6 +247,25 @@ free_marks_env = "SAGE_OPENROUTER_FREE_MARKS"
 # turn, so an effort setting would be honoured on about a third of them with nothing
 # on screen able to say which.
 reasoning = true
+# `openrouter/free` is a ROUTER, not a model, and this is where the app is told so.
+#
+# It matters because it changes what "try again" means. Everywhere else in the lineup a
+# repeat is pointless — the model that just returned nothing will return nothing again —
+# so `View.alternative` skips anything already `tried` and walks on to the next name.
+# Here the same id resolves to a different model on the next request: measured over 33
+# rolls on 2026-09-11 it served 14 distinct models, and two consecutive rolls repeated a
+# model twice in 32, so a re-ask lands somewhere else about 94% of the time. Asking again
+# is the cheapest recovery available and the walk could not reach it.
+#
+# What makes it worth having a recovery for: one of the names in the free pool is
+# `nvidia/nemotron-3.5-content-safety:free`, a safety CLASSIFIER whose entire output is
+# `User Safety: safe`. It was reached on 2 of 33 tool-less rolls.
+# `normalize.is_moderation_verdict` is what stops that being shipped as an answer; this
+# is what gets the reader a real one instead of an error card. Neither OpenRouter's
+# `plugins.excluded_models` nor `provider.ignore` can keep the router off it — both were
+# tried — so recovery after the fact is the only lever there is.
+routers = ["openrouter/free"]
+routers_env = "SAGE_OPENROUTER_ROUTERS"
 # What the picker calls it, because the served id is not a name — it is the billing
 # arrangement, and a reader choosing a row is not choosing a billing arrangement. The id
 # is untouched everywhere it counts: it is what goes upstream, what the feedback log and
@@ -354,8 +387,17 @@ models = [
 deny = [
     "deepseek-v4-flash-free",
     "muse-spark-1.2-contributor-free",
-    "nemotron-3.5-lightning-free",
+    # Added by hand, and how it got here is the point. `tools/lineup_check.py` had
+    # already found it and proposed it on the `lineup/auto` branch; that PR was closed
+    # unmerged because the Zen lineup is not what answers. It is what answers on a
+    # FAILOVER, and an audit of 13 real turns then measured this: the router returned an
+    # empty answer on 9 of them, every one failed over to Zen, and Zen answered
+    # `HTTP 500 Internal server error` EVERY time — so the reader got
+    # "The assistant is temporarily unavailable" instead of an answer on most questions.
+    # The automation was right and the close was wrong.
+    "muse-spark-1.3-contributor-free",
     "nemotron-3-ultra-free",
+    "nemotron-3.5-lightning-free",
 ]
 deny_env = "SAGE_ZEN_DENY"
 free_marks = ["-free", "big-pickle"]

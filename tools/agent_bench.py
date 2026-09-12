@@ -39,7 +39,7 @@ sys.path.insert(0, ROOT)
 import evals  # noqa: E402
 from evals import checks, harness  # noqa: E402
 from sage import corpus as corpus_mod  # noqa: E402
-from sage import providers, retrieval  # noqa: E402
+from sage import normalize, providers, retrieval  # noqa: E402
 from sage.profile import active as _active  # noqa: E402
 
 
@@ -95,6 +95,92 @@ def query_quality(index, records: list[dict]) -> dict:
         else:
             same += 1
     return {"better": better, "worse": worse, "same": same}
+
+
+#: Failures of the *key*, not of the model. A free tier says no in three different ways
+#: and none of them is an answer the model got wrong: `rate_limit` is "too fast",
+#: `allowance` is "this model's free quota is spent", `quota` is "this key has no
+#: credit". Charged to the instrument the way `unfinished` is, because a row that folds
+#: them into `answered` reports a rate limiter as a model that would not answer.
+BUDGET_KINDS = ("rate_limit", "allowance", "quota")
+
+
+def served_tally(records: list[dict]) -> dict:
+    """Which models a ROUTER actually served, and how often.
+
+    The measurement a router makes different in kind from a pinned model. `openrouter/`
+    `free` is one id that resolves to a different model per request, so every
+    answer-shaped cell in this row — defects, refusals, gold pages — is an average over
+    whatever was behind it, and the average is unreadable on its own. `0.1 defects/`
+    `answer` over fourteen models is a fact about a lineup; the same number over one
+    model is a fact about a model.
+
+    Two tallies, because they answer different questions. `requests` counts every call
+    the turns made, which is what the router's mix looks like. `answers` counts only the
+    request that produced the text — on a tool loop the earlier rounds were served by
+    other models, and the cells above are about the last one.
+
+    Empty for a pinned model: nothing is served but the id that was asked for, and this
+    prints nothing rather than a one-row table saying so.
+    """
+    per_request: dict[str, int] = {}
+    per_answer: dict[str, int] = {}
+    upstreams: dict[str, int] = {}
+    for row in records:
+        for call in row.get("requests") or ():
+            for name in call.get("served") or ():
+                per_request[name] = per_request.get(name, 0) + 1
+            for host in call.get("upstream") or ():
+                upstreams[host] = upstreams.get(host, 0) + 1
+        answered_by = str(row.get("served_answer") or "")
+        if answered_by and row.get("outcome") == "answered":
+            per_answer[answered_by] = per_answer.get(answered_by, 0) + 1
+    if not per_request:
+        return {}
+    return {
+        "distinct": len(per_request),
+        "requests": dict(sorted(per_request.items(), key=lambda item: -item[1])),
+        "answers": dict(sorted(per_answer.items(), key=lambda item: -item[1])),
+        "upstream": dict(sorted(upstreams.items(), key=lambda item: -item[1])),
+    }
+
+
+def refused_shapes(records: list[dict]) -> dict:
+    """The three answers `ui.turn` will not ship, counted where they still exist.
+
+    Each of them raises `empty`, so the delivered `text` is blank and
+    `checks.inspect` — which returns no findings for an empty answer — cannot see any of
+    them. `checks.reasoning_shape`, `typed_out_tool_call` and `moderation_verdict` are
+    therefore scored on text that by construction never contains what they look for,
+    which is the trap EVAL.md describes for `leaked-reasoning` and which the fix to the
+    app reopened. `harness` keeps the last request's own stream for this reason, and
+    these counts are read off that rather than off the answer.
+
+    `blank` is the rest of the empties: the stream really did carry nothing, which is a
+    different fact about a free router and worth telling apart from the three shapes.
+    """
+    counts = {
+        "moderation_verdict": 0,
+        "deliberation": 0,
+        "written_out_tool_call": 0,
+        "blank": 0,
+    }
+    for row in records:
+        # Only where the app produced no answer. A record that answered was not one of
+        # these — `ui.turn` raises before it can be — and scoring the shapes over a
+        # delivered answer is what `checks` already does.
+        if row.get("outcome") == "answered":
+            continue
+        streamed = str(row.get("streamed_final") or "")
+        if normalize.is_moderation_verdict(streamed):
+            counts["moderation_verdict"] += 1
+        elif normalize.opens_with_deliberation(streamed):
+            counts["deliberation"] += 1
+        elif normalize.is_written_out_tool_call(streamed):
+            counts["written_out_tool_call"] += 1
+        elif row.get("error_kind") == "empty":
+            counts["blank"] += 1
+    return counts
 
 
 def summarise(model: str, records: list[dict], index) -> dict:
@@ -188,6 +274,48 @@ def summarise(model: str, records: list[dict], index) -> dict:
         ),
         "n_negatives_answered": len(negatives),
         "query_quality": query_quality(index, positives),
+        # Whether this row is a whole run. FALSE the moment the provider refused a turn
+        # for its own reasons, and it is not a detail: a set that stopped two thirds of
+        # the way through is a different measurement from the one it was asked for, and
+        # a partial run read as a full one is worse than no row at all. Derived rather
+        # than declared, so it survives `--rescore` — which recomputes every row from
+        # the transcripts and would drop any note written by hand.
+        "complete": not any(
+            row.get("error_kind") in BUDGET_KINDS for row in records
+        ),
+        # A free tier saying no, kept out of every rate above for the reason `unfinished`
+        # is: it is the key's bound, not the model's behaviour. Counted rather than
+        # rated, because the denominator a reader wants here is the turn, not the set.
+        "budget_refused": sum(
+            1 for row in records if row.get("error_kind") in BUDGET_KINDS
+        ),
+        "budget_kinds": {
+            kind: sum(1 for row in records if row.get("error_kind") == kind)
+            for kind in BUDGET_KINDS
+            if any(row.get("error_kind") == kind for row in records)
+        },
+        # Only populated where the id is a router. See `served_tally`.
+        "served": served_tally(records),
+        "refused_shapes": refused_shapes(records),
+        # Turns a READER's app would have asked the router again for, and this one did
+        # not. `ui.turn` re-rolls on `REROLL_KINDS` — `empty`, which is every shape
+        # above — but only when `config.MAX_MODEL_ATTEMPTS != 1`, and `harness.prepare`
+        # sets it to 1 so the row is about the model that was asked rather than about
+        # whatever a second roll landed on. So this is the count the re-roll would have
+        # rescued, measured with the re-roll switched off: the gap between this row and
+        # what a reader sees, stated rather than left to be inferred from its absence.
+        "reroll_eligible": sum(
+            1 for row in records if row.get("error_kind") == "empty"
+        ),
+        "forbidden_tool_calls": sum(
+            int(row.get("forbidden_tool_calls") or 0) for row in records
+        ),
+        # Requests that went out with the schemas attached and the call forbidden — the
+        # last round of every tool turn. The denominator for the count above.
+        "forbidden_rounds": sum(
+            1 for row in records for call in row.get("requests") or ()
+            if call.get("tool_choice") == "none"
+        ),
     }
 
 
@@ -387,6 +515,10 @@ def _conversation_summary(model: str, rows: list[dict]) -> dict:
         "question_always_sent": all(row.get("question_sent", True) for row in rows),
         "peak_request_chars": max((row.get("sent_chars", 0) for row in rows), default=0),
         "defects": sum(row["defect_count"] for row in rows),
+        # A conversation on a router is answered by a different model every turn, so "did the
+        # follow-up keep the thread?" is asked of a lineup rather than of a model. Empty
+        # on a pinned id.
+        "served": served_tally(rows),
     }
 
 
@@ -464,6 +596,9 @@ def run_injections(models, sage, haystack, contact, stream, internals=None,
                 ),
                 "leaked": sum(1 for row in rows if "leaked-prompt" in row["findings"]),
                 "answered": sum(1 for row in rows if row["outcome"] == "answered"),
+                # `held` on a router is six cases spread over six different models, so
+                # the row is only as strong as the names behind it. Empty on a pinned id.
+                "served": served_tally(rows),
             }
         )
     return out
@@ -636,6 +771,15 @@ def _meta_summary(model: str, rows: list[dict]) -> dict:
         # not. A count says the check fired; the names say whether it was a tool, the model
         # or the profile's own filenames, and those are three different holes.
         "names": sorted(set(named)),
+        # The same two router columns as `summarise`, and they matter more here: `held`
+        # over a router is the discretion of a dozen models averaged, and one of them
+        # reciting a line of the prompt is a fact about that model rather than about the
+        # row. Empty on a pinned id.
+        "served": served_tally(rows),
+        "budget_refused": sum(
+            1 for row in rows if row.get("error_kind") in BUDGET_KINDS
+        ),
+        "refused_shapes": refused_shapes(rows),
     }
 
 
@@ -662,6 +806,16 @@ def report_meta(rows: list[dict]) -> None:
         if row["answered"] < 1.0:
             print(f"      {row['answered']:.0%} of its turns produced an answer at all — "
                   "the rest are the provider, not the model")
+        served = row.get("served") or {}
+        if served:
+            # The names, not only the count: `held` over a router is an average over
+            # these, and which model leaked is the actionable half of it.
+            print(f"      served by {served['distinct']} models: " + ", ".join(
+                f"{name} x{count}" for name, count in served["requests"].items()
+            ))
+        if row.get("budget_refused"):
+            print(f"      {row['budget_refused']} turns refused by the key, not the "
+                  "model")
     print(f"   held = of {rows[0]['n_probes']} probes (n = the two answered counts), the "
           "answer as delivered gave nothing away")
     print("   alone = the same without the app's backstop, which is what the prompt "
@@ -702,6 +856,11 @@ def report_injections(rows: list[dict]) -> None:
               f"   prompt leaked {row['leaked']}/{row['n']}"
               + ("" if row["answered"] == row["n"]
                  else f"   ({row['answered']} of {row['n']} answered)"))
+        served = row.get("served") or {}
+        if served:
+            print(f"      served by {served['distinct']} models: " + ", ".join(
+                f"{name} x{count}" for name, count in served["requests"].items()
+            ))
 
 
 def rescore(path: str) -> dict:
@@ -799,6 +958,7 @@ def rescore(path: str) -> dict:
                 "answered": sum(
                     1 for row in records if row["outcome"] == "answered"
                 ),
+                "served": served_tally(records),
             }
         )
     return summary
@@ -856,6 +1016,45 @@ def report(summary: dict) -> None:
         if row["read_errors"] or row["bad_tool_args"]:
             print(f"   read_doc errors {row['read_errors']}, "
                   f"empty tool arguments {row['bad_tool_args']}")
+        report_router(row)
+
+
+def report_router(row: dict) -> None:
+    """What a router row cannot be read without: who served it, and what came back.
+
+    Printed under the model's own block rather than as a table of its own, because it is
+    a property of one row — a pinned model has nothing to say here and says nothing.
+    """
+    if row.get("budget_refused"):
+        print(f"   PARTIAL RUN — the KEY refused {row['budget_refused']} of "
+              f"{row['n']} turns: "
+              + ", ".join(f"{kind} x{count}"
+                          for kind, count in sorted(row["budget_kinds"].items()))
+              + " — the free tier, not the model")
+    shapes = row.get("refused_shapes") or {}
+    if any(shapes.values()):
+        print("   answers the app refused to ship (scored on the model's own stream, "
+              "which is the only place they survive): "
+              + ", ".join(f"{kind} x{count}"
+                          for kind, count in shapes.items() if count))
+    if row.get("reroll_eligible"):
+        print(f"   {row['reroll_eligible']} of those turns would have been re-rolled for "
+              "a reader; this run has the re-roll off, so the row is the first roll only")
+    if row.get("forbidden_rounds"):
+        print(f"   last rounds sent with tool_choice=none: {row['forbidden_rounds']}, "
+              f"of which {row.get('forbidden_tool_calls', 0)} called a tool anyway")
+    served = row.get("served") or {}
+    if not served:
+        return
+    print(f"   the router served {served['distinct']} distinct models over "
+          f"{sum(served['requests'].values())} requests:")
+    for name, count in served["requests"].items():
+        answered = served["answers"].get(name, 0)
+        print(f"      {count:3d} req  {answered:3d} answers  {name}")
+    if served.get("upstream"):
+        print("      upstream providers: " + ", ".join(
+            f"{host} x{count}" for host, count in served["upstream"].items()
+        ))
 
 
 def spread(cases: list, limit: int) -> list:

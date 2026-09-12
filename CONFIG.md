@@ -18,20 +18,23 @@ has to change and none of them are settings.
 | `SAGE_TEMPERATURE` | `0.2` | Sampling temperature |
 | `SAGE_MAX_TOOL_ROUNDS` | `4` | Search/read rounds before the turn must answer |
 | `SAGE_MAX_MODEL_ATTEMPTS` | `0` *(the whole lineup)* | Models one turn may ask before it gives up. A model that fails in a way another model might not — an empty reply, a spent allowance, a 5xx — hands the question to the next one automatically. `1` switches that off; a lineup of eight can cost forty provider calls in the worst case, which is what `SAGE_CALL_BUDGET` is for |
+| `SAGE_ROUTER_RETRIES` | `2` | Times a turn may ask a ROUTER again after it produced no answer. Only for the ids a profile lists under `routers`, where the same name resolves to a different model per request — a re-ask there is a different model, which the lineup walk above cannot reach. `0` switches it off, and so does `SAGE_MAX_MODEL_ATTEMPTS=1` |
+| `SAGE_OPENROUTER_ROUTERS` | `openrouter/free` | Which of that provider's ids are routers rather than models |
 | `SAGE_SEARCH_RESULTS` | `6` | Results per search |
 | `SAGE_MAX_PER_PAGE` | `2` | Sections of one page allowed in a result set |
 | `SAGE_SYNONYM_WEIGHT` | `0.8` | Weight of expanded synonym terms |
 | `SAGE_HISTORY_CHAR_BUDGET` | `48000` | History size before oldest turns are trimmed |
 | `SAGE_MAX_PROMPT_CHARS` | `8000` | Longest question accepted |
-| *(no variable)* | `openrouter/free` → `enigma` | The picker name, set by `labels` in the profile. See [Naming a model](#naming-a-model) — it has no environment override on purpose |
-| `SAGE_OPENROUTER_FREE_MARKS` | `openrouter/free` | Which OpenRouter models the picker offers. The default is the router's own id, so exactly one is offered; `:free` would offer all 18 free models and hand their upkeep back to you |
-| `SAGE_OPENROUTER_FREE_ONLY` | `1` | Off, the picker offers all 387 models OpenRouter fronts, most of which need a balance |
+| *(no variable)* | `openrouter/free` → `enigma` | The name the reader is shown, set by `labels` in the profile. See [Naming a model](#naming-a-model) — it has no environment override on purpose |
+| `SAGE_OPENROUTER_FREE_MARKS` | `openrouter/free` | Which OpenRouter models enter the lineup. The default is the router's own id, so exactly one does; `:free` would pull in all 18 free models and hand their upkeep back to you |
+| `SAGE_OPENROUTER_FREE_ONLY` | `1` | Off, the lineup holds all 387 models OpenRouter fronts, most of which need a balance |
 | `SAGE_ZEN_DENY` | *(see profile)* | Model ids never offered, however the provider lists them. For a model that is served and cannot answer — maintained by `lineup.yml`, and cleared when the model answers again |
 | `SAGE_STREAM_REPAINT_MS` | `40` | Shortest gap between repaints of a streaming answer. Deltas arriving inside one interval are drawn together, because `write_stream` redraws the whole answer every time. `0` = one repaint per delta |
-| `SAGE_STATUS_ARGUMENT_CHARS` | `96` | How much of a tool's argument the progress block shows — the query searched for, the path read. A ceiling on what a model can put in the page, not a layout number: the row ellipses whatever is too wide for the window it is in |
+| `SAGE_STATUS_ARGUMENT_CHARS` | `160` | How much of a tool's argument the progress block shows — the query searched for, and the *title* of the section read, since a corpus path is this repo's name for a file and not the documentation's. A ceiling on what a model can put in the page, not a layout number: the row ellipses whatever is too wide for the window it is in. Raised from 96, which ellipsed the longest title the shipped docs produce |
 | `SAGE_MAX_UPLOAD_BYTES` | `10485760` | Upload size limit, per file |
 | `SAGE_MAX_ATTACHED_BYTES` | `20971520` | Upload size limit, across one turn |
 | `SAGE_IMAGE_MAX_EDGE` | `1568` | Longest edge an image is downscaled to before it is sent |
+| `SAGE_MAX_IMAGE_REQUEST_BYTES` | `4194304` *(4 MiB)* | Ceiling on the assembled base64 image bytes in one request. Base64 inflates by a third, so a legal `SAGE_MAX_ATTACHED_BYTES` of uploads can become a 26 MB request no model accepts — and a data URL is deliberately uncounted against the character budget, so nothing else bounded it. What fits is sent; the rest are named in the text, and the first image always goes |
 | `SAGE_FEEDBACK_LOG` | *(unset)* | JSONL sink for 👍/👎, zero-result queries, and one mechanics line per turn (outcome, rounds, searches, caveats, names redacted, seconds). Unset = nothing recorded |
 | `LOG_LEVEL` | `WARNING` | Python log level |
 
@@ -51,7 +54,7 @@ These exist because [`profiles/rcc.toml`](profiles/rcc.toml) asks for them by na
 | `MISTRAL_API_KEY` | *(one key required)* | Mistral API key |
 | `OPENCODE_API_KEY` | *(one key required)* | OpenCode Zen key (`sk-zen-…`), free tier |
 | `OPENCODE_BASE_URL` | `https://opencode.ai/zen/v1` | OpenAI-compatible endpoint |
-| `SAGE_MISTRAL_MODELS` | small/medium/large | Mistral models offered in the picker |
+| `SAGE_MISTRAL_MODELS` | small/medium/large | Mistral models in the lineup |
 | `SAGE_OPENCODE_MODELS` | deepseek-v4-flash-free, … | Fallback list if `GET /models` fails |
 | `SAGE_ZEN_FREE_ONLY` | `1` | Offer only Zen's free models. `0` for a paid balance |
 | `SAGE_ZEN_FREE_MARKS` | `-free,big-pickle` | How a free Zen model is recognised |
@@ -64,7 +67,7 @@ These exist because [`profiles/rcc.toml`](profiles/rcc.toml) asks for them by na
 Any of these keys can go in `.streamlit/secrets.toml` (gitignored) instead of the
 environment — on Streamlit Community Cloud that is **Settings → Secrets**, as
 `OPENROUTER_API_KEY = "sk-or-v1-..."`. At least one is needed; set several and the
-picker offers all of them, and an automatic failover can cross between them.
+lineup holds all of them, and an automatic failover can cross between them.
 
 ## Providers
 
@@ -73,9 +76,9 @@ knows which is in use.
 
 - **Mistral** — the official SDK.
 - **OpenRouter** — `https://openrouter.ai/api/v1`, and the entry is one model id:
-  `openrouter/free`, OpenRouter's *Free Models Router*, shown in the picker as
-  **`enigma`** because the served id names a billing arrangement and a reader choosing a
-  row is not choosing one — see [Naming a model](#naming-a-model). It picks a free model per
+  `openrouter/free`, OpenRouter's *Free Models Router*, shown as **`enigma`** wherever
+  the app names a model at all, because the served id names a billing arrangement rather
+  than a model — see [Naming a model](#naming-a-model). It picks a free model per
   request from whatever is currently up, filtered to the ones supporting the parameters
   the request carries, so a tool-calling turn is never routed to a model that cannot
   call a tool. This is the provider that needs no lineup maintenance — see
@@ -93,24 +96,41 @@ knows which is in use.
 - **OpenCode Zen** — the OpenAI-compatible endpoint at `https://opencode.ai/zen/v1`.
   Its model list comes from `GET /models` at runtime, because a free tier's lineup
   changes without notice; the profile's list is only the fallback. Zen serves its paid
-  lineup from the same endpoint, so the picker keeps only the free ones — matched by
+  lineup from the same endpoint, so the app keeps only the free ones — matched by
   naming convention (`-free`, plus stealth codenames) rather than a hardcoded list,
-  since the lineup moves. `SAGE_ZEN_FREE_ONLY=0` shows everything, for a deployment
+  since the lineup moves. `SAGE_ZEN_FREE_ONLY=0` takes everything, for a deployment
   with a balance. The tier marker is part of the id sent upstream and of the filter
-  that reads it, but not of the name in the picker: it is billing plumbing, not
-  something to pick between models on.
+  that reads it, but not of `Model.label`: it is billing plumbing, and no part of what
+  the model is.
 
 Models that cannot call tools answer from a **single retrieval pass** instead of the
 search/read loop — searched up front, matching sections in the prompt, still cited.
 Set `SAGE_TOOLLESS_MODELS`, or let the app detect it: a provider that rejects tools is
 retried that way.
 
+The **Think** pill in the corner of the input box sends OpenRouter's `reasoning`
+parameter, which a provider entry turns on with `reasoning = true` — declared per
+provider rather than read off `kind`, because `kind = "openai"` covers both OpenRouter
+and Zen and only one of them has heard of the field; an unknown key is a 400 from any
+endpoint entitled to be strict about its own wire format. Of the three shipped providers
+only OpenRouter has it, and the same flag decides whether the pill is drawn at all: it
+is read off the model answering *now*, so a failover onto Mistral or Zen takes the pill
+off the page for that turn rather than leaving a control that does nothing, and a new
+question — which resets the session to `SAGE_DEFAULT_MODEL` — is what brings it back.
+What it costs is output tokens, since reasoning tokens are billed as output, and the
+request asks for the transcript to be *excluded*: the model still thinks, and nothing in
+this app can display a transcript anyway. There is no environment override and no effort
+dial, because `reasoning_effort` is supported by only a minority of the models the router
+picks from — a low/medium/high setting would be honoured on some turns and ignored on
+others, with nothing on screen able to say which.
+
 ### Naming a model
 
-A picker row is normally the model id with the tier marker taken off — billing plumbing
-is not part of a name. That is not enough for an id that is not a name at all:
-`openrouter/free` says which free tier the request draws on, and the row behind it is a
-different model every turn, so no specific model name would be right either.
+A model's name — `Model.label` — is normally its served id with the tier marker taken
+off, because billing plumbing is not part of a name. That is not enough for an id that is
+not a name at all: `openrouter/free` says which free tier the request draws on, and the
+model behind it is a different one every turn, so no specific model name would be right
+either.
 
 So a provider entry may carry `labels`, a mapping of served id to the word the reader
 sees:
@@ -118,6 +138,12 @@ sees:
 ```toml
 labels = { "openrouter/free" = "enigma" }
 ```
+
+The name reaches fewer places than it did. The model picker was where a reader read it
+every turn, and `#84` removed it, so nothing on the page names the model answering as a
+matter of course: what is left is the error card's "→ Use <model>" button, and the line
+saying an attached image will not be looked at, which renders only once a failover has
+landed on a model that cannot see one. `labels` still earns its keep on both.
 
 The id is untouched everywhere it counts — upstream, in `Model.key`, in the feedback
 log, in `tools/agent_bench.py`, and in the error card's technical-details panel — so
@@ -156,10 +182,10 @@ below, which is the arrangement the router was chosen to avoid. On the sweep it 
 measured against, nine of those eighteen were rate-limited or dead.
 
 The rest of this section is about Zen. Nothing has to be done there either for a model
-that appears or disappears. The picker is built from
+that appears or disappears. The lineup is built from
 `GET /models` and filtered by `free_marks`, so a model Zen starts serving free under a
-`-free` name is offered the moment it exists — `muse-spark-1.2-contributor-free` was in
-the picker before the profile named it — and `SAGE_DEFAULT_MODEL` naming something no
+`-free` name is in it the moment it exists — `muse-spark-1.2-contributor-free` was in the
+lineup before the profile named it — and `SAGE_DEFAULT_MODEL` naming something no
 longer served falls through to the first discovered option rather than failing.
 
 `tools/lineup_check.py` covers the four things that rule cannot do on its own, and

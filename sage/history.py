@@ -7,12 +7,36 @@ no bound at all on total history size.
 A turn carries a *list* of attachments. It used to carry one, and the app dropped any
 file offered while one was already held, which from the outside looked like the second
 attachment doing nothing at all.
+
+**What `HISTORY_CHAR_BUDGET` bounds is this list, once, and nothing else in the turn.**
+`ui/turn.py` calls `build` before the tool loop and then appends to what it returns, so
+the budget is a bound on the conversation rather than on the request. Measured end to
+end against a local provider that records what arrived — a conversation and attachments
+4.6x the budget (two 30 KB logs and a 9.4 MB screenshot on the last turn), four rounds
+of three reads each, replies at the `MAX_TOKENS` ceiling — the last request of the turn
+carried 242 928 characters of text and 968 071 more of base64 image, 1.16 MB on the
+wire:
+
+    system prompt         5 285   (4 220 + the last-round instruction; outside the budget)
+    user (trimmed)       48 000   = HISTORY_CHAR_BUDGET, exactly
+    assistant rounds    128 000   uncounted: 4 x MAX_TOKENS of the model's own text
+    tool results         61 071   TOOL_RESULT_CHAR_BUDGET (60 000) + one note per clip
+    tool-call arguments     572   uncounted
+    image parts         968 071   uncounted — see `_length`
+
+So the two budgets do not compose into a ceiling: 5.06x the history budget in text, and
+nothing in the app enforces a total. `_trim` is honest about the part it owns, and the
+part it does not own is the larger one.
 """
 
 from __future__ import annotations
 
 from . import config
 from .files import Attachment, as_context
+
+# The only thing this module puts in FRONT of a question, and the floor below is
+# derived from its length rather than from a number written out twice.
+_ASKS = "The user asks: "
 
 
 def user_content(
@@ -28,18 +52,30 @@ def user_content(
 
     Reordering is the fix rather than a cleverer clip, because it is also the right
     way round to read: the request, then the evidence for it.
+
+    **In BOTH renderings, and the stub was the half that kept the old order.** It put
+    the "content is omitted" line first and the question after it, which is only ever
+    read as history — except at `ATTACHMENT_FULL_TEXT_TURNS = 0`, a documented setting
+    (`config.py`: "set it to 0 to stub every attachment") where the CURRENT turn is
+    stubbed too. The names are the reader's, one per attachment, nothing caps how many
+    files a turn may carry, and 250 four-byte files with long names — 1 000 bytes
+    uploaded against a 20 MB limit — render a 61 750-character list of filenames. The
+    model was handed 48 000 characters of those names and no question at all: the
+    measured failure of the paragraph above, reachable through the branch it did not
+    touch. The stub says the same thing in the same words with the question first.
     """
     attachments = attachments or []
     if not attachments:
         return text
     if full:
         blocks = "\n\n".join(as_context(item) for item in attachments)
-        return f"The user asks: {text}\n\n{blocks}"
+        return f"{_ASKS}{text}\n\n{blocks}"
     names = ", ".join(item.filename for item in attachments)
-    return (
+    omitted = (
         f"[earlier in this conversation the user attached {names}; "
-        f"the content is omitted here to save space]\n\n{text}"
+        f"the content is omitted here to save space]"
     )
+    return f"{text}\n\n{omitted}" if text else omitted
 
 
 def _with_images(content: str, attachments: list[Attachment]) -> str | list[dict]:
@@ -54,12 +90,42 @@ def _with_images(content: str, attachments: list[Attachment]) -> str | list[dict
     images = [item for item in attachments if item.kind == "image" and item.data]
     if not images:
         return content
+    # Bounded by `config.MAX_IMAGE_REQUEST_BYTES`, which is the ceiling `_length`'s
+    # docstring below asks for. Nothing else bounds it: a data URL is deliberately
+    # uncounted against the character budget, so the only thing that used to stop 87
+    # legal images assembling a 26.6 MB request was the provider's 413 — which the
+    # reader was shown as "this conversation got too long", about a picture attached to
+    # the question they had just asked.
+    #
+    # What fits goes; the rest are NAMED rather than dropped in silence, so the model
+    # can answer about the pictures it was given and say which ones it was not. That is
+    # the same trade the tool loop's truncation note makes, and for the same reason: a
+    # model handed less than it expected can work with it, where a model handed nothing
+    # and told nothing invents a reason.
+    #
+    # At least one image always goes, whatever it costs. A reader who attaches a single
+    # screenshot asked a question about that screenshot, and refusing it here would
+    # answer a different question — the per-file and per-turn upload caps are where an
+    # image that is too big is supposed to be refused, with a message about uploading.
+    kept: list[str] = []
+    named: list[str] = []
+    spent = 0
+    for item in images:
+        url = item.as_data_url()
+        if kept and spent + len(url) > config.MAX_IMAGE_REQUEST_BYTES:
+            named.append(item.filename)
+            continue
+        kept.append(url)
+        spent += len(url)
+    if named:
+        content += (
+            "\n\n[Not sent, because this turn reached its image limit: "
+            + ", ".join(named)
+            + ". Answer about the images you were given, and say which you were not.]"
+        )
     return [
         {"type": "text", "text": content},
-        *(
-            {"type": "image_url", "image_url": {"url": item.as_data_url()}}
-            for item in images
-        ),
+        *({"type": "image_url", "image_url": {"url": url}} for url in kept),
     ]
 
 
@@ -115,23 +181,30 @@ def build(messages: list[dict], system: str, *, vision: bool = False) -> list[di
     # was added to catch. Measured at `SAGE_HISTORY_CHAR_BUDGET=1`: the model was handed a
     # user turn with one character of the question in it, and answered anyway.
     #
-    # The floor is the *stub* rendering of the same turn — question plus the "content
-    # omitted" line — because that is the smallest faithful form of it, always contains
-    # the question whole, and is derived rather than guessed at. `MAX_PROMPT_CHARS` bounds
-    # what a reader can type, so honouring it cannot run away.
-    # …up to the most a reader may type, so the guarantee is bounded by the same setting
-    # that bounds the input box rather than by the size of whatever arrives. A question
-    # larger than that cannot come from the composer, and one that does is clipped as
-    # before: this is a floor for real questions, not a way around the budget.
+    # The floor is the QUESTION, plus the two strings this module wraps around it, and
+    # nothing else. Both of those are paid for out of `keep` — `_ASKS` sits in front of
+    # the question in the inlined rendering and `_clip` spends the cut note out of the
+    # same allowance — so a floor that leaves them out is short by exactly their length.
+    # Measured at `SAGE_HISTORY_CHAR_BUDGET=4000` with one attachment and a 7 999-char
+    # question, which is a question the composer accepts (`MAX_PROMPT_CHARS` is 8 000):
+    # the floor came out at 8 000, the clip needed 8 071, and the model was handed the
+    # question 71 characters short with no sign anything had been dropped.
+    #
+    # It used to be the length of the *stub* rendering of the whole turn, capped at
+    # `MAX_PROMPT_CHARS`, and both halves of that are why it was wrong. The cap is what
+    # made it short — it bounded the rendering where what needs bounding is the question,
+    # since that is the only part of it a reader chooses — and the rendering is what made
+    # it unbounded in the other direction: the stub names every attached file, nothing
+    # caps how many a turn may carry, and 250 legal files put the floor at 61 845 against
+    # a 48 000 budget. Measuring the question alone is bounded by `MAX_PROMPT_CHARS` at
+    # one end and independent of the filenames at the other.
+    #
+    # A question larger than that cannot come from the composer, and one that does is
+    # clipped as before: this is a floor for real questions, not a way around the budget.
     last = messages[-1] if messages else {}
+    question = (last.get("text") or "").strip()[: config.MAX_PROMPT_CHARS]
     floor = (
-        min(
-            len(user_content(
-                (last.get("text") or "").strip(),
-                last.get("attachments") or [], full=False,
-            )),
-            config.MAX_PROMPT_CHARS,
-        )
+        len(_ASKS) + len(question) + len(_CUT_NOTE)
         if last.get("role") == "user"
         else 0
     )
@@ -210,8 +283,22 @@ def _length(content) -> int:
 
     A message with an image is a list of parts, and a base64 data URL is enormous —
     counting it against a *character* budget would evict the whole conversation to make
-    room for one screenshot. Only the text parts are counted; the picture's real cost
-    is in tokens, which `config.MAX_TOKENS` and the provider bound.
+    room for one screenshot. Only the text parts are counted, and
+    `test_a_screenshot_does_not_evict_the_conversation_from_the_budget` holds that.
+
+    **What used to be written here — that the picture's real cost is in tokens, "which
+    `config.MAX_TOKENS` and the provider bound" — is wrong, and it is the reason nothing
+    caps it.** `MAX_TOKENS` is this app's ceiling on the ANSWER; it says nothing about
+    what goes up. So the provider is the only thing bounding an image, and the way a
+    provider bounds one is a 413 or a context error — which `llm.classify` reads as
+    `context` and the reader is shown as "This conversation got too long for the model.
+    Clear the chat and ask again", about a conversation of one question.
+    Measured: one 9.4 MB screenshot (`MAX_UPLOAD_BYTES` is 10 MB) downscales to a
+    968 071-character data URL, and 87 legal 240 KB images — 20.9 MB, inside
+    `MAX_ATTACHED_BYTES` — assemble a 26.6 MB request that this function scores as
+    4 200 characters. Bounding it needs a per-request image ceiling in `config.py`;
+    until there is one, this counts what it can and the arithmetic is honest about
+    covering the prose only.
     """
     if isinstance(content, str):
         return len(content)

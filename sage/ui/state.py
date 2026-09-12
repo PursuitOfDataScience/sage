@@ -61,6 +61,12 @@ SESSION_DEFAULTS: tuple[tuple[str, object], ...] = (
     ("edit_session", 0),
     ("error", None),
     ("error_detail", ""),
+    # Which KIND of failure the card on screen is about, so the card can offer only
+    # the buttons that could work. `context` is the case it exists for: the request
+    # itself is too long, so "→ Use <model>" is a button guaranteed to fail beside a
+    # sentence telling the reader to clear the chat. Set by `turn.run`'s `fail`, read
+    # by `transcript.render_error_card`, and cleared wherever `error` is.
+    ("error_kind", ""),
     ("model", ""),
     ("notice", ""),
     # Models this turn has already asked and been refused by. A failure another
@@ -70,6 +76,15 @@ SESSION_DEFAULTS: tuple[tuple[str, object], ...] = (
     # replaced a separate boolean for key-level failures, which capped those at one
     # hop however many models were left.
     ("tried", []),
+    # How many times this turn has asked a ROUTER again after it produced no answer.
+    #
+    # Its own counter and not an entry in `tried`, because the two ledgers answer
+    # different questions and sharing one would break both. `tried` is "who has been
+    # asked", and its whole job is to stop the walk repeating itself — a re-roll that
+    # wrote to it would forbid the very thing it is trying to do, and would spend a
+    # slot of `attempts_allowed` that belongs to a model still unasked. Per turn,
+    # cleared where `switched_from` is: `config.ROUTER_RETRIES` is the ceiling.
+    ("rerolls", 0),
     # (label, kind) of a model an automatic failover moved off. Held until the
     # replacement has actually answered, so the notice can never claim a switch
     # worked while an error card below it says it did not.
@@ -86,9 +101,12 @@ SESSION_DEFAULTS: tuple[tuple[str, object], ...] = (
     # open record and loads the target's, which leaves every existing path free to go
     # on rebinding `messages` exactly as it did before.
     #
-    # A record is {"id": int, "messages": list}. There is no stored title: the title is
-    # derived from the first question every time it is drawn, so a chat cannot end up
-    # labelled with a question the reader has since edited away.
+    # A record is {"id": int, "messages": list}, plus "pending" while a turn in it was
+    # cut off before it answered — see `abandon_turn` and `resume_pending` — and
+    # "error"/"error_detail", the card it was left with, which `_stash` writes and
+    # `_restore_error` reads. There is no stored title: the title is derived from the
+    # first question every time it is drawn, so a chat cannot end up labelled with a
+    # question the reader has since edited away.
     ("chats", []),
     ("chat_id", 0),
     # Ids are handed out and never reused, so a button key can never name two
@@ -183,6 +201,23 @@ def active_messages(chat_id: int) -> list[dict]:
     return []
 
 
+def _record(chat_id: int) -> dict | None:
+    """The record for one conversation, or None once it has been deleted."""
+    return next(
+        (record for record in st.session_state.chats if record["id"] == chat_id), None
+    )
+
+
+def _awaiting_answer(messages: list[dict]) -> bool:
+    """Does this conversation end in a question with nothing under it?
+
+    The test for "a turn is owed here", and it is a fact about the messages rather than
+    a flag anyone has to remember to clear: an answer, an error card's stopped marker or
+    a cleared conversation all make it false on their own.
+    """
+    return bool(messages) and messages[-1].get("role") == "user"
+
+
 def _stash() -> None:
     """Put the live conversation away — or drop it, if nothing was ever asked in it.
 
@@ -196,15 +231,53 @@ def _stash() -> None:
     conversation, and the list never fills with blanks, because the blank you are
     leaving goes as you leave it. (A reader pressing it twice on an empty chat sees no
     change, and there is none to see — both states are an empty conversation.)
+
+    The error card goes with the messages, and `_restore_error` brings it back. It is
+    the only other thing on screen that belongs to this conversation and to no other:
+    `_leave_conversation` clears it on the way out, which is right, and until it was
+    kept here nothing put it back — see that function for the dead end that left.
     """
     for index, record in enumerate(st.session_state.chats):
         if record["id"] != st.session_state.chat_id:
             continue
         if st.session_state.messages:
             record["messages"] = st.session_state.messages
+            record["error"] = st.session_state.error
+            record["error_detail"] = st.session_state.error_detail
+            record["error_kind"] = st.session_state.error_kind
         else:
             st.session_state.chats.pop(index)
         return
+
+
+def _restore_error() -> None:
+    """Put back the error card the conversation being opened was left with.
+
+    A turn that FAILED leaves a question with no answer under it, an error card, and a
+    Try-again button — which is the only way forward from there, and the reason the
+    card is not merely decoration. `_leave_conversation` tears it up, because it is
+    about the conversation being left; nothing brought it back, so a trip to another
+    chat and back left the question bare. Measured in the running app against a
+    provider returning 413: one question on screen, no answer, no card, nothing to
+    press, and no way to that answer but typing the question again.
+
+    Which is the same dead end `abandon_turn` was written for, reached without a click
+    in the panel at all. The two are kept apart on purpose: an ABANDONED turn is owed
+    another attempt and gets one (`resume_pending`), while a FAILED one is owed the
+    reader's decision — re-asking a question that has just failed, on every visit to
+    the chat it is in, would spend a provider call each time the reader came to look.
+    So this restores the card and lets them press the button.
+
+    Called where the switch has already happened, after `_leave_conversation` and
+    before `resume_pending`: a turn that is starting must not have a card about the
+    attempt before it underneath, and `resume_pending` clears one if it starts.
+    """
+    record = _record(st.session_state.chat_id)
+    if record is None:
+        return
+    st.session_state.error = record.get("error")
+    st.session_state.error_detail = record.get("error_detail") or ""
+    st.session_state.error_kind = record.get("error_kind") or ""
 
 
 def _leave_conversation() -> None:
@@ -226,9 +299,18 @@ def _leave_conversation() -> None:
     st.session_state.upload_refusals = {}
     st.session_state.error = None
     st.session_state.error_detail = ""
+    st.session_state.error_kind = ""
     st.session_state.notice = ""
     st.session_state.tried = []
+    st.session_state.rerolls = 0
     st.session_state.switched_from = None
+    # And the MODEL, for the same reason `start_new_turn` resets it: a failover sets
+    # `session_state.model` and nothing else writes it back. Resetting only on the next
+    # QUESTION left a visible gap — open another chat and the Think pill is absent
+    # until you ask something, because `View.can_think` is still reading the provider
+    # the last turn was walked to. Leaving a conversation is already where the failover
+    # ledger is torn up, so it is where the model goes back too.
+    st.session_state.model = config.DEFAULT_MODEL
     # A failover in flight belongs to the turn being left. Left set, it fires on the
     # next run and `turn.run`'s `finally` sets `processing` again — a question from
     # the conversation that was just closed, answered into the one that replaced it.
@@ -279,6 +361,12 @@ def delete_chat(chat_id: int) -> None:
         st.session_state.chat_id = target["id"]
         st.session_state.messages = target["messages"]
         _leave_conversation()
+        _restore_error()
+    # Two ways this delete leaves a question owed an answer. The ✕ of a row the reader
+    # is NOT in kills the answer arriving in the one they are — nothing about that click
+    # says "stop generating" — and the ✕ of the row they are in opens a neighbour, which
+    # may be a conversation they walked away from mid-answer earlier.
+    resume_pending()
     st.rerun()
 
 
@@ -296,10 +384,27 @@ def abandon_turn(model_key: str, names: dict[str, str] | None = None) -> None:
     question with the bare word `Stopped` under it and no answer — reported with a
     screenshot of exactly that, and "this is certainly a bug".
 
-    So a turn that arrived empty is dropped whole, the question with it, and the
-    conversation is left as it was before it was asked. Nothing half-done, and — because
-    `_stash` drops a conversation with no messages — no empty chat left in the panel
-    either, which is where that screenshot's spare `Nothing asked yet` row came from.
+    So a turn that arrived empty leaves the QUESTION and appends nothing. That is the
+    one state all three reports about this path can hold at once:
+
+    * no bare `Stopped` under a question nobody stopped — nothing is appended, so there
+      is no empty assistant message to carry that word;
+    * no spare `Nothing asked yet` row in the panel — the conversation still holds the
+      question, so it is not a blank and `_stash` has nothing to prune, which is where
+      that screenshot's extra row came from;
+    * and the conversation does not VANISH, which is what dropping the question caused.
+      Open a new chat, ask something, switch to an older chat before the answer starts:
+      the question went, `_stash` saw an empty conversation and pruned it, and the chat
+      the reader had just made and just typed into disappeared out of the list behind
+      them — "the new chat session will disappear. this is very confusing and annoying."
+
+    What that left, and what the second report about this path is, was a question with
+    nothing under it FOR GOOD: "now when switching from the new chat to the old one, the
+    new one won't go away but the answer won't be generated and it will have nothing.
+    this is bad." A turn nobody was watching still has a reader who asked for it. So the
+    turn is not dropped here, it is put down — marked on the record the question is in —
+    and `resume_pending` picks it up on the next run that has the reader in that
+    conversation. What they come back to is their own question, generating.
     """
     if not st.session_state.processing:
         return
@@ -316,10 +421,75 @@ def abandon_turn(model_key: str, names: dict[str, str] | None = None) -> None:
     st.session_state.switched_from = None
     st.session_state.error = None
     st.session_state.error_detail = ""
+    st.session_state.error_kind = ""
     st.session_state.notice = ""
-    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-        st.session_state.messages.pop()
-    logger.info("Turn abandoned before it produced anything; the question goes with it")
+    # And the two ledgers of the walk that was in progress, because the turn
+    # `resume_pending` starts later is a fresh attempt at the question rather than a
+    # continuation of this one. `_leave_conversation` clears both on the paths that go
+    # through it; the path that does not is `open_chat`'s no-op branch — the reader
+    # clicking the row they are already in — and there a resumed turn inherited
+    # `rerolls` from the attempt that was cut off and could have none of its own left.
+    # `tried` goes for the same reason: a model skipped because a dead attempt had
+    # asked it is a model this question never got an answer out of.
+    st.session_state.tried = []
+    st.session_state.rerolls = 0
+    # The mark, on the record rather than in a session-wide list: a conversation that is
+    # deleted takes its own unfinished business with it, so nothing can name a chat that
+    # is gone. `_stash` writes `messages` into this same record on the way out, and the
+    # question is what makes it worth coming back to — a turn abandoned with nothing
+    # under it is one nobody has answered yet.
+    record = _record(st.session_state.chat_id)
+    if record is not None and _awaiting_answer(st.session_state.messages):
+        record["pending"] = True
+    logger.info("Turn abandoned before it produced anything; the question is kept")
+
+
+def resume_pending() -> bool:
+    """Pick up the turn a click cut off, if the open conversation is owed one.
+
+    The other half of `abandon_turn`, and the reason the question is kept rather than
+    dropped. Three clicks in the panel end a turn without the reader meaning to end
+    anything: the row of another chat, the ✕ on another row, and the name of the row
+    already open. Only the first of them even changes what is on screen. Leaving a
+    question unanswered in all three was one bug reported twice.
+
+    Called where the switch has already happened, so what it reads is the conversation
+    the reader is now in. It does NOT rerun: `open_chat`'s no-op branch is on the run
+    that is still being drawn, and `app.py` reaches the turn block at the bottom of it,
+    so setting `processing` is the whole of starting the turn there. The paths that do
+    rerun were going to anyway.
+
+    Through `may_start_turn`, because this makes provider calls like any other turn and
+    that is the one gate every such path goes through. A refusal keeps the mark: the
+    question is still unanswered, so the next visit can still be the one that answers
+    it, and the notice says why this one did not.
+    """
+    record = _record(st.session_state.chat_id)
+    if record is None or not record.get("pending"):
+        return False
+    if not _awaiting_answer(st.session_state.messages):
+        # Answered, stopped, edited or cleared since. The mark belongs to a turn that
+        # no longer needs picking up, and a stale one would re-ask a question that has
+        # a reply under it every time the reader opened the chat to read it.
+        record.pop("pending", None)
+        return False
+    if st.session_state.processing:
+        record.pop("pending", None)
+        return True
+    if not may_start_turn():
+        return False
+    record.pop("pending", None)
+    st.session_state.processing = True
+    # Both belong to the run that was aborted. `partial` is already empty — nothing
+    # arrived, which is why there is a mark at all — and `stop_requested` cannot be set
+    # here, but a turn that starts is a turn that starts from nothing either way.
+    st.session_state.partial = []
+    st.session_state.stop_requested = False
+    st.session_state.error = None
+    st.session_state.error_detail = ""
+    st.session_state.error_kind = ""
+    logger.info("Picking the abandoned turn up again in chat %s", record["id"])
+    return True
 
 
 def new_chat() -> None:
@@ -343,6 +513,11 @@ def new_chat() -> None:
 def open_chat(chat_id: int) -> None:
     """Switch to another conversation in this session."""
     if chat_id == st.session_state.chat_id:
+        # Not a switch, and still not a rerun — but the click that got here has already
+        # aborted whatever was streaming, so the turn is picked up instead of being
+        # left for dead. Clicking the chat you are in is the one control in this panel
+        # that changes nothing at all, and it was taking the answer with it.
+        resume_pending()
         return
     target = next(
         (record for record in st.session_state.chats if record["id"] == chat_id), None
@@ -355,6 +530,13 @@ def open_chat(chat_id: int) -> None:
     st.session_state.chat_id = chat_id
     st.session_state.messages = target["messages"]
     _leave_conversation()
+    # After `_leave_conversation`, which empties `partial` and clears `processing`: this
+    # is a turn starting in the conversation being opened, not the remains of the one
+    # being left. And after `_restore_error`, which is the other half of the same rule
+    # — the card this conversation was left with is put back, and then dropped again if
+    # a turn in it is actually being picked up.
+    _restore_error()
+    resume_pending()
     st.rerun()
 
 
@@ -430,7 +612,15 @@ def start_new_turn(
     # committed by the next stop as if it were this turn's.
     st.session_state.partial = []
     st.session_state.stop_requested = False
+    # All three, because they are one fact: whether there is a card on screen and what
+    # it is about. `error` alone was cleared here, so a new question left `error_detail`
+    # and `error_kind` describing the turn before it. Nothing reads either without
+    # checking `error` first, so it cost nothing — and an invariant that holds in four
+    # places out of five is one somebody will rely on in the fifth.
+    # `tests/test_chats.py` holds the three together.
     st.session_state.error = None
+    st.session_state.error_detail = ""
+    st.session_state.error_kind = ""
     # Both of these belong to the turn that just ended, and a new question is where
     # they stop being true.
     #
@@ -443,7 +633,24 @@ def start_new_turn(
     # the transcript, which puts a notice about the previous turn directly above the
     # new question while the new one generates, reading as if it belonged to it.
     st.session_state.tried = []
+    st.session_state.rerolls = 0
     st.session_state.notice = ""
+    # And the MODEL, which belongs to the turn that set it and not to the session.
+    #
+    # A failover exists to rescue the turn it happens in. It was also pinning the
+    # session: `turn.run` and the error card's "Use <model>" both write
+    # `session_state.model`, and nothing wrote it back — so one hop onto a provider
+    # that takes no `reasoning` parameter took the Think pill off the page and nothing
+    # in that conversation could return it. "the think toggle is gone forever. this is
+    # far worse", and it was: a control that vanishes for good is worse than the spent
+    # quota the failover was rescuing.
+    #
+    # A new question is where the pin stops being justified. On this deployment it is
+    # not justified at all — the default is a router that picks a live model per
+    # request, so the reason the last question was refused has nothing to do with the
+    # next. Within a turn the hop still sticks: `failover_to` is popped by `turn.run`,
+    # not here, so nothing walks back into the model that just refused mid-question.
+    st.session_state.model = config.DEFAULT_MODEL
     st.session_state.attachments = []
     # Both, together: the widget is reset so its files stop being reported, and the
     # dismissal list is emptied because the keys in it refer to a widget that no
@@ -531,6 +738,7 @@ def finish_stopped_turn(model_key: str, names: dict[str, str] | None = None) -> 
     st.session_state.notice = ""
     st.session_state.error = None
     st.session_state.error_detail = ""
+    st.session_state.error_kind = ""
     st.session_state.messages.append(
         {
             "role": "assistant",

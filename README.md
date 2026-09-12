@@ -49,9 +49,15 @@ and a base URL in your profile.
 ## What you get
 
 - 🔗 **Real citations** — deep-linked to the exact heading, plus Related sections.
-- 🔀 **Model picker** — in the corner of the input box; switch mid-conversation; a model that cannot answer — spent
-  quota, spent free allowance, an empty reply — hands the question on by itself, and
-  keeps going down the lineup until one answers.
+- 🧠 **Think** — a pill in the corner of the input box asks the model to work through
+  the question before answering. Slower, and drawn only when the model answering takes
+  the parameter: a control that is there and does nothing is worse than no control.
+- 🔀 **Automatic failover** — a model that cannot answer — spent quota, spent free
+  allowance, an empty reply — hands the question on by itself, and keeps going down the
+  lineup until one answers. Where the lineup is a *router* — one name that resolves to a
+  different model per request — it is asked again instead, which is the cheaper recovery
+  and the one a walk cannot reach. There is no model picker; nobody has to choose, and
+  the only switch by hand is on the error card, after a turn has already failed.
 - ⏹ **Stop & edit** — cut an answer short, or reword a question and re-ask it.
 - ⏭ **Ask the next question early** — send a follow-up while an answer is still
   arriving; it waits its turn and goes the moment the current one lands.
