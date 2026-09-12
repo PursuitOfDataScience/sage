@@ -22,24 +22,11 @@ from .view import View
 
 logger = logging.getLogger(__name__)
 
-# Why a model refused, in words a user can act on. One entry per failover kind — the
-# notice reads "{model} is unavailable ({reason})", so a kind with no entry here puts
-# its own internal name in front of the reader: "nemotron-3-ultra is unavailable
-# (empty)". `tests/test_app_smoke.py` holds the two lists together.
-REASONS = {
-    "quota": "out of credit",
-    "auth": "its key was rejected",
-    "allowance": "its free allowance is used up",
-    "empty": "it returned no answer",
-    "rate_limit": "it is refusing requests for now",
-    "unavailable": "it is not responding",
-    "network": "it could not be reached",
-    # Not "it failed": the sentences these fill already say a model was unavailable, so
-    # "That model is unavailable (it failed)" tells a reader the same thing twice. This
-    # is the kind with nothing to go on, and saying so is more use than repeating the
-    # verb — the real exception is in the error card's technical-details panel.
-    "unknown": "no reason given",
-}
+# `REASONS` was here: one short phrase per failover kind, for the notice that said
+# "That model is unavailable ({reason}). Retrying…". Both notices are gone — the reader
+# cannot act on a recovery and said so — and nothing else ever read it, so the table
+# went with them. `llm._MESSAGES` is where a kind's words for the READER live, on the
+# error card, which is the one place a failure needs words at all.
 
 # Failures worth trying a different model for, rather than showing a card about. Each
 # one means "this model cannot answer and another might"; `View.alternative` decides
@@ -563,7 +550,6 @@ def run(view: View) -> None:
         st.session_state.error_detail = why
         st.session_state.error_kind = kind
         st.session_state.notice = ""
-        st.session_state.switched_from = None
         st.session_state.rerolls = 0
 
     def grounded(messages: list[dict]) -> list[dict]:
@@ -946,30 +932,21 @@ def run(view: View) -> None:
         # Per turn, unlike `tried` which is per walk — see `state` for why they are two
         # counters. A turn that took a re-roll and then answered has spent it.
         st.session_state.rerolls = 0
-        # Only now is a failover a fact worth reporting: the replacement model
-        # has produced this answer. Any older notice belongs to an older turn.
-        switched = st.session_state.switched_from
-        st.session_state.switched_from = None
-        st.session_state.notice = (
-            # No model names, and no instruction. This read "<name> was unavailable
-            # (<reason>), so <name> answered instead. Pick a different one from the
-            # model button under the input box" — and every clause is now wrong for a
-            # reader. There is no model button: the picker is gone, so the instruction
-            # sends them hunting for a control that does not exist. And the names were
-            # only ever actionable BECAUSE of that control; without it they are operator
-            # information on a reader's screen. "we don't have a model picker, why do we
-            # need this?"
-            #
-            # What survives is the one thing a reader can use: why this answer took
-            # longer than the last. The ids are not lost — `feedback.record_turn` gets
-            # `model.key` and the error card's technical-details panel prints the real
-            # one, which is where an operator looks.
-            f"The first model was unavailable "
-            f"({REASONS.get(switched[1], switched[1])}), so another answered. "
-            f"This turn took longer than usual."
-            if switched
-            else ""
-        )
+        # NOTHING about the failover reaches the page, and that is the decision
+        # rather than an omission. This said "The first model was unavailable (its free
+        # allowance is used up), so another answered. This turn took longer than usual."
+        # — reported as "this is noise to users", "the users don't need to know any shit
+        # like this". It is true, it is unactionable, and it is printed above an answer
+        # the reader asked for: the machinery recovered by itself, which is the whole
+        # point of having it.
+        #
+        # `switched_from` went with the sentence. It existed only to hold (label, kind)
+        # until the replacement had actually answered, so that the notice could not
+        # claim a switch worked while an error card said otherwise. With no notice
+        # there is nothing to hold. The ids are not lost: `feedback.record_turn` gets
+        # `model.key` and the error card's technical-details panel prints the real one,
+        # which is where an operator looks.
+        st.session_state.notice = ""
         feedback.record_turn(
             question=question, outcome="answered", model=model.key, rounds=rounds,
             searches=len(runner.queries), sections=len(runner.sources),
@@ -1023,9 +1000,7 @@ def run(view: View) -> None:
         # `tried` is deliberately NOT appended to. A re-roll is not another model asked,
         # so it must not consume a slot of `attempts_allowed` that belongs to a model
         # still unasked — and `alternative` would skip the router for the rest of the
-        # turn if it did, which is the opposite of the point. `switched_from` is
-        # deliberately not set either: it is what makes the settled notice say another
-        # model answered, and the whole claim here is that the same id did.
+        # turn if it did, which is the opposite of the point.
         if (
             exc.kind in REROLL_KINDS
             and view.reroutes
@@ -1046,27 +1021,21 @@ def run(view: View) -> None:
             # error and reruns — so the identical question goes back to the router and
             # is served by whatever it picks this time.
             st.session_state.failover_to = model.key
-            st.session_state.notice = (
-                # No model name and no arithmetic. The reader is owed an account of the
-                # extra seconds and can do nothing with either.
-                "That attempt came back empty. Trying again…"
-            )
+            # Same reasoning as the failover below: the re-ask is invisible because the
+            # reader can do nothing about it and the status row already says the turn
+            # is running.
+            st.session_state.notice = ""
         elif exc.kind in FAILOVER_KINDS and alternative is not None and may_switch:
             # Out of credit on one provider is exactly what the second one is for.
             logger.info("%s unusable (%s); failing over to %s",
                         model.key, exc.kind, alternative.key)
             st.session_state.tried = [*tried, model.key]
             st.session_state.failover_to = alternative.key
-            st.session_state.switched_from = (model.label, exc.kind)
-            # Present tense: the retry has not happened yet. The past-tense
-            # version is written only once an answer actually arrives.
-            st.session_state.notice = (
-                # The fact, not the names — same reasoning as the settled notice. A
-                # reader watching a turn take eight seconds is owed an account of why,
-                # and can do nothing with which model it was.
-                f"That model is unavailable ({REASONS.get(exc.kind, exc.kind)}). "
-                "Retrying…"
-            )
+            # And no notice. This said "That model is unavailable (its free allowance
+            # is used up). Retrying…" while the status row underneath was already
+            # saying the turn was working. Two lines of chrome for one recovery the
+            # reader cannot influence.
+            st.session_state.notice = ""
         else:
             # An "unknown" kind means classify() had nothing to go on, so log the
             # full traceback — otherwise the only signal is a generic message.

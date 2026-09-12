@@ -205,7 +205,6 @@ class TestSwitchingChats:
                 "error_detail": "detail",
                 "notice": "switched to X",
                 "tried": ["mistral:m1"],
-                "switched_from": ("m1", "empty"),
                 "editing": 0,
                 "dropped_uploads": {"k": 1},
                 "upload_refusals": {"k": "too big"},
@@ -227,7 +226,6 @@ class TestSwitchingChats:
         assert stub.session_state.error_detail == ""
         assert stub.session_state.notice == ""
         assert stub.session_state.tried == []
-        assert stub.session_state.switched_from is None
         assert stub.session_state.editing is None
         assert stub.session_state.attachments == []
         assert stub.session_state.dropped_uploads == {}

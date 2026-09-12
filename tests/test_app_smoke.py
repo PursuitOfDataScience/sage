@@ -1346,23 +1346,32 @@ class TestQuotaFailover:
         assert stub.session_state["model"] == "opencode:deepseek-v4-flash-free"
         assert stub.session_state["processing"] is True, "the turn should be retried"
         assert stub.session_state["error"] is None
-        assert "unavailable" in stub.session_state["notice"]
+        assert stub.session_state["notice"] == "", (
+            "a failover the reader cannot influence is not news"
+        )
 
-    def test_the_notice_does_not_claim_an_answer_that_has_not_happened(
-        self, monkeypatch
-    ):
-        """It used to say the answer "came from" a model that had not run yet."""
+    def test_a_failover_says_nothing_to_the_reader(self, monkeypatch):
+        """The whole point of automatic failover is that nobody has to know.
+
+        Two notices used to announce it: "That model is unavailable (its free allowance
+        is used up). Retrying…" while the turn ran, and "The first model was unavailable
+        (…), so another answered. This turn took longer than usual." once it landed.
+        Both were true and neither was actionable, and they arrived above an answer the
+        reader had asked for — "this is noise to users", "the users don't need to know
+        any shit like this". The status row already says the turn is working.
+        """
         mistral = ScriptedProvider([], name="mistral", models=("m1",),
                                    error=self._payment_required())
         zen = ScriptedProvider([], name="opencode", models=("z1",))
         stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
                            session=self.session(), opencode=True)
-        assert "Retrying" in stub.session_state["notice"]
-        assert "z1" not in stub.session_state["notice"]
-        assert "came from" not in stub.session_state["notice"]
-        assert stub.session_state["switched_from"] == ("m1", "quota")
+        assert stub.session_state["notice"] == ""
+        # Still a failover: the state that matters is unchanged.
+        assert stub.session_state["model"] == "opencode:z1"
+        assert stub.session_state["processing"] is True
+        assert stub.session_state["tried"] == ["mistral:m1"]
 
-    def test_the_notice_turns_past_tense_once_the_answer_lands(self, monkeypatch):
+    def test_and_says_nothing_once_the_answer_lands_either(self, monkeypatch):
         """The state a failover rerun arrives in: switched, and about to answer."""
         zen = ScriptedProvider([[event("Zen answered.")]], name="opencode",
                                models=("z1",))
@@ -1370,22 +1379,11 @@ class TestQuotaFailover:
         session = self.session() | {
             "model": "opencode:z1",
             "tried": ["mistral:m1"],
-            "switched_from": ("Mistral · m1", "quota"),
-            "notice": "Mistral · m1 is unavailable (out of credit). Retrying…",
         }
         stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
                            session=session, opencode=True)
-        notice = stub.session_state["notice"]
-        assert "was unavailable (out of credit)" in notice
-        # No model names: with the picker gone a reader cannot act on them.
-        assert "so another answered" in notice
-        assert "z1" not in notice
-        # And it points at where the picker actually is. It said "the button at
-        # the top left" for as long as there was a top left to point at.
-        # The instruction is gone with the control it named.
-        assert "took longer than usual" in notice
-        assert "top left" not in notice
-        assert stub.session_state["switched_from"] is None
+        assert stub.session_state["notice"] == ""
+        assert stub.session_state["messages"][-1]["text"] == "Zen answered."
         assert stub.session_state["error"] is None
 
     def test_a_failed_failover_leaves_no_notice_contradicting_the_error(
@@ -1401,14 +1399,11 @@ class TestQuotaFailover:
             "model": "opencode:z1",
             # The lineup is m1 and z1, and m1 has had its turn: nothing is left.
             "tried": ["mistral:m1"],
-            "switched_from": ("Mistral · m1", "quota"),
-            "notice": "Mistral · m1 is unavailable (out of credit). Retrying…",
         }
         stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
                            session=session, opencode=True)
         assert stub.session_state["error"], "the second failure must surface"
         assert stub.session_state["notice"] == ""
-        assert stub.session_state["switched_from"] is None
         assert "opencode:z1" in stub.session_state["error_detail"], (
             "the details must name the model that actually failed"
         )
@@ -1594,7 +1589,7 @@ class TestASpentFreeAllowance:
         assert stub.session_state["model"] == "opencode:nemotron-3-ultra-free"
         assert stub.session_state["processing"] is True, "the turn should be retried"
         assert stub.session_state["error"] is None
-        assert "free allowance" in stub.session_state["notice"]
+        assert stub.session_state["notice"] == ""
 
     def test_when_every_model_is_spent_it_stops_and_says_so(self, monkeypatch):
         """The state a shared IP puts a deployment in near the end of a UTC day.
@@ -1834,7 +1829,7 @@ class TestWalkingTheLineup:
             "model": "opencode:z1",
         } | extra
 
-    CARRIED = ("messages", "processing", "model", "tried", "switched_from", "notice")
+    CARRIED = ("messages", "processing", "model", "tried", "notice")
 
     def drive(self, monkeypatch, provider, *, session=None, runs=12):
         """Re-enter the app until the turn settles, carrying the walk's state along.
@@ -1864,32 +1859,22 @@ class TestWalkingTheLineup:
         assert stub.session_state["processing"] is True, "the turn should be retried"
         assert stub.session_state["tried"] == ["opencode:z1"]
 
-    def test_the_notice_says_why_in_words_rather_than_in_kinds(self, monkeypatch):
-        """`REASONS` is what keeps an internal name off the screen. Without an entry
-        the line reads "z1 is unavailable (empty)"."""
+    def test_the_walk_says_nothing_while_it_walks(self, monkeypatch):
+        """It used to narrate every hop — "That model is unavailable (it returned no
+        answer). Retrying…" — from a `REASONS` table that existed for that sentence
+        and nothing else. Both are gone: "this is noise to users"."""
         zen = self.Lineup(self.LINEUP)
         stub, _module = run_app(monkeypatch, client=zen, session=self.session(),
                                 opencode=True)
-        notice = stub.session_state["notice"]
-        assert "returned no answer" in notice
-        assert "(empty)" not in notice
-        assert "Retrying" in notice
+        assert stub.session_state["notice"] == ""
+        assert stub.session_state["processing"] is True, "and it is still walking"
 
-    def test_every_reason_a_turn_can_fail_over_for_reads_as_english(self):
-        """The two lists have to be held together, because the failover set is now
-        derived from `llm.KINDS` — a kind added there joins the walk automatically and
-        would otherwise print its own name to the reader.
-
-        Under the stub like every other test in this file, and not as an incidental:
-        CI installs pytest, ruff, pypdf and httpx and *not* Streamlit — that is what
-        keeps the job fast — so `sage.ui.turn` cannot be imported bare. It passed here
-        and failed there, which is the one direction a check must not fail in.
-        """
-        stub_streamlit.install()
-        from sage.ui import turn as turn_module
-
-        missing = sorted(turn_module.FAILOVER_KINDS - set(turn_module.REASONS))
-        assert not missing, f"no reader-facing reason for: {missing}"
+    # `test_every_reason_a_turn_can_fail_over_for_reads_as_english` was here, holding
+    # `turn.REASONS` against `turn.FAILOVER_KINDS` so a kind added to `llm.KINDS` could
+    # not reach a reader as its own internal name. Both the table and the sentence it
+    # filled are gone — a failover says nothing now — so there is nothing left to hold.
+    # `llm._MESSAGES` is where a kind's reader-facing words live, on the error card, and
+    # `tests/test_llm.py` covers that.
 
     def test_it_keeps_going_until_the_whole_lineup_is_spent(self, monkeypatch):
         """"Until all the models have been used" — five, not three of five."""
@@ -1913,8 +1898,8 @@ class TestWalkingTheLineup:
         assert reply["text"] == "A service unit is an hour."
         assert reply["model"] == "opencode:z4"
         assert stub.session_state["error"] is None
-        # Past tense only now, and about the model the reader actually left behind.
-        assert "so another answered" in stub.session_state["notice"]
+        # And nothing on the page about the three models it went through to get here.
+        assert stub.session_state["notice"] == ""
         assert stub.session_state["tried"] == []
 
     def test_a_failure_that_is_not_about_the_model_is_walked_too(self, monkeypatch):
@@ -1926,7 +1911,7 @@ class TestWalkingTheLineup:
         zen = self.Lineup(self.LINEUP, answers={"z3": "Answered."}, error=error)
         stub = self.drive(monkeypatch, zen)
         assert stub.session_state["messages"][-1]["text"] == "Answered."
-        assert "not responding" in stub.session_state["notice"]
+        assert stub.session_state["notice"] == ""
 
     def test_a_conversation_too_long_for_one_model_is_too_long_for_all_of_them(
         self, monkeypatch
@@ -2013,8 +1998,7 @@ class TestAskingARouterAgain:
             "model": "openrouter:openrouter/free",
         } | extra
 
-    CARRIED = ("messages", "processing", "model", "tried", "rerolls",
-               "switched_from", "notice")
+    CARRIED = ("messages", "processing", "model", "tried", "rerolls", "notice")
 
     def drive(self, monkeypatch, provider, *, runs=8):
         session = self.session()
@@ -2046,8 +2030,8 @@ class TestAskingARouterAgain:
         stub, _module = run_app(monkeypatch, client=router, session=self.session(),
                                 openrouter=True)
         assert stub.session_state["tried"] == []
-        assert stub.session_state["switched_from"] is None, (
-            "nothing switched, so the settled notice must not claim another model answered"
+        assert stub.session_state["notice"] == "", (
+            "nothing to say: the same id was asked again and the reader sees the answer"
         )
 
     def test_it_answers_on_the_second_attempt(self, monkeypatch):
@@ -2069,14 +2053,14 @@ class TestAskingARouterAgain:
         assert stub.session_state["error"] == llm.AssistantError("empty").user_message
         assert stub.session_state["processing"] is False
 
-    def test_the_notice_names_no_model_and_no_arithmetic(self, monkeypatch):
-        """There is no model to name — that is the point of a router — and "attempt 2
-        of 3" is machinery. What the reader is owed is why this is taking longer."""
+    def test_a_reroll_says_nothing_either(self, monkeypatch):
+        """It said "That attempt came back empty. Trying again…", which is a sentence
+        about the machinery recovering. The reader gets the answer instead."""
         router = self.Router(empties=1)
         stub, _module = run_app(monkeypatch, client=router, session=self.session(),
                                 openrouter=True)
         notice = stub.session_state["notice"]
-        assert "Trying again" in notice
+        assert notice == ""
         # "came back empty" is prose a reader can read; `(empty)` is the internal kind,
         # which is what `REASONS` exists to keep off the page.
         for absent in ("openrouter", "free", "1 of 2", "(empty)"):

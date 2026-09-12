@@ -83,12 +83,12 @@ SESSION_DEFAULTS: tuple[tuple[str, object], ...] = (
     # asked", and its whole job is to stop the walk repeating itself — a re-roll that
     # wrote to it would forbid the very thing it is trying to do, and would spend a
     # slot of `attempts_allowed` that belongs to a model still unasked. Per turn,
-    # cleared where `switched_from` is: `config.ROUTER_RETRIES` is the ceiling.
+    # cleared where the error card is: `config.ROUTER_RETRIES` is the ceiling.
     ("rerolls", 0),
-    # (label, kind) of a model an automatic failover moved off. Held until the
-    # replacement has actually answered, so the notice can never claim a switch
-    # worked while an error card below it says it did not.
-    ("switched_from", None),
+    # `switched_from` was here — (label, kind) of a model an automatic failover moved
+    # off, held until the replacement had answered so the notice could not claim a
+    # switch worked while an error card said otherwise. Both failover notices are gone
+    # ("this is noise to users"), and the field existed only to build one of them.
     # Every conversation this session holds, and which of them is open.
     #
     # One list of messages is LIVE at a time — `messages`, at the top of this tuple —
@@ -303,7 +303,6 @@ def _leave_conversation() -> None:
     st.session_state.notice = ""
     st.session_state.tried = []
     st.session_state.rerolls = 0
-    st.session_state.switched_from = None
     # And the MODEL, for the same reason `start_new_turn` resets it: a failover sets
     # `session_state.model` and nothing else writes it back. Resetting only on the next
     # QUESTION left a visible gap — open another chat and the Think pill is absent
@@ -418,7 +417,6 @@ def abandon_turn(model_key: str, names: dict[str, str] | None = None) -> None:
     # The same reason `_leave_conversation` pops it: a pending failover would re-ask
     # this question on the next run, in whatever conversation is open by then.
     st.session_state.pop("failover_to", None)
-    st.session_state.switched_from = None
     st.session_state.error = None
     st.session_state.error_detail = ""
     st.session_state.error_kind = ""
@@ -734,7 +732,6 @@ def finish_stopped_turn(model_key: str, names: dict[str, str] | None = None) -> 
     # next run, `processing` is set again by the turn's `finally`, and the turn the
     # reader just stopped starts over on a different model.
     st.session_state.pop("failover_to", None)
-    st.session_state.switched_from = None
     st.session_state.notice = ""
     st.session_state.error = None
     st.session_state.error_detail = ""

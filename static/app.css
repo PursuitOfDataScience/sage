@@ -645,6 +645,21 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 [class*="st-key-chat-name-"] { flex: 1 1 auto !important; min-width: 0 !important; }
 [class*="st-key-chat-act-"] { flex: 0 0 auto !important; }
 
+/* One line per conversation, ellipsed. "for each chat name, why do you put two lines
+ * there. it should be one line and that's good." — a question is a sentence, so a row
+ * named after one wrapped to two lines and the panel became a wall of paragraphs.
+ *
+ * On the `p` Streamlit puts the label in, not on the button: the button is the flex
+ * container and clipping there would take the ✕ with it. `min-width: 0` above is what
+ * lets the clip happen at all — a flex item will not shrink below its content without
+ * it, which is why the row used to push the ✕ off the panel instead of ellipsing. */
+[class*="st-key-chat-name-"] button p {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100% !important;
+}
+
 .st-key-chat-list button {
     background: transparent !important;
     border: 1px solid transparent !important;
@@ -748,18 +763,34 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     background: var(--danger-bg) !important;
 }
 
-/* New chat. An outline rather than a maroon fill: it is a way out of the current
- * conversation rather than the panel's headline act, and the maroon in this panel is
- * spent on saying which row you are in. */
+/* New chat, filled maroon — the send arrow's red and the Think pill's when it is on.
+ *
+ * It was an outline, on the reasoning that this is a way out of the current
+ * conversation rather than the panel's headline act and that the maroon in here is
+ * spent on saying which row you are in. Overruled: "the new chat logo should be the red
+ * color as the up arrow and think toggle." Those two are both a `--brand` fill with a
+ * white glyph, so this is that.
+ *
+ * `--brand` and not `--brand-text`, and the difference is the whole reason both exist:
+ * `--brand-text` is the lighter tint a word or a 1px line needs to stay readable on a
+ * near-black page, and `--brand` is #800000, which works as a FILL in either theme
+ * because what has to be read is the white on the maroon (12.6:1) rather than the
+ * maroon against the page. Same choice the send button's rule makes, for the same
+ * reason, a few hundred lines up. */
 .st-key-chat-list .st-key-new-chat button {
-    border-color: var(--control-border) !important;
-    color: var(--brand-text) !important;
+    background: var(--brand) !important;
+    border-color: var(--brand) !important;
+    color: #ffffff !important;
     margin-bottom: 0.75rem;
 }
 
+.st-key-chat-list .st-key-new-chat button p {
+    color: #ffffff !important;
+}
+
 .st-key-chat-list .st-key-new-chat button:hover {
-    background: var(--control-bg-hover) !important;
-    border-color: var(--brand-line) !important;
+    background: var(--brand-deep) !important;
+    border-color: var(--brand-deep) !important;
 }
 
 /* ===== THE THEME TOGGLE =====
