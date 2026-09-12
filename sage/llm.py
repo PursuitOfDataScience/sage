@@ -99,7 +99,28 @@ def classify(exc: BaseException) -> AssistantError:
         status = getattr(getattr(exc, "response", None), "status_code", None)
     text = f"{type(exc).__name__} {exc}".lower()
 
-    if status in (401, 403) or "unauthorized" in text or "invalid api key" in text:
+    if (
+        status in (401, 403)
+        or "unauthorized" in text
+        or "invalid api key" in text
+        # A provider refusing this CLIENT rather than this key. OpenCode Zen closed its
+        # free tier to anything but its own editor on 2026-09-12 and says so with an
+        # HTTP 400: `{"type":"MissingSessionID","message":"Error from provider
+        # (Console): OpenCode's free tier can only be used in OpenCode"}`. Direct
+        # probes get `403 error code: 1010` from its edge instead, so the 403 arm
+        # already covered half of it and the 400 arm covered none.
+        #
+        # It landed in `unknown`, which is in `turn.FAILOVER_KINDS` and in
+        # `View.PER_MODEL` — so the turn walked all eight of that provider's free
+        # models, one certain 400 each, and finished on "Something went wrong reaching
+        # the assistant". `auth` is the right kind and not a euphemism: it is the same
+        # refusal for every model on the key, it cannot be retried, and it is
+        # key-level, so `View.alternative` jumps to another PROVIDER instead of
+        # walking this one. The reader is told to tell the operator, which is true —
+        # only an operator can take a dead provider out of the lineup.
+        or "missingsessionid" in text
+        or "can only be used in" in text
+    ):
         kind = "auth"
     elif any(
         needle in text

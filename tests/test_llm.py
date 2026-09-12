@@ -237,6 +237,49 @@ class TestClassify:
         assert llm.AssistantError("nonsense-kind").kind == "unknown"
 
 
+class TestAProviderThatRefusesTheClientIsNeverUnknown:
+    """OpenCode Zen closed its free tier to anything but its own editor.
+
+    Reported from the running app on 2026-09-12: `HTTP 400
+    {"type":"MissingSessionID","message":"Error from provider (Console): OpenCode's
+    free tier can only be used in OpenCode"}`. A direct probe gets `403 error code:
+    1010` from its edge instead, so the existing 403 arm caught half of it and the 400
+    arm caught none.
+
+    It landed in `unknown`, which is both in `turn.FAILOVER_KINDS` and in
+    `View.PER_MODEL` — so a turn walked all eight of that provider's free models, one
+    certain 400 each, and finished on "Something went wrong reaching the assistant".
+    `auth` is key-level, so `View.alternative` leaves the provider on the first
+    refusal, and it is the honest word: only an operator can take a dead provider out
+    of a lineup.
+    """
+
+    @pytest.mark.parametrize("status,message", [
+        (400, 'HTTP 400 from https://opencode.ai/zen/v1/chat/completions: '
+              '{"type":"error","error":{"type":"MissingSessionID","message":"Error '
+              "from provider (Console): OpenCode's free tier can only be used in "
+              'OpenCode"}}'),
+        (403, "HTTP 403 from https://opencode.ai/zen/v1/chat/completions: "
+              "error code: 1010"),
+    ])
+    def test_a_closed_free_tier_is_an_auth_failure(self, status, message):
+        error = RuntimeError(message)
+        error.status_code = status
+        classified = llm.classify(error)
+        assert classified.kind == "auth"
+        assert not classified.retryable, (
+            "retrying a provider that refuses this client spends a call to be told "
+            "the same thing"
+        )
+
+    def test_an_ordinary_400_is_still_unknown(self):
+        """The new needles are the provider's own words, not the status. A 400 with
+        nothing recognisable in it must keep falling through to the generic card."""
+        error = RuntimeError('HTTP 400: {"error":{"message":"Bad request"}}')
+        error.status_code = 400
+        assert llm.classify(error).kind == "unknown"
+
+
 class TestASpentFreeAllowanceIsNeverQuota:
     """Two providers cap a free tier, and both bodies read like something else.
 
