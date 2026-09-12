@@ -516,6 +516,23 @@ def start_new_turn(
     # new question while the new one generates, reading as if it belonged to it.
     st.session_state.tried = []
     st.session_state.notice = ""
+    # And the MODEL, which is the third thing belonging to the turn that just ended.
+    #
+    # A failover exists to rescue the turn it happens in. It was also pinning the
+    # session: it sets `session_state.model`, and the only thing that put it back was
+    # leaving the conversation — so one hop onto a provider that does not take a
+    # `reasoning` parameter took the Think pill off the page and nothing inside that
+    # conversation could bring it back. "the think toggle is gone forever. this is far
+    # worse", and it was: a control that vanishes permanently is worse than the spent
+    # quota the failover was rescuing.
+    #
+    # A new question is exactly where the pin stops being justified, and on this
+    # deployment it is not justified at all: the default model is a router that picks a
+    # live model per request, so the reason it refused the last question has nothing to
+    # do with the next one. Within a turn the hop still sticks — `failover_to` is
+    # popped by `turn.run`, not here — so nothing walks back into the model that just
+    # refused mid-question.
+    st.session_state.model = config.DEFAULT_MODEL
     st.session_state.attachments = []
     # Both, together: the widget is reset so its files stop being reported, and the
     # dismissal list is emptied because the keys in it refer to a widget that no

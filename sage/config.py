@@ -98,7 +98,26 @@ REQUEST_RETRIES = _env_int("SAGE_REQUEST_RETRIES", 2, minimum=0)
 # it is the same key CALL_BUDGET is there to protect — set that if the arithmetic
 # matters more than the answer. Set this to 1 to switch failover off entirely, which is
 # what `evals/harness.py` does so a per-model benchmark measures the model it asked.
-# ONE, so a turn asks the model it was given and stops.
+# BACK TO 0 — no limit, walk the lineup — after 1 broke the app.
+#
+# The reasoning for 1 is below and still reads well, and it was wrong about the thing
+# that matters: it treated the router as a failover mechanism that makes the app's own
+# walk redundant. The router picks a live model per request, but it does not pick a
+# WORKING one. Measured against it directly: one plain text request in three came back
+# from `nvidia/nemotron-3.5-content-safety:free` — a safety classifier — with `null`
+# content. That is the app's `empty` kind, and with one attempt allowed there is nothing
+# after it but the error card. A third of questions stopped being answerable: "the whole
+# app is totally fucked up by you. it doesn't even work now."
+#
+# The walk was the thing absorbing that, and the noise it makes — a notice about a model
+# that failed — is a far smaller cost than a third of turns failing. Restored first and
+# tuned later if at all.
+#
+# What is still true, and is the better fix when there is time for it: the right recovery
+# from a router is to ASK THE ROUTER AGAIN, because it routes somewhere different each
+# time. `View.alternative` cannot do that — it excludes everything in `tried`, so a hop
+# is always to a different model — and until it can, the whole-lineup walk is what stands
+# in for it.
 #
 # It was 0, which means "no limit — walk the whole lineup", and the reasoning for that
 # was several free models spent at the same time: stopping early meant stopping while a
@@ -116,7 +135,7 @@ REQUEST_RETRIES = _env_int("SAGE_REQUEST_RETRIES", 2, minimum=0)
 #
 # A deployment that pins one model per provider and wants the old behaviour sets
 # `SAGE_MAX_MODEL_ATTEMPTS=0` and gets the full walk back.
-MAX_MODEL_ATTEMPTS = _env_int("SAGE_MAX_MODEL_ATTEMPTS", 1, minimum=0)
+MAX_MODEL_ATTEMPTS = _env_int("SAGE_MAX_MODEL_ATTEMPTS", 0, minimum=0)
 
 # --- chunking --------------------------------------------------------------
 #

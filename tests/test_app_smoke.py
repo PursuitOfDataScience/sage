@@ -1206,11 +1206,11 @@ class TestQuotaFailover:
     def _walk_the_whole_lineup(self, monkeypatch):
         """The walk is opt-in now, so the tests for it opt in.
 
-        `config.MAX_MODEL_ATTEMPTS` defaults to 1 — one model per turn — because the
-        deployment's default model is a router that already fails over upstream, and a
-        second walk on top of it only queues up models to fail through. 0 is "no limit"
-        and is what a deployment pinning one model per provider sets. The machinery
-        below is unchanged and still has to work for them.
+        `config.MAX_MODEL_ATTEMPTS` is 0 — no limit — and this pins it so the tests do
+        not move when the default does. It was 1 for a day, on the reasoning that the
+        default model is a router that fails over upstream; what that missed is that the
+        router picks a live model per request and not a working one, so a third of turns
+        ended on the error card. The walk is what absorbs that.
         """
         monkeypatch.setattr(config, "MAX_MODEL_ATTEMPTS", 0)
 
@@ -1417,11 +1417,11 @@ class TestASpentFreeAllowance:
     def _walk_the_whole_lineup(self, monkeypatch):
         """The walk is opt-in now, so the tests for it opt in.
 
-        `config.MAX_MODEL_ATTEMPTS` defaults to 1 — one model per turn — because the
-        deployment's default model is a router that already fails over upstream, and a
-        second walk on top of it only queues up models to fail through. 0 is "no limit"
-        and is what a deployment pinning one model per provider sets. The machinery
-        below is unchanged and still has to work for them.
+        `config.MAX_MODEL_ATTEMPTS` is 0 — no limit — and this pins it so the tests do
+        not move when the default does. It was 1 for a day, on the reasoning that the
+        default model is a router that fails over upstream; what that missed is that the
+        router picks a live model per request and not a working one, so a third of turns
+        ended on the error card. The walk is what absorbs that.
         """
         monkeypatch.setattr(config, "MAX_MODEL_ATTEMPTS", 0)
 
@@ -1681,11 +1681,11 @@ class TestWalkingTheLineup:
     def _walk_the_whole_lineup(self, monkeypatch):
         """The walk is opt-in now, so the tests for it opt in.
 
-        `config.MAX_MODEL_ATTEMPTS` defaults to 1 — one model per turn — because the
-        deployment's default model is a router that already fails over upstream, and a
-        second walk on top of it only queues up models to fail through. 0 is "no limit"
-        and is what a deployment pinning one model per provider sets. The machinery
-        below is unchanged and still has to work for them.
+        `config.MAX_MODEL_ATTEMPTS` is 0 — no limit — and this pins it so the tests do
+        not move when the default does. It was 1 for a day, on the reasoning that the
+        default model is a router that fails over upstream; what that missed is that the
+        router picks a live model per request and not a working one, so a third of turns
+        ended on the error card. The walk is what absorbs that.
         """
         monkeypatch.setattr(config, "MAX_MODEL_ATTEMPTS", 0)
 
