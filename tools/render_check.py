@@ -869,8 +869,13 @@ def live_row(name: str = "", argument: str = "") -> str:
     return (
         f'<div class="status-row"{role}>'
         '<span class="status-dot" aria-hidden="true"></span>'
+        # `.status-live` wraps both, because it is what carries the sweep: one
+        # background clipped across every glyph inside it. On `.status-text` alone the
+        # band lit the name and left the argument flat beside it.
+        '<span class="status-live">'
         f'<span class="status-text">{name or STATUS_LABEL}</span>'
         + (f'<span class="status-arg">{argument}</span>' if argument else "")
+        + "</span>"
         + '<span class="status-dots" aria-hidden="true"><span></span><span></span>'
         "<span></span></span></div>"
     )
@@ -1196,6 +1201,15 @@ function box(sel) {
     family: (cs.fontFamily || '').split(',')[0].replace(/["']/g, '').trim(),
     overflowX: el.scrollWidth - el.clientWidth,
     contrast: ratio(cs.color, solidBg(el)),
+    // Is this element's text painted by a gradient clipped to its glyphs rather than
+    // by its own `color`? Then `contrast` above is a reading of the fallback nobody
+    // sees, and the audit skips it — `statusStops` measures the gradient stop by stop
+    // instead. Measured rather than listed by selector: `.status-arg` is clipped on the
+    // live row (inside `.status-live`, which carries the sweep) and NOT clipped in the
+    // folded block, where its muted grey is a real pair worth checking, and one name
+    // cannot say both.
+    clippedFill: cs.webkitTextFillColor === 'rgba(0, 0, 0, 0)'
+      || cs.webkitTextFillColor === 'transparent',
     hit: hitTest(el, r)
   };
 }
@@ -1534,6 +1548,13 @@ ELLIPSIS_OK = {PICKER,
 # is the fallback a browser without `background-clip: text` would use, not the colour a
 # reader sees, so the generic contrast check would be reading the wrong number — pass
 # or fail. The status line is measured properly instead, stop by stop, further down.
+#
+# The list is the belt; `box().clippedFill` is the braces, and it is the better of the
+# two because it reads the element rather than trusting a name. `.status-arg` is why:
+# it is clipped on the LIVE row, where `.status-live` carries the sweep across the
+# tool's name and its argument together, and not clipped in the folded block, where the
+# same selector is a muted grey that should be checked. A selector cannot say both, and
+# adding it here would have retired a real check to silence a false one.
 CLIPPED_TEXT = {".welcome-title", ".status-text"}
 
 # Elements whose own horizontal overflow is the fix rather than the bug. A table too
@@ -2911,7 +2932,8 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
         # Small text needs 4.5:1; >=18.66px counts as large text at 3:1.
         if b["contrast"] and "chip" not in sel:
             need = 3.0 if b["fontPx"] >= 18.66 else 4.5
-            if b["contrast"] < need and sel not in CLIPPED_TEXT:
+            if (b["contrast"] < need and sel not in CLIPPED_TEXT
+                    and not b.get("clippedFill")):
                 problems.append(
                     f"{where}: {sel} contrast {b['contrast']}:1 (needs {need}:1)"
                 )

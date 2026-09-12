@@ -73,7 +73,9 @@ def status_html(text: str) -> str:
     return (
         '<div class="status-row" role="status" aria-live="polite">'
         '<span class="status-dot" aria-hidden="true"></span>'
+        '<span class="status-live">'
         f'<span class="status-text">{html.escape(text)}</span>'
+        "</span>"
         '<span class="status-dots" aria-hidden="true"><span></span><span></span>'
         "<span></span></span></div>"
     )
@@ -100,11 +102,19 @@ def live_html(step: Step) -> str:
     so a child of it inherits `-webkit-text-fill-color: transparent` with no background
     of its own and is invisible.
     """
+    # Name and argument inside ONE `.status-live` wrapper, which is what carries the
+    # gradient. A `background-clip: text` sweep on the name alone lit the name, left the
+    # argument in the flat muted colour beside it and lit the animated ellipsis after
+    # that: "it illuminates search and the middle part is dark and then '...' gets
+    # gradient. it looks weird." One background across one element clips to every glyph
+    # inside it, so the band crosses the whole message once, smoothly.
     return (
         '<div class="status-row" role="status" aria-live="polite">'
         '<span class="status-dot" aria-hidden="true"></span>'
+        '<span class="status-live">'
         f'<span class="status-text">{html.escape(step.name)}</span>'
         f"{_argument_html(step.detail)}"
+        "</span>"
         '<span class="status-dots" aria-hidden="true"><span></span><span></span>'
         "<span></span></span></div>"
     )

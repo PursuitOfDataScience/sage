@@ -2216,6 +2216,22 @@ body[data-sage-dropping] .stChatInput > div {
     margin: 0.5rem 0 1rem;
 }
 
+/* The live message, as ONE element: the tool's name and the argument beside it, so the
+ * sweep below has a single background to clip across both. It used to be on
+ * `.status-text` alone, which lit the name, left the argument flat beside it and lit the
+ * animated ellipsis after that — "it illuminates search and the middle part is dark and
+ * then '...' gets gradient. it looks weird."
+ *
+ * `min-width: 0` so the argument can still ellipse: a flex item will not shrink below
+ * its content without it, which is the same reason the chat rows carry it. */
+.status-live {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
 .status-text {
     color: var(--brand-text);
     font-weight: 600;
@@ -2236,7 +2252,7 @@ body[data-sage-dropping] .stChatInput > div {
  * as motion. `linear`, not `ease-in-out`: an eased sweep slows to a stop at both edges,
  * and a progress cue that keeps pausing looks like the thing it is reporting on has. */
 @supports (background-clip: text) or (-webkit-background-clip: text) {
-    .status-text {
+    .status-live {
         background: linear-gradient(90deg,
             var(--status-dim) 0%,
             var(--status-dim) 38%,
@@ -2248,6 +2264,16 @@ body[data-sage-dropping] .stChatInput > div {
         background-clip: text;
         -webkit-text-fill-color: transparent;
         animation: shimmer 1.9s linear infinite;
+    }
+
+    /* The children paint no fill of their own, or each would cover the band where its
+     * own glyphs are — which is what kept the argument flat while the name swept. They
+     * keep their size and their typeface: the argument is still mono and still smaller,
+     * it is only its COLOUR that now comes from the sweep. */
+    .status-live .status-text,
+    .status-live .status-arg {
+        background: none;
+        -webkit-text-fill-color: transparent;
     }
 }
 
@@ -2425,6 +2451,11 @@ body[data-sage-dropping] .stChatInput > div {
 .status-mark,
 .status-arg,
 .status-time { color: var(--text-muted); }
+
+/* Except on the live row, where the sweep is the colour. This is the fallback a browser
+ * without `background-clip: text` keeps, so it has to be a colour that reads rather than
+ * the muted grey a finished step wants. */
+.status-live .status-arg { color: var(--brand-text); }
 
 .status-summary { color: var(--text-secondary); }
 
