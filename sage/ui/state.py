@@ -355,7 +355,28 @@ def abandon_turn(model_key: str, names: dict[str, str] | None = None) -> None:
     st.session_state.error = None
     st.session_state.error_detail = ""
     st.session_state.notice = ""
-    logger.info("Turn abandoned before it produced anything; the question is kept")
+    # Marked, so opening this conversation again ASKS IT. Keeping the question alone
+    # left the reader with the other half of the same complaint: "now when switching
+    # from the new chat to the old one, the new one won't go away but the answer won't
+    # be generated and it will have nothing."
+    #
+    # A turn cannot outlive the run that started it — Streamlit reruns the script per
+    # session and `turn.run` is reached from `app.py` only while the conversation
+    # holding it is the open one — so there is no version of this where the answer
+    # arrives in a conversation the reader is not looking at. What there is, is the
+    # question being asked again the moment they come back, which is what they expect
+    # to find and costs the turn they already intended to spend.
+    #
+    # On the RECORD and not on `session_state`, because it belongs to one conversation:
+    # `_leave_conversation` would clear a session flag, and a second abandoned turn in
+    # another chat would overwrite it. `open_chat` reads it and clears it, so a
+    # conversation resumes once — a question the reader never comes back to is never
+    # asked, and one they open twice is not asked twice.
+    for record in st.session_state.chats:
+        if record["id"] == st.session_state.chat_id:
+            record["resume"] = True
+            break
+    logger.info("Turn abandoned before it produced anything; it resumes on reopening")
 
 
 def new_chat() -> None:
@@ -376,6 +397,11 @@ def new_chat() -> None:
     st.rerun()
 
 
+def may_resume(messages: list[dict]) -> bool:
+    """Whether this conversation ends on a question nobody has answered yet."""
+    return bool(messages) and messages[-1].get("role") == "user"
+
+
 def open_chat(chat_id: int) -> None:
     """Switch to another conversation in this session."""
     if chat_id == st.session_state.chat_id:
@@ -391,6 +417,16 @@ def open_chat(chat_id: int) -> None:
     st.session_state.chat_id = chat_id
     st.session_state.messages = target["messages"]
     _leave_conversation()
+    # A turn this conversation had taken from it by the reader walking away — see
+    # `abandon_turn`. Asked again now, which is what they came back for. AFTER
+    # `_leave_conversation`, which sets `processing` to False for the conversation being
+    # left and would otherwise undo this.
+    #
+    # Both conditions, not just the mark: a record whose last message is not an
+    # unanswered question has nothing to re-ask, and asking anyway would send whatever
+    # the transcript happened to end with.
+    if target.pop("resume", False) and may_resume(st.session_state.messages):
+        st.session_state.processing = True
     st.rerun()
 
 

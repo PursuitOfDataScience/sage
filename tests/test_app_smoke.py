@@ -912,13 +912,15 @@ class TestStatusBlock:
 
     def test_markup_in_an_argument_is_escaped(self, monkeypatch):
         """It reaches the page through `unsafe_allow_html`, so this is the only thing
-        between a model's query and the DOM."""
+        between a model's query and the DOM. Checked on the FOLDED block, which is
+        where an argument is drawn now — the live row carries a stage phrase."""
         module = self.app(monkeypatch)
         status = self.block(module)
         status.begin(*module.turn.call_step(
             module.VIEW,
             {"name": tools.SEARCH_DOCS, "input": {"query": "<img src=x onerror=1>"}},
         ))
+        status.collapse()
         drawn = module.st.markdown_html[-1]
         assert "<img" not in drawn
         assert "&lt;img" in drawn
@@ -938,31 +940,65 @@ class TestStatusBlock:
         for added in ("status-block", "status-step", "status-arg", "details"):
             assert added not in drawn
 
-    def test_a_line_per_call_and_the_finished_ones_stay(self, monkeypatch):
+    def test_only_the_sweeping_row_is_on_screen_while_a_turn_runs(self, monkeypatch):
+        """One line, one phrase, the gradient crossing it — for the whole turn.
+
+        It drew a step per call and kept them, which by the third round was six rows of
+        history stacked over an empty answer: "it's everything showing, which looks
+        bad", and then "it should be like what we had before with the cool status
+        message with gradients". The steps are still RECORDED — see `record` below and
+        the folded block — they are just not painted while the reader is waiting.
+        """
         module = self.app(monkeypatch)
         status = self.block(module)
         status.show("Thinking")
         status.begin("search", "quota")
         status.begin("read", "docs/storage/main.md#quotas")
-        status.show("Thinking")
+        status.show(module.RUNTIME.copy.status_reading)
         drawn = module.st.markdown_html[-1]
-        # Both calls, both still on the page, each with its own argument.
-        assert drawn.count('class="status-step"') == 2
-        assert ">quota<" in drawn and ">docs/storage/main.md#quotas<" in drawn
-        # And one live line under them: the wait for the next request.
         assert drawn.count('class="status-row"') == 1
+        assert "Reading the relevant sections" in drawn
+        for absent in ("status-step", "status-arg", ">quota<", "docs/storage"):
+            assert absent not in drawn
+
+    def test_the_steps_are_recorded_even_though_they_are_not_drawn(self, monkeypatch):
+        """What the stored answer carries, and what the folded block is built from."""
+        module = self.app(monkeypatch)
+        status = self.block(module)
+        status.begin("search", "quota")
+        status.begin("read", "Data Management FAQ — Quotas")
+        status.collapse()
+        assert [step["name"] for step in status.record()] == ["search", "read"]
+        assert [step["detail"] for step in status.record()] == [
+            "quota", "Data Management FAQ — Quotas",
+        ]
+
+    def test_the_phrase_names_the_stage_and_not_the_argument(self, monkeypatch):
+        """Vague on purpose: the row says which stage, the folded block says which
+        section. Merging the two put a repository path on the row."""
+        module = self.app(monkeypatch)
+        copy = module.RUNTIME.copy
+        assert module.turn.stage_phrase(
+            module.VIEW, tools.SEARCH_DOCS) == copy.status_searching
+        assert module.turn.stage_phrase(
+            module.VIEW, tools.READ_DOC) == copy.status_reading
+        assert module.turn.stage_phrase(module.VIEW, "something-else") == (
+            copy.status_working)
 
     def test_a_finished_step_carries_its_time_and_the_live_one_does_not(
         self, monkeypatch
     ):
+        """On the folded block, which is where times are shown. A step still running
+        when the turn ended has no duration to report and is left out by `record`."""
         module = self.app(monkeypatch)
         status = self.block(module)
         status.begin("search", "quota")
-        assert "status-time" not in module.st.markdown_html[-1]
-        status.begin("read", "docs/storage/main.md#quotas")
+        status.begin("read", "Data Management FAQ — Quotas")
+        status.collapse()
         drawn = module.st.markdown_html[-1]
         assert re.search(r'class="status-time">\d+\.\ds<', drawn)
-        assert drawn.count("status-time") == 1
+        # Two steps, and the second stopped when `collapse` did.
+        assert drawn.count("status-time") == 2
 
     def test_the_time_is_the_wait_and_not_the_call(self, monkeypatch):
         """A search of an in-memory index is 10-40ms, so a step timed from the call
@@ -974,8 +1010,8 @@ class TestStatusBlock:
         monkeypatch.setattr(module.turn.time, "monotonic", lambda: next(ticks, 102.5))
         status = self.block(module)          # opened at 100.0
         status.begin("search", "quota")      # the wait for it started there too
-        status.show("Thinking")              # and ended at 102.5
-        assert ">2.5s<" in module.st.markdown_html[-1]
+        status.begin("read", "a section")    # and ended at 102.5
+        assert status.record()[0]["seconds"] == 2.5
 
     def test_it_folds_into_one_line_the_reader_can_open_again(self, monkeypatch):
         module = self.app(monkeypatch)
