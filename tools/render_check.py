@@ -101,6 +101,15 @@ sys.path.insert(0, REPO)
 
 from sage import config as config_module  # noqa: E402
 from sage import profile as profile_module  # noqa: E402
+
+# The progress block's own markup, from the module that draws it in the app. Not a
+# replica: `sage/progress.py` imports no Streamlit ("This returns strings"), so the
+# screens below can render the bytes the reader gets rather than a copy of them that has
+# to be kept in step by hand. The row has three shapes now — the ellipsis after the
+# name, glued to the argument's last word, or after a long unbreakable argument — and a
+# guard written out twice is a guard that goes stale on one side, which is the reason
+# `STATUS_LABEL` and `STEP_NAMES` are read off the app too.
+from sage import progress as progress_module  # noqa: E402
 from sage import tools as tools_module  # noqa: E402
 
 # Streamlit's own header (`[data-testid="stHeader"]`) is a FULL-WIDTH fixed strip
@@ -856,31 +865,22 @@ def step_row(name: str, argument: str, seconds: str) -> str:
 def live_row(name: str = "", argument: str = "") -> str:
     """The step that is running — or, with no name, the row a turn opens on.
 
-    That second form is what this file rendered before there were steps, down to the
-    byte, because that frame of a turn did not change. The live step differs from it in
-    one way, and it is deliberate: the argument is a sibling of `.status-text` rather
-    than inside it, because the text is a gradient clipped to its own glyphs and a
-    child of it inherits a transparent fill with no background to show through.
+    The app's own two functions, not a copy of what they emit. This used to be a hand
+    written replica of `progress.live_html` and it was drifting: the argument is a
+    sibling of `.status-text` rather than inside it (the text is a gradient clipped to
+    its glyphs, so a child of it inherits a transparent fill and disappears), the
+    animated ellipsis is inside `.status-live` after the words, and that ellipsis is
+    inside a `white-space: nowrap` span with the argument's last word whenever that word
+    is short. Three shapes, one guard on `config.STATUS_TAIL_CHARS`, and nothing here
+    that can disagree with the app about any of them.
 
-    Both forms carry the `role`, matching `progress.live_html` and `progress.status_html`
-    — this row IS the live region now. It used to be roleless when it named a step,
-    which was right while a BLOCK of steps surrounded it and wrong the moment one row
-    replaced the block.
+    Both forms carry the `role` — this row IS the live region now. It used to be roleless
+    when it named a step, which was right while a BLOCK of steps surrounded it and wrong
+    the moment one row replaced the block.
     """
-    role = ' role="status" aria-live="polite"'
-    return (
-        f'<div class="status-row"{role}>'
-        '<span class="status-dot" aria-hidden="true"></span>'
-        # `.status-live` wraps both, because it is what carries the sweep: one
-        # background clipped across every glyph inside it. On `.status-text` alone the
-        # band lit the name and left the argument flat beside it.
-        '<span class="status-live">'
-        f'<span class="status-text">{name or STATUS_LABEL}</span>'
-        + (f'<span class="status-arg">{argument}</span>' if argument else "")
-        + "</span>"
-        + '<span class="status-dots" aria-hidden="true"><span></span><span></span>'
-        "<span></span></span></div>"
-    )
+    if name:
+        return progress_module.live_html(progress_module.Step(name, argument))
+    return progress_module.status_html(STATUS_LABEL)
 
 
 def step_block(*, live: str, steps: int = 6) -> str:
@@ -964,6 +964,53 @@ IN_FLIGHT = in_flight(live_row())
 # overflow the row — the fixed phrases are short by construction and were the only
 # thing measured here while the row carried them.
 IN_FLIGHT_STEP = in_flight(live_row(STEP_NAMES[1], STEP_PATH))
+
+
+def title_of(chars: int) -> str:
+    """The longest real section label, cut back to whole words inside `chars`.
+
+    A prefix rather than an invention: what the sweep below measures is where the line
+    breaks and what is left on the last one, which is a fact about the lengths of the
+    words, and the words are the corpus's own either way. `STEP_PATH`'s own 55
+    characters are one point on that curve and were the only one rendered.
+    """
+    longest = max((label for label, _ in REAL_SOURCES), key=len)
+    kept: list[str] = []
+    for word in longest.split():
+        if len(" ".join([*kept, word])) > chars:
+            break
+        kept.append(word)
+    return " ".join(kept)
+
+
+# The live row WRAPPING, at a sweep of message lengths rather than at one.
+#
+# This screen exists because the drift it holds is a sawtooth in the length of the
+# message, not a constant: the ellipsis used to sit after the message's BOX, and a
+# wrapped box is as wide as its column however short its last line, so the daylight was
+# widest just past a wrap and closed again as the last line filled. Measured under the
+# old arrangement at 1440: 8px at 86 characters, 611px at 90, 494px at 105, 63px at 160.
+# One fixture is one tooth — `STEP_PATH` is 55 characters and does not wrap at all above
+# 500px, which is why the screen that renders it reported 8px while the reader was
+# looking at 600.
+#
+# Five rows, so every width has one just under a wrap, one just past it and one near the
+# clip. 40 characters is the control (one line at every width); 90 is the length whose
+# last line ended close enough to the edge to ORPHAN the ellipsis onto a line of its own
+# at the three widest viewports, and 108 is that length at 500px, so the two rows that
+# `.status-tail` exists for are on the page at every width; 108 is also the longest label
+# this corpus can produce as a whole title; `STEP_WIDEST` is
+# `config.STATUS_ARGUMENT_CHARS` of unbreakable token, which is the shape that FALLS BACK
+# past `config.STATUS_TAIL_CHARS` — so both sides of that guard are rendered too.
+#
+# Five live rows is not a page the app ever draws — one turn has one live row. It is a
+# measurement fixture, the same way `step_block`'s six steps are the tallest the block
+# gets rather than the usual one, and `audit` reads every `.status-row` on the page
+# rather than the first.
+WRAP_TITLES = (*(title_of(chars) for chars in (40, 60, 90, 108)), STEP_WIDEST)
+IN_FLIGHT_WRAP = in_flight(
+    "".join(live_row(STEP_NAMES[1], title) for title in WRAP_TITLES)
+)
 # The same screen once the turn has done something: six finished steps, each naming a
 # tool and what it was given, and the live line under them. This is the one that grows
 # — 22px a step, measured — so it is where "does the newest thing on the page still
@@ -1020,6 +1067,12 @@ SCENARIOS = {
     # shown in the status message" — so the argument is on screen mid-turn and needs the
     # same width bound the folded block's already has.
     "in-flight-step": CHAT_MARKER + IN_FLIGHT_STEP + strip(wrapped=False),
+    # The same row with a message long enough to take two lines, at five lengths. See
+    # `WRAP_TITLES`: the row above carries 55 characters, which is one line at every
+    # width but the phone, so the two things that go wrong on a second line — the
+    # ellipsis left behind at the column's edge, the leading dot floating into the gap
+    # between the lines — had no screen at all until this one.
+    "in-flight-wrap": CHAT_MARKER + IN_FLIGHT_WRAP + strip(wrapped=False),
     # The same turn, once it has done something. Three finished turns behind it for the
     # reason the `queued` screen has them: the bound that matters here — the newest
     # thing on the page is under the composer — can only fire on a page long enough to
@@ -1338,6 +1391,78 @@ function snapshot() {
   var refsOverhang = (refsOwner && lastStrip) ? Math.round(
       lastStrip.getBoundingClientRect().bottom
       - refsOwner.getBoundingClientRect().bottom) : null;
+  // EVERY live status row, measured against its own GLYPHS rather than its own boxes.
+  //
+  // Both halves of this row go wrong only when the message wraps, and both of them are
+  // invisible to `box()`: the message's element spans the whole column once it has
+  // wrapped, so its right edge is 8px from the ellipsis at every length while the words
+  // end wherever they end — 611px away on one real section title. So the range's client
+  // rects are what is read here: one per line of text, and the last of them is where the
+  // message actually stops.
+  //
+  // Every row, not the first, because the screen that renders this sweeps the message
+  // across the wrap boundary (see `WRAP_TITLES`) and the drift is a sawtooth in that
+  // length: one row of it can sit on a tooth that passes while the reader is looking at
+  // one that does not. Same reasoning as `rows()` below.
+  //
+  // The range runs from the start of `.status-live` to immediately BEFORE the ellipsis,
+  // rather than over one element's contents, and that matters twice. It is every glyph
+  // of the message whichever element holds it — the argument's last word is inside a
+  // `.status-tail` span now, and will be inside something else next time. And it stops
+  // short of the ellipsis's own box, which would otherwise be the last rect returned and
+  // would make the daylight in front of it measure as zero.
+  var statusRows = [].slice.call(document.querySelectorAll('.status-row')).map(
+    function (row) {
+      var live = row.querySelector('.status-live');
+      var lead = row.querySelector('.status-dot');
+      var ell = row.querySelector('.status-dots');
+      if (!live || !lead || !ell) return null;
+      var range = document.createRange();
+      range.setStart(live, 0);
+      range.setEndBefore(ell);
+      var text = [].slice.call(range.getClientRects()).filter(function (q) {
+        return q.width > 0 && q.height > 0;
+      });
+      if (!text.length) return null;
+      // The end of the message is the LAST rect in content order, not the lowest one.
+      // A rect per fragment, not per line: the tool's name is one, the argument's text
+      // is another, the nowrap tail holding the last word is a third, and Chrome hands
+      // several of them back twice. Picking the lowest bottom picked the NAME on a
+      // one-line row — it is set larger than the mono argument beside it, so its box
+      // hangs 1px further below their shared baseline — and reported the whole width of
+      // the argument as drift. Content order has no such tie to break: whatever is last
+      // is where the message stops.
+      var last = text[text.length - 1];
+      // A line count rather than a fragment count, by walking content order and
+      // counting a rect that starts at or below where the current line ended. Distinct
+      // `top` values cannot do it — two fragments SHARING a line have different tops,
+      // because they are set at different sizes over one baseline — and Chrome hands
+      // some rects back a second time after the last line, so anything order-blind
+      // counts those again too. This number is only ever printed, but a failure message
+      // that miscounts the lines is a failure message that sends the next reader to the
+      // wrong place.
+      var lines = 1, floorY = text[0].bottom;
+      text.forEach(function (q, i) {
+        if (i && q.top >= floorY - 1) { lines++; floorY = q.bottom; }
+        else { floorY = Math.max(floorY, q.bottom); }
+      });
+      var eb = ell.getBoundingClientRect(), lb = lead.getBoundingClientRect();
+      return {
+        lines: lines,
+        // Horizontal daylight between the last word and the ellipsis.
+        drift: Math.round(eb.left - last.right),
+        // Whether the ellipsis is on the last line of the message at all: its middle
+        // inside that line's band. Negative is on it. Zero or more means the line it
+        // is on carries no glyphs, which is the orphan.
+        below: Math.round(eb.top + eb.height / 2 - last.bottom),
+        // The leading dot against the middle of the message's FIRST line — the first
+        // rect in content order, which is the tool's name. Centres rather than edges,
+        // because the dot is mid-pulse in every render and a `scale()` about its own
+        // centre leaves that centre where it is.
+        bullet: Math.round(lb.top + lb.height / 2
+                           - (text[0].top + text[0].bottom) / 2)
+      };
+    }).filter(function (r) { return r; });
   var statusEl = document.querySelector('.status-text');
   var statusStops = null;
   if (statusEl) {
@@ -1365,6 +1490,7 @@ function snapshot() {
            cursorGap: cursorGap,
            clipDrop: clipDrop, sendDrop: sendDrop,
            statusStops: statusStops,
+           statusRows: statusRows,
            answerToRefs: answerToRefs, refsToRelated: refsToRelated,
            refsOverhang: refsOverhang,
            scrolled: port ? Math.round(port.scrollTop) : 0,
@@ -1514,12 +1640,18 @@ SELECTORS = [
     # here as a selector nothing rendered.
     QUEUED_NOTE, ".queued-bubble", ".queued-label", ".queued-drop",
     ".status-text",
-    # The live message as one box, and the animated ellipsis after it. Both measured
+    # The live message as one box, and the animated ellipsis inside it. Both measured
     # because the row is read left to right — dot, message, ellipsis — and the ellipsis
     # drifting away from the message is a bug nothing else here could see: giving
     # `.status-live` `flex: 1 1 auto` made it fill the row and put the ellipsis against
     # the far edge of the page, reported as "the three dots are on the right side of the
     # ui, which is so weird".
+    #
+    # These are the BOXES, and the boxes are not where that bug lives any more. Once the
+    # message is long enough to wrap, its box is the whole column whatever its last line
+    # does — so `statusRows` in MEASURE reads the glyphs instead, on every row of the
+    # page, and `audit` holds the ellipsis against the last of them. These two stay for
+    # the overflow, line and hit checks the table applies to everything on it.
     ".status-live", ".status-dots",
     # A step on the progress block, and the machine data on it. Both ends of the
     # column, because the block grows downwards and the last line is the one with the
@@ -3037,27 +3169,76 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
                     f"{where}: {sel} contrast {b['contrast']}:1 (needs {need}:1)"
                 )
 
-    # The animated ellipsis belongs to the message, not to the right-hand margin. The
-    # row is `dot · message · ellipsis` read left to right, and the one thing that can
-    # separate them is a flex child that grows — which is what happened: the wrapper
-    # carrying the sweep was given `flex: 1 1 auto`, filled the row, and left the
-    # ellipsis against the far edge of the page. "the three dots are on the right side
-    # of the ui, which is so weird."
+    # The animated ellipsis belongs to the message, not to the right-hand margin, and
+    # the leading dot belongs to the message's FIRST line. The row is
+    # `dot · message · ellipsis` read left to right, and both ends of it have come
+    # apart from the middle once each.
     #
-    # Measured against the last TEXT in the row rather than against the wrapper around
-    # it, and that distinction is the whole check. The first version of this compared
-    # the ellipsis with `.status-live`'s right edge — which the growing wrapper takes
-    # with it, so the gap stayed 8px while both slid 264px to the right and the bound
-    # passed on the very bug it was written for. Against the words: 272px, caught.
-    dots = els.get(".status-dots")
-    words = els.get(".status-arg") or els.get(".status-text")
-    if dots and words:
-        drift = dots["left"] - words["right"]
-        if drift > 24:
+    # The ellipsis first: a flex child that grows separates it from the words, which is
+    # what `flex: 1 1 auto` on the wrapper did — it filled the row and left the ellipsis
+    # against the far edge of the page. "the three dots are on the right side of the ui,
+    # which is so weird."
+    #
+    # This bound is the SECOND version of that check and the third arrangement of the
+    # row. The first version compared the ellipsis with `.status-live`'s right edge —
+    # which the growing wrapper takes with it, so the gap stayed 8px while both slid
+    # 264px right and it passed on the very bug it was written for. The second compared
+    # it with the words' ELEMENT, which caught that one (272px) and could not catch the
+    # next: once the message is long enough to wrap, the element spans the whole column
+    # whatever its last line does, so the reading was 8px at every length while the
+    # reader was looking at up to 611px. So it is measured against the last GLYPH, per
+    # row, over a sweep of message lengths — `statusRows` in MEASURE, `in-flight-wrap`
+    # for the lengths. The glyph reading is never narrower than the element one, so this
+    # is the strictly tighter check and both of the old bugs still fail it.
+    #
+    # And the ellipsis may not be ALONE on a line, which is the third thing that went
+    # wrong here and the one a drift reading cannot express. In the text flow the
+    # ellipsis is an atomic inline, and Chrome breaks before one of those however full
+    # the line is — so for about one message length in twenty the three dots went to the
+    # next line by themselves, at the left margin a line below the last word. Measured
+    # at 1440 on the 90-character row: 750px to the left of the word they belong to,
+    # reported as a worse read than the gap they replaced. Nothing written in front of
+    # them prevents it (WORD JOINER, NBSP and ZERO WIDTH JOINER each measured; all 34 of
+    # the orphaning column widths orphaned anyway). `white-space: nowrap` on an inline
+    # containing the last word AND the ellipsis does: 0 of the same 141 widths.
+    #
+    # So the two clauses are "on the last line, close to the words" and nothing else.
+    # The version before this one allowed the orphan as long as it landed flush with the
+    # message's left edge, on the reasoning that it was the text flowing — and it let
+    # through exactly what the reader was complaining about. Note the reading it would
+    # have had to be caught by: a dot pack on its own line reports a NEGATIVE drift
+    # (-205px in the standalone measurement, -740px on the fixture), because the words
+    # it is being compared with end far to its right on the line above. Which line it
+    # is on is the question, and `below` is the answer to it.
+    for index, row in enumerate(data.get("statusRows") or []):
+        seat = "the status row's" if index == 0 else f"status row {index + 1}'s"
+        if row["below"] >= 0:
             problems.append(
-                f"{where}: the status line's ellipsis sits {round(drift)}px after the "
-                f"words it belongs to (the row's gap is 8px) — something in the row is "
-                f"growing and has carried it to the margin"
+                f"{where}: {seat} ellipsis is alone on a line — {row['below']}px below "
+                f"the last glyph of a {row['lines']}-line message, so nothing on its "
+                f"own line but the three dots. It has to come down with the word it "
+                f"follows (`.status-tail`), not without it"
+            )
+        elif row["drift"] > 24:
+            problems.append(
+                f"{where}: {seat} ellipsis sits {row['drift']}px after the words "
+                f"it belongs to (the gap is 8px) — on a message of "
+                f"{row['lines']} line(s), so either something in the row is "
+                f"growing or it is being placed after the message's box instead "
+                f"of after its last word"
+            )
+        # The dot is the bullet of the message, and a bullet sits with the line it
+        # starts. Centred in the ROW instead it slid half a line down for every line the
+        # message gained: measured on this screen at 9px below the middle of the first
+        # line on a three-line message, 17px on four and 30px on the six a 160-character
+        # argument takes at 500px. `align-items: baseline` on `.status-row` is what puts
+        # it back. Two pixels of tolerance because the dot is mid-pulse in every render
+        # and both numbers are rounded.
+        if abs(row["bullet"]) > 2:
+            problems.append(
+                f"{where}: {seat} leading dot sits {row['bullet']}px off the middle of "
+                f"the message's first line (on {row['lines']} line(s)) — it reads as "
+                f"the bullet of that line, so it has to stay level with it"
             )
 
     # Every stop of the status line's sweep, not the colour it claims. The highlight
@@ -3961,6 +4142,14 @@ def states_for(scenario: str) -> list[str]:
         return ["unmeasured", "rest"]
     elif scenario == "in-flight":
         return ["generating"]           # it *is* the mid-turn screen
+    elif scenario == "in-flight-wrap":
+        # One state, because what this screen is for is the inside of one row: where
+        # the ellipsis and the leading dot sit relative to the message's own lines.
+        # That is the same whatever the page is doing around it, and five rows of it
+        # across two themes and six widths is already sixty measurements of the
+        # geometry. The clearance bound that wants `scrolled` is asked on
+        # `in-flight-step` and `in-flight-folded`, which carry the same row.
+        return ["generating"]
     elif scenario.startswith("in-flight-"):
         # Mid-turn, which is when the progress block exists, and scrolled
         # to the end, which is the state its clearance bound fires in:

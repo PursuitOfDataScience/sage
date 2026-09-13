@@ -1801,6 +1801,11 @@
     // only once. See `paintThinkButton` for what the alternative cost.
     var thinkBuilt = false;
 
+    // The clipped `st.button` the pill's click is carried by. Named once because two
+    // things below need the same node: the click, which has to reach Python, and the
+    // state, which is the key on the container this hook sits IN.
+    var THINK_HOOK = '[class*="st-key-think-toggle"]';
+
     function paintThinkButton(btn, on, hint, label) {
         btn.title = hint;
         btn.setAttribute('aria-label', label + ' — ' + hint);
@@ -1816,6 +1821,7 @@
         var input = doc.querySelector('[data-testid="stChatInput"]');
         var marker = doc.querySelector('#think-state');
         var existing = doc.getElementById('think-btn');
+        var hookHost = doc.querySelector(THINK_HOOK);
         // No marker means the control was not drawn for this model — see
         // `View.can_think`. Anything already injected goes with it, or a failover onto
         // a provider without reasoning leaves a pill with no widget behind it.
@@ -1827,7 +1833,36 @@
         // State off the container key, which Streamlit writes in the same run that
         // changed it, and read on every pass — so the pill cannot be a frame behind
         // whether it was rebuilt or kept.
-        var on = !!doc.querySelector('.st-key-think-on');
+        //
+        // Read off the container THIS RUN'S HOOK IS IN, and not off whatever in the
+        // document happens to be wearing the class. `doc.querySelector('.st-key-think-on')`
+        // asks a different question — "is there a node ANYWHERE with this class" — and
+        // that question can only ever be answered wrong in one direction: one stray node
+        // pins the pill lit and nothing ever puts it out, while turning it ON goes on
+        // working, because `on` is the reading a stray node agrees with. So the control
+        // arms normally and cannot be disarmed, which is exactly how it was reported —
+        // "I can't untoggle it in a conversation, yet I can do so in an empty chat" — and
+        // a conversation is what gives a stray node somewhere to be. Reproduced in the
+        // running app by appending one `st-key-think-on` div elsewhere on the page: the
+        // click reached Python, the real container duly became `st-key-think-off`, and
+        // the pill stayed `data-on="true"` through every further click.
+        //
+        // Where a stray one comes from is the hazard `INJECTED` is named for at the top
+        // of this file: Streamlit reuses a container's DOM node across reruns and swaps
+        // its class rather than rebuilding it, so which node is wearing which key is not
+        // this script's to assume. The hook is the anchor because the hook is what the
+        // click goes to — the container around it is the one whose key Python wrote on
+        // this run, whatever else on the page says.
+        //
+        // The document-wide reading stays as the fallback, for a Streamlit that does not
+        // nest the two. Both shapes `st.container(key=…)` produces are modelled in
+        // `tools/render_check.py:strip`, and in both of them — and in the real app on
+        // 1.54, measured — the hook is a descendant of the keyed block.
+        var keyed = hookHost && hookHost.closest
+            ? hookHost.closest('.st-key-think-on, .st-key-think-off')
+            : null;
+        var on = keyed ? keyed.classList.contains('st-key-think-on')
+                       : !!doc.querySelector('.st-key-think-on');
         var hint = marker.getAttribute('data-hint') || '';
         var label = marker.getAttribute('data-label') || 'Think';
 
@@ -1863,7 +1898,18 @@
             event.stopPropagation();
             // The clipped Streamlit button is the only thing with a channel back to
             // the script, exactly as the stop square and the paperclip work.
-            var hook = doc.querySelector('[class*="st-key-think-toggle"] button');
+            //
+            // Through `widgetButton`, not a bare `querySelector(sel + ' button')`, and
+            // that is the `INJECTED` rule at the top of this file rather than tidiness.
+            // A container Streamlit relabels can arrive wearing this key with a button
+            // THIS script appended still inside it — the row under an answer puts four
+            // of them in a keyed container — and `click()` on one of those copies an
+            // answer or re-asks a question instead of toggling: no error, nothing in a
+            // log, and a pill that hit-tests as itself and does nothing. Every other
+            // wire in this file goes through `widgetButton` for that reason; this was
+            // the one that did not. Reproduced by leaving a single injected button in
+            // the hook's container: the click landed on it and the pill never moved.
+            var hook = widgetButton(THINK_HOOK);
             if (hook) hook.click();
         });
 

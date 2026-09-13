@@ -252,6 +252,30 @@ STREAM_REPAINT_MS = _env_int("SAGE_STREAM_REPAINT_MS", 40, minimum=0)
 # written out twice is a worst case that goes stale on one side.
 STATUS_ARGUMENT_CHARS = _env_int("SAGE_STATUS_ARGUMENT_CHARS", 160, minimum=1)
 
+# How long the argument's LAST WORD may be and still be glued to the animated ellipsis.
+#
+# `progress._argument_html` puts that word and the ellipsis inside one
+# `white-space: nowrap` span, so the two move to the next line together rather than the
+# ellipsis going alone. Chrome allows a line break before an atomic inline whatever
+# character sits in front of it — WORD JOINER, NBSP and ZERO WIDTH JOINER were all
+# measured and none of them prevents it — and suppressing the break from the containing
+# inline is the mechanism that does: 0 orphans across 141 column widths, against 34 of
+# them without it.
+#
+# Bounded because `nowrap` is the opposite of what `.status-arg`'s `overflow-wrap:
+# anywhere` is for. A model's query can be one unbroken token of
+# `STATUS_ARGUMENT_CHARS`, and that token has to be allowed to break mid-word or it
+# leaves the column — measured at 127px of overflow with the whole value in one nowrap
+# span. Past this length the old markup is emitted instead, which is safe for the reason
+# the guard exists: a long last word fills the line it is on, so there is nothing for the
+# ellipsis to be orphaned from. 30 characters is longer than any word in a real section
+# title ("OPENSSL_1_1_1b?" is 15) and still fits beside the ellipsis on one line at the
+# narrowest viewport the harness renders.
+#
+# In `config` for the same reason as the constant above: `tools/render_check.py` renders
+# both shapes and cannot import the module that builds them.
+STATUS_TAIL_CHARS = _env_int("SAGE_STATUS_TAIL_CHARS", 30, minimum=1)
+
 # --- uploads ---------------------------------------------------------------
 
 MAX_UPLOAD_BYTES = _env_int("SAGE_MAX_UPLOAD_BYTES", 10 * 1024 * 1024, minimum=1)

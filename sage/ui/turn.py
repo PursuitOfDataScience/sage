@@ -81,7 +81,9 @@ CONTROL_FLOW_NAMES = frozenset(
 
 # What the progress block says, and where each part of it comes from.
 #
-# Two fixed phrases live in the profile (`Copy.status_thinking`, `Copy.status_working`),
+# Three fixed phrases live in the profile (`Copy.status_thinking` and
+# `Copy.status_answering` for the opening wait, one each way the Think toggle can be
+# set — see `wait_phrase` — and `Copy.status_working` for a tool that declares no name),
 # because a deployment over something other than documentation would word them
 # differently. Everything else on the block belongs to the turn: one line per tool
 # call, named by `View.public_names` — the same reader-facing word `sage.redact` swaps
@@ -165,6 +167,28 @@ def call_step(view: View, call: dict) -> tuple[str, str]:
 # and the two phrases lost their only reader. Both are gone rather than left for a
 # grep to find. `call_step` still falls back to `Copy.status_working` for a tool that
 # declares no reader-facing name, which is the one fixed phrase a step row can hold.
+
+
+def wait_phrase(view: View) -> str:
+    """What the row says while the first request is out and nothing has come back.
+
+    "Thinking" only when the reader asked for thinking. The row said it either way, and
+    with the toggle off no `reasoning` parameter is sent at all — so it was describing
+    something the request had not asked for, on a turn that may never reason once.
+    `Copy.status_answering` is the other half, and the profile is where both live.
+
+    `st.session_state.thinking` read HERE rather than passed in or captured at the top
+    of the turn, for the same reason `start` reads it per request: a failover inside
+    this turn can land on a provider that does not take the field, and the flag the
+    phrase should follow is the one the next request will carry. `View.can_think` is the
+    other side of that — when the model answering cannot reason, the toggle is not drawn
+    and the flag is forced False — so following the flag is following what was asked.
+    """
+    return (
+        view.copy.status_thinking
+        if st.session_state.thinking
+        else view.copy.status_answering
+    )
 
 
 
@@ -507,7 +531,7 @@ def run(view: View) -> None:
 
     render_user(st.session_state.messages[-1])
     status = Status(st.empty())
-    status.show(view.copy.status_thinking)
+    status.show(wait_phrase(view))
 
     answer = st.empty()
     runner = runtime.toolset.runner()

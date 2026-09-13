@@ -64,20 +64,44 @@ class Step:
     seconds: float | None = None
 
 
+#: The animated ellipsis, INSIDE `.status-live` and after the message's last element.
+#:
+#: It was a third child of `.status-row`, beside the dot and the message — which is
+#: what put it at the far right of the page whenever the message wrapped. A flex item
+#: that has wrapped is as wide as the column it wrapped in, however short its last
+#: line, so an ellipsis placed after that item's BOX is placed after the column and not
+#: after the words: measured at 611px past the last glyph on a 90-character section
+#: title at 1440, and drifting less the closer the last line came to filling its line
+#: (63px at 160 characters). That sawtooth is why it looked intermittent — "it still
+#: drifts sometimes" — and why the bound written for the first version of this bug could
+#: not see it: that one measured the wrapper's right edge, which is 8px from the
+#: ellipsis at every length.
+#:
+#: In the message's own inline flow the ellipsis is at the end of the text rather than
+#: at the end of a box, so it rides with the last word and wraps when the words wrap.
+#: `tools/render_check.py` holds it there against the last GLYPH, per row, across a
+#: sweep of message lengths — and holds it to being on the same LINE as that glyph,
+#: which is the second half of the story and is `_argument_html`'s to tell.
+ELLIPSIS = (
+    '<span class="status-dots" aria-hidden="true"><span></span><span></span>'
+    "<span></span></span>"
+)
+
+
 def status_html(text: str) -> str:
     """The line a turn opens with, and the one it waits on between rounds.
 
-    Byte for byte what this app has always drawn there, and deliberately so: it is the
-    first thing a reader sees on every turn, and the block below only ever adds to it.
+    What this app has always drawn there, in the order it has always drawn it — the one
+    thing that moved is the nesting of the animated ellipsis, which is now inside
+    `.status-live` with the words (see `ELLIPSIS`). It is the first thing a reader sees
+    on every turn, and the block below only ever adds to it.
     """
     return (
         '<div class="status-row" role="status" aria-live="polite">'
         '<span class="status-dot" aria-hidden="true"></span>'
         '<span class="status-live">'
         f'<span class="status-text">{html.escape(text)}</span>'
-        "</span>"
-        '<span class="status-dots" aria-hidden="true"><span></span><span></span>'
-        "<span></span></span></div>"
+        f"{ELLIPSIS}</span></div>"
     )
 
 
@@ -101,6 +125,11 @@ def live_html(step: Step) -> str:
     reason `_argument_html` records: the live text is a gradient clipped to its glyphs,
     so a child of it inherits `-webkit-text-fill-color: transparent` with no background
     of its own and is invisible.
+
+    A section title is long enough to WRAP this row, which is the one shape the row's
+    geometry had never been measured in: the ellipsis belongs after the last word (see
+    `ELLIPSIS`) and the leading dot belongs beside the first line (`.status-row` in
+    app.css), and both of those were wrong until they were looked at.
     """
     # Name and argument inside ONE `.status-live` wrapper, which is what carries the
     # gradient. A `background-clip: text` sweep on the name alone lit the name, left the
@@ -108,27 +137,54 @@ def live_html(step: Step) -> str:
     # that: "it illuminates search and the middle part is dark and then '...' gets
     # gradient. it looks weird." One background across one element clips to every glyph
     # inside it, so the band crosses the whole message once, smoothly.
+    #
+    # The ellipsis goes inside the argument, glued to its last word — `_argument_html`
+    # says why. With no argument there is no last word to glue it to and it follows the
+    # name, which cannot be orphaned: the name is one short word at the start of a line.
     return (
         '<div class="status-row" role="status" aria-live="polite">'
         '<span class="status-dot" aria-hidden="true"></span>'
         '<span class="status-live">'
         f'<span class="status-text">{html.escape(step.name)}</span>'
-        f"{_argument_html(step.detail)}"
-        "</span>"
-        '<span class="status-dots" aria-hidden="true"><span></span><span></span>'
-        "<span></span></span></div>"
+        f"{_argument_html(step.detail, ELLIPSIS) or ELLIPSIS}</span></div>"
     )
 
 
-def _argument_html(detail: str) -> str:
+def _argument_html(detail: str, trailing: str = "") -> str:
     """The machine's half of a line: a path, a query. Monospace, and nothing else.
 
     Its own element rather than part of the text beside it, because the live line's
     text is painted as a gradient clipped to the glyphs — a child of it inherits
     `-webkit-text-fill-color: transparent` with no background of its own to show
     through, which is a value the reader cannot see at all.
+
+    `trailing` — the animated ellipsis, on the live row only — is put inside a
+    `white-space: nowrap` span with the value's LAST WORD, so that when there is no room
+    for it the word comes down to the next line with it. Being in the text flow is what
+    keeps the ellipsis beside the words at all (see `ELLIPSIS`); being in the flow as an
+    atomic inline is what let it wrap *alone*, to the left margin a line below the last
+    word, which reads as more disconnected than the gap it replaced rather than less.
+    Chrome allows that break whatever character precedes the ellipsis — WORD JOINER,
+    NBSP and ZERO WIDTH JOINER were each measured and none prevents it — and it is the
+    containing inline that suppresses it: 0 orphans across 141 column widths, against 34
+    without.
+
+    Only when the last word is short (`config.STATUS_TAIL_CHARS`). A query the model
+    chose can be one unbroken token of `config.STATUS_ARGUMENT_CHARS`, and `nowrap`
+    around that would defeat the `overflow-wrap: anywhere` that lets it break mid-token
+    and keeps it inside the column — 127px of overflow, measured. Nothing is lost by
+    falling back: a last word that long fills its own line, so there is no room left for
+    the ellipsis to be orphaned from.
     """
-    return f'<span class="status-arg">{html.escape(detail)}</span>' if detail else ""
+    if not detail:
+        return ""
+    head, space, tail = detail.rpartition(" ")
+    if trailing and len(tail) <= config.STATUS_TAIL_CHARS:
+        return (
+            f'<span class="status-arg">{html.escape(head)}{space}'
+            f'<span class="status-tail">{html.escape(tail)}{trailing}</span></span>'
+        )
+    return f'<span class="status-arg">{html.escape(detail)}</span>{trailing}'
 
 
 

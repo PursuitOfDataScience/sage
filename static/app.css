@@ -2299,7 +2299,16 @@ body[data-sage-dropping] .stChatInput > div {
 /* ===== STATUS / STREAMING ===== */
 .status-row {
     display: flex;
-    align-items: center;
+    /* BASELINE, not centre, and the difference only shows when the message wraps.
+     * Centred, the leading dot is centred on the ROW — so it slid half a line down for
+     * every line the message gained: measured at 9px below the middle of the first line
+     * on a three-line message, 17px on four, and 30px on the six a 160-character
+     * argument takes at 500px. It is the bullet of the message, and a bullet belongs to
+     * the line it starts: baseline alignment puts it on the first line's baseline, which
+     * is where a 10px dot ends up anyway when it is centred in a 16-18px line — in the
+     * running app, old rules against new on the same DOM, the one-line row the reader
+     * already likes moved the dot half a pixel and moved nothing else at all. */
+    align-items: baseline;
     gap: 8px;
     padding: 0.25rem 0;
     margin: 0.5rem 0 1rem;
@@ -2311,29 +2320,83 @@ body[data-sage-dropping] .stChatInput > div {
  * animated ellipsis after that — "it illuminates search and the middle part is dark and
  * then '...' gets gradient. it looks weird."
  *
- * `min-width: 0` so the argument can still ellipse: a flex item will not shrink below
- * its content without it, which is the same reason the chat rows carry it. */
+ * ONE INLINE FLOW, not a flex row, and the animated ellipsis is inside it. This is the
+ * second half of "the ellipsis goes back beside the words", and the half the first
+ * attempt could not reach: the ellipsis was a flex item AFTER this one, so it sat after
+ * this element's BOX — and a box that has wrapped is as wide as the column it wrapped
+ * in, however short its last line. The gap it left was a sawtooth in the message's
+ * length, widest just past a wrap (611px on a 90-character section title at 1440,
+ * 63px at 160) and 8px whenever the last line happened to fill up, which is what
+ * "it still drifts sometimes" was. Nothing about the row's arrangement can fix that:
+ * the ellipsis has to be in the TEXT, where the last word is, and then it rides with
+ * the last word and wraps when the text wraps. The three dots landing at the start of
+ * the next line is that wrapping working — Chrome allows a break before an atomic
+ * inline whatever is written between them (WORD JOINER, NBSP and ZERO WIDTH JOINER all
+ * measured, none of them prevents it) — and it happens for about one message length in
+ * twenty, against every length above the wrap under the old arrangement.
+ *
+ * `font-size` and `line-height` are here so the switch costs no space. A block with
+ * inline children has a strut of its OWN, and the strut inherited the body's 16px: the
+ * row went 26px → 27px on one line and 40px → 46px on two. Given the message's own
+ * size, and no leading at all, every line box is exactly as tall as the text on it —
+ * the same heights the flex version drew. The two children put their leading back,
+ * because `line-height: 0` inherits. */
 .status-live {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
+    display: block;
+    font-size: clamp(0.85rem, 2vw, 0.94rem);
+    line-height: 0;
     /* Shrinkable but NOT growable, and the second half is the bug the first half
      * caused. `flex: 1 1 auto` made this fill the row, which pushed the animated
      * ellipsis to the far right edge of the page — "the three dots are on the right
-     * side of the ui, which is so weird". The row is `dot · message · ellipsis` read
-     * left to right and nothing in it wants to grow.
+     * side of the ui, which is so weird". The row is `dot · message` read left to
+     * right and nothing in it wants to grow.
      *
      * `min-width: 0` stays: a flex item will not shrink below its content without it,
-     * and shrinking is what lets `.status-arg` ellipse a long section title instead of
-     * pushing the ellipsis off the line. Same reason the chat rows carry it. */
+     * and shrinking is what lets a long section title wrap inside the column instead
+     * of pushing the row past it. Same reason the chat rows carry it. */
     min-width: 0;
     flex: 0 1 auto;
 }
 
+.status-live .status-text,
+.status-live .status-arg { line-height: normal; }
+
+/* The 8px that used to be `.status-live`'s flex `gap`, as margins, because an inline
+ * flow has no gap. Written on the elements that FOLLOW something rather than as a
+ * blanket rule, so the first thing on the row still starts at the message's left edge —
+ * and scoped under `.status-live`, because `.status-arg` is also a step row's second
+ * column and that row still has a real `gap`. */
+.status-live .status-arg,
+.status-live .status-dots { margin-left: 8px; }
+
+/* And the ellipsis sits on the middle of the text it follows, which is where the row
+ * used to put it. Its own default would be `baseline` — three dots resting on the line
+ * like the dots of a real "…", 2px lower than the reader has been looking at. `middle`
+ * lands within a pixel of the old centring at every width. */
+.status-live .status-dots { vertical-align: middle; }
+
+/* The message's LAST WORD and the ellipsis, as one unbreakable group — which is the
+ * half of "the ellipsis rides with the words" that being in the text flow does not buy
+ * on its own. In the flow the ellipsis is an atomic inline, and Chrome will break
+ * before one of those however full the line is: for about one message length in twenty
+ * the three dots went to the next line ALONE, at the left margin some 750px from the
+ * word they belong to, which reads as more disconnected than the gap they replaced and
+ * not less. No character in front of them stops it — WORD JOINER, NBSP and ZERO WIDTH
+ * JOINER were each measured, all 34 of the orphaning column widths orphaned anyway —
+ * because the rule is about the object, not about what precedes it. `nowrap` on the
+ * inline that CONTAINS both is the mechanism that does work: the break opportunity
+ * falls inside an element that forbids breaking, so it moves back to the space before
+ * the last word and the pair comes down together. 0 orphans across the same 141 widths.
+ *
+ * `progress._argument_html` wraps only a SHORT last word (`config.STATUS_TAIL_CHARS`);
+ * a value that is one long unbroken token keeps the old markup, because `nowrap` around
+ * that would defeat `.status-arg`'s `overflow-wrap: anywhere` and push it out of the
+ * column — 127px past it, measured. */
+.status-tail { white-space: nowrap; }
+
 .status-text {
     color: var(--brand-text);
     font-weight: 600;
-    font-size: clamp(0.85rem, 2vw, 0.94rem);
 }
 
 /* The sweep. A band of the lit colour crossing a dim line, which is the one thing on
@@ -2487,11 +2550,19 @@ body[data-sage-dropping] .stChatInput > div {
     min-width: 0;
     /* WRAPS. It was `overflow: hidden; text-overflow: ellipsis`, held to one line
      * because a step was a progress cue over an empty answer and a second row grew the
-     * page under a waiting reader. That is still true of `.status-row`, and it stopped
-     * being true of these: they are only drawn in the FOLDED block now, after the
-     * answer has arrived. And the value is a sentence since the row started resolving
-     * section ids to titles, so the ellipsis cut it exactly where the useful half
-     * began: "why can't it show the complete cot?"
+     * page under a waiting reader. And the value is a sentence since the row started
+     * resolving section ids to titles, so the ellipsis cut it exactly where the useful
+     * half began: "why can't it show the complete cot?"
+     *
+     * This used to say the wrap was safe because these are "only drawn in the FOLDED
+     * block now, after the answer has arrived", with the one-line rule still standing
+     * for `.status-row`. That was not true: `progress.live_html` puts a
+     * `.status-arg` on the LIVE row too — `.status-live .status-arg` further down is
+     * the colour it gets there — so this rule wrapped the sweeping row as well, at
+     * every width above 500px, and nothing had measured that row with two lines in it.
+     * Both of the things that then looked wrong were about the second line: where the
+     * ellipsis went (`.status-live`) and where the leading dot went (`.status-row`).
+     * The wrap itself stays, and is now a shape the harness renders.
      *
      * `overflow-wrap: anywhere`, because a query the model chose can be one long
      * unbroken token and a word that cannot break overflows the column instead of

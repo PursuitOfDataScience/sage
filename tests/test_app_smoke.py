@@ -888,6 +888,63 @@ class TestStatusBlock:
         assert detail == ""
         assert "glossary" not in name
 
+    def test_the_ellipsis_is_glued_to_the_last_word_unless_there_is_no_last_word(self):
+        """Why `.status-tail` exists, and why it is guarded.
+
+        The animated ellipsis is in the message's text flow, which is what keeps it
+        beside the words when the row wraps — and what let it wrap ALONE onto the next
+        line, at the left margin a line below the word it belongs to. Chrome breaks
+        before an atomic inline whatever character precedes it; `white-space: nowrap`
+        on an inline containing both the last word and the ellipsis is what stops it.
+
+        Guarded on `config.STATUS_TAIL_CHARS`, because `nowrap` around a value that is
+        one long unbroken token would defeat the `overflow-wrap: anywhere` that keeps
+        such a token inside the column. Nothing is lost: a word that long fills its own
+        line, so there is no room for the ellipsis to be orphaned from.
+        """
+        dots = progress.ELLIPSIS
+        # A real section title: head in the argument, last word in the nowrap span.
+        live = progress.live_html(progress.Step("read", "Batch jobs — Why my job fails"))
+        assert 'class="status-arg">Batch jobs — Why my job ' in live
+        assert f'class="status-tail">fails{dots}</span></span>' in live
+        # One unbroken token past the guard: today's markup, ellipsis after the value.
+        token = "x" * (config.STATUS_TAIL_CHARS + 1)
+        long = progress.live_html(progress.Step("search", token))
+        assert "status-tail" not in long
+        assert f'class="status-arg">{token}</span>{dots}' in long
+        # No argument at all: it follows the name, which cannot be orphaned — one short
+        # word at the start of the line.
+        bare = progress.live_html(progress.Step("work", ""))
+        assert "status-tail" not in bare and "status-arg" not in bare
+        assert f'class="status-text">work</span>{dots}' in bare
+        # And the fixed-phrase row the turn opens on, for the same reason.
+        assert f'class="status-text">Thinking</span>{dots}' in progress.status_html(
+            "Thinking"
+        )
+        # A FINISHED step carries neither: no ellipsis to glue anything to, and the
+        # tail span would only stop its argument wrapping inside the folded block.
+        done = progress.steps_html([progress.Step("read", "Batch jobs — Why", seconds=1)])
+        assert "status-tail" not in done and "status-dots" not in done
+
+    def test_the_opening_wait_only_says_thinking_when_thinking_was_asked_for(
+        self, monkeypatch
+    ):
+        """"Thinking" was shown either way, and with the toggle off no `reasoning`
+        parameter is sent at all — so the row claimed a thing the request had not asked
+        for. Read off the flag at the moment the phrase is drawn, not captured at the
+        top of the turn, because a failover inside one turn can change which provider
+        (and so which flag) the next request carries."""
+        module = self.app(monkeypatch)
+        copy = module.RUNTIME.copy
+        module.st.session_state["thinking"] = True
+        assert module.turn.wait_phrase(module.VIEW) == copy.status_thinking
+        module.st.session_state["thinking"] = False
+        assert module.turn.wait_phrase(module.VIEW) == copy.status_answering
+        # Two phrases, not one word doing two jobs: `status_working` is a step's.
+        assert copy.status_answering not in (copy.status_thinking, copy.status_working)
+        # …and both are what the layout check fits the row against.
+        assert copy.status_answering in copy.status_phrases
+
     # --- and what no argument can do to it -------------------------------
 
     def test_no_argument_can_end_a_turn(self, monkeypatch):
@@ -969,7 +1026,10 @@ class TestStatusBlock:
         # One row, and it is the one that is running.
         assert drawn.count('class="status-row"') == 1
         assert 'class="status-text">read<' in drawn
-        assert 'class="status-arg">Data Management FAQ — Quotas<' in drawn
+        # The whole value is on the row; its LAST WORD is in the nowrap span that the
+        # animated ellipsis rides in. See `progress._argument_html`.
+        assert 'class="status-arg">Data Management FAQ — ' in drawn
+        assert f'class="status-tail">Quotas{progress.ELLIPSIS}</span>' in drawn
         # No history: the finished search is recorded, not painted.
         assert ">quota<" not in drawn
         for absent in ("status-step", "docs/storage"):
@@ -1153,13 +1213,22 @@ class TestStatusBlock:
         # the bare class name.
         live = [html for html in drawn if 'class="status-row"' in html]
         assert any('class="status-text">search<' in html for html in live)
-        assert any('class="status-arg">quota<' in html for html in live)
+        # A one-word query IS its own last word, so the whole argument is in the nowrap
+        # span with the ellipsis — the shape `progress._argument_html` describes.
+        assert any(
+            f'class="status-tail">quota{progress.ELLIPSIS}</span>' in html
+            for html in live
+        )
         assert any('class="status-text">read<' in html for html in live)
         # Never two steps in one live row.
         assert all(html.count('class="status-text"') == 1 for html in live)
         # The waiting phrase is still what shows before the first call, when there is
-        # no step to name.
-        assert any("Thinking" in html for html in live)
+        # no step to name — and on this turn it is the one for a request that asked for
+        # no reasoning, because nothing pressed the toggle. "Thinking" was shown either
+        # way until `turn.wait_phrase`.
+        copy = profile.active().copy
+        assert any(copy.status_answering in html for html in live)
+        assert not any(copy.status_thinking in html for html in live)
         # And no corpus path anywhere on the page at any point in the turn — the read's
         # live row carries the resolved section title, exactly as the folded one does.
         assert not any("docs/storage/main.md" in html for html in drawn)

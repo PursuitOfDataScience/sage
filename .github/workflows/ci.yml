@@ -42,7 +42,7 @@ jobs:
       #
       # A missing browser is a BROKEN check, not a passing one. This step used to
       # print `::warning::` and `exit 0` when /usr/bin/google-chrome was not there,
-      # so the day the runner image moves Chrome, all 684 renders quietly stop being
+      # so the day the runner image moves Chrome, all 720 renders quietly stop being
       # checked and the job still goes green — with an annotation nobody reads on a
       # tick everybody does. That is the exact failure this repo is written against:
       # a check that cannot fail reads as a pass, which is worse than no check. So
@@ -62,7 +62,7 @@ jobs:
             fi
           done
           if [ -z "${SAGE_CHROME:-}" ]; then
-            echo "::error title=Layout check did not run::No Chrome or Chromium on this runner, so tools/render_check.py rendered nothing. This is a required check: add a browser step (browser-actions/setup-chrome) rather than letting 684 renders pass without being rendered."
+            echo "::error title=Layout check did not run::No Chrome or Chromium on this runner, so tools/render_check.py rendered nothing. This is a required check: add a browser step (browser-actions/setup-chrome) rather than letting 720 renders pass without being rendered."
             exit 1
           fi
           echo "Layout check rendering with $SAGE_CHROME"

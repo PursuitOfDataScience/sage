@@ -152,12 +152,28 @@ class Copy:
     new_chat: str = "New chat"
     untitled_chat: str = "Nothing asked yet"
     delete_chat: str = "Delete this chat"
-    #: The progress block, for the two lines on it that are not a tool call.
+    #: The progress block, for the three lines on it that are not a tool call.
     #:
     #: `status_thinking` is the wait before anything has been called, and the wait
     #: between a tool result going up and the next thing coming back. `status_working`
     #: names a tool that declared no reader-facing name (see `tools.Tool.label`), so
     #: that an unnamed tool is still one honest line rather than a blank.
+    #:
+    #: `status_answering` is that same opening wait when the Think toggle is OFF, and it
+    #: exists because "Thinking" was shown either way. With the toggle off no
+    #: `reasoning` parameter is sent at all (see `ProviderEntry.reasoning`), so the row
+    #: was claiming a thing the request had not asked for — on a provider that cannot
+    #: reason, `View.can_think` forces the flag false and the claim was never once true.
+    #: A gerund like the other two, because all three describe a wait in progress, and
+    #: it names nothing inside the machine: not the tools, not the model, not the
+    #: instructions. Deliberately not another word for `status_working` — that one is
+    #: taken, by a *step*, and `new_chat`/`untitled_chat` below is what one word doing
+    #: two jobs looks like.
+    #:
+    #: NOT the third and fourth coming back. `status_searching` and `status_reading`
+    #: named the STAGE a turn was in and are gone for good (see below); this is one more
+    #: word for one more moment — the first wait of a turn, which is the only place
+    #: `turn.wait_phrase` is read.
     #:
     #: There used to be two more — "Searching the documentation" and "Reading the
     #: relevant sections" — and a rule that nothing from inside the machine could
@@ -179,6 +195,7 @@ class Copy:
     #: phrases had nothing left to describe. `status_working` survives because
     #: `turn.call_step` still needs a word for a tool that declares no name.
     status_thinking: str = "Thinking"
+    status_answering: str = "Answering"
     status_working: str = "Working"
     #: The toggle in the corner of the input box, where the model picker used to be.
     #:
@@ -228,6 +245,7 @@ class Copy:
         """
         return (
             self.status_thinking,
+            self.status_answering,
             self.status_working,
         )
 
