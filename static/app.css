@@ -1352,7 +1352,10 @@ body[data-sage-generating] .stChatInput button:not(#paperclip-btn):not(#stop-btn
  * appended to it — which is the button app.js then found and clicked. */
 .st-key-stop-generation,
 .st-key-think-toggle,
-[class*="st-key-edit-open-"] {
+[class*="st-key-edit-open-"],
+.st-key-again,
+.st-key-shorter,
+.st-key-longer {
     position: absolute !important;
     width: 1px !important; height: 1px !important;
     padding: 0 !important; margin: -1px !important;
@@ -1906,13 +1909,14 @@ body[data-sage-dropping] .stChatInput > div {
  * top-right corner on hover and on focus. It works, and it is in the tab order. Do not
  * repoint that hide rule at `stCode` — it takes a working control off every code block.
  *
- * `.rcc-copy-btn` below is still live, and on a different control: `addAnswerCopyButtons`
- * puts one in the top-right of each keyed ANSWER container. */
+ * `.rcc-copy-btn` below is still live, and on a different control: `addAnswerActions`
+ * puts one in the row of icons at the END of each keyed ANSWER container, which is
+ * where the `.answer-acts` rules below lay it out. It used to be alone in that
+ * container's top-right corner — `position: absolute; top: 8px; right: 8px`, with a
+ * z-index to keep it over the prose — and those four declarations are what came off it
+ * when it moved. Everything about how it LOOKS is unchanged; the three buttons beside
+ * it were given these values rather than the other way round. */
 .rcc-copy-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 10;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1927,6 +1931,91 @@ body[data-sage-dropping] .stChatInput > div {
 
 .rcc-copy-btn:hover { background: var(--control-bg-hover); color: var(--text-primary); }
 .rcc-copy-btn[data-copied="true"] { color: var(--ok); border-color: var(--ok); }
+
+/* ===== THE ROW OF ICONS UNDER AN ANSWER =====
+ *
+ * Copy, run again, shorter, longer — injected by `addAnswerActions` in app.js as the
+ * last child of the answer's keyed container, under the Sources and Related strips.
+ * The copy button used to be alone in the corner above; moving it down here is what
+ * the owner asked for, and the three re-asks are what it moved down to join.
+ *
+ * 16px off Related, where Related is 12px off Sources and Sources is 20px off the
+ * answer. That ordering is the hierarchy said in spacing: Sources and Related are one
+ * block belonging to the answer, so the gap INSIDE it is the smallest one, and this row
+ * is a different kind of thing — controls, not references — so it sits further off than
+ * the two strips sit from each other. Written as the gap it actually draws, not a rem
+ * larger: this row is injected straight into the container, so unlike the strips above
+ * it there is no `[data-testid="stMarkdownContainer"]` negative margin to absorb.
+ *
+ * No bottom margin. It is the last child of a container that carries its own, and a
+ * last child with a margin is how `.sources` came to overflow its parent by 16px and
+ * take `fill()` in app.js down with it.
+ *
+ * `flex-wrap` because the content column is `min(820px, 92vw)` — 460px at the narrowest
+ * width this is rendered at — and four controls that cannot fit should drop to a second
+ * line rather than push the row past its own edge. */
+.answer-acts {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 1rem;
+}
+
+/* The three re-asks, given the copy button's shape so the four read as one row.
+ *
+ * Written as their own rule rather than appended to `.rcc-copy-btn`'s selector list,
+ * and the values repeated rather than shared, on purpose: `tools/palette_baseline.json`
+ * is keyed on `selector :: property`, so widening that selector would report the copy
+ * button as repainted — `gone` and `new` for every declaration on it — when nothing
+ * about it changed. Additions are reviewable; a spurious repaint is noise in the one
+ * diff that exists to catch a real one.
+ *
+ * Keyed on `[data-sage-act]` and not on `button`, which was the first version and was
+ * wrong: `.answer-acts button` outranks `.rcc-copy-btn[data-copied="true"]`, so
+ * hovering a button that had just copied took the green tick off it. These three have
+ * no `data-sage-act` neighbour to shadow. */
+.answer-acts [data-sage-act] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: var(--control-bg);
+    border: 1px solid var(--control-border);
+    color: var(--icon);
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition);
+}
+
+.answer-acts [data-sage-act]:hover {
+    background: var(--control-bg-hover);
+    color: var(--text-primary);
+}
+
+/* The three carry `disabled` from the clipped widget behind them, and app.js refreshes
+ * it every pass. Streamlit's own disabled styling cannot reach an injected button, so
+ * without this the state that stops a click is invisible and the reader presses a
+ * control that does nothing and is told nothing.
+ *
+ * It cannot fire today, and saying so is the point of this paragraph rather than a
+ * reason to delete it. `transcript.render_answer_actions` draws the hooks only when the
+ * newest message is an ANSWER, and while a turn runs the newest message is the question
+ * being answered — so the hooks do not exist mid-turn and `processing` is always false
+ * where they do. The guard is the braces: it is one word in Python and four
+ * declarations here, and what it protects against is a future change that commits an
+ * answer while leaving `processing` set, where the cost is a click that silently
+ * abandons the answer on screen. `tools/render_check.py` models the state that actually
+ * occurs — rows with a copy button and no re-asks — and not a row of dimmed icons. */
+.answer-acts [data-sage-act]:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.answer-acts [data-sage-act]:disabled:hover {
+    background: var(--control-bg);
+    color: var(--icon);
+}
 
 /* ===== SOURCES AND RELATED =====
  *
@@ -2520,6 +2609,7 @@ body[data-sage-dropping] .stChatInput > div {
 #theme-toggle:focus-visible,
 .queued-drop:focus-visible,
 .rcc-copy-btn:focus-visible,
+.answer-acts [data-sage-act]:focus-visible,
 .user-copy-btn:focus-visible,
 .user-edit-btn:focus-visible,
 #ask-selection:focus-visible,
@@ -2597,6 +2687,7 @@ body[data-sage-dropping] .stChatInput > div {
 @media print {
     .st-key-composer-strip, .stChatInput, [data-testid="stBottomBlockContainer"],
     .rcc-copy-btn, .user-copy-btn, .user-edit-btn, #ask-selection,
+    .answer-acts,
     [class*="st-key-rate-"] { display: none !important; }
 
     /* Nothing is pinned on paper, so the reserved band is dead white space. */

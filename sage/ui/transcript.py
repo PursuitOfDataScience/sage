@@ -360,9 +360,11 @@ def render_steps(steps: list[dict], seconds: float | None = None) -> None:
     """What the turn did, folded, above the answer it produced.
 
     ABOVE the text, which is where the live row already sits — so the answer does not
-    move when the turn ends and the stored version replaces the painted one. Same rule
-    the copy button's gutter follows: a reader begins reading at the moment the turn
-    finishes, and anything that reflows then reflows under their eyes.
+    move when the turn ends and the stored version replaces the painted one. The rule
+    is that a reader begins reading at the moment the turn finishes, so anything that
+    reflows then reflows under their eyes; it is the same rule that put the row of
+    action icons at the END of the answer, where a control appearing under the last
+    line pushes nothing the reader has started on.
 
     `turn.summary_html` builds the identical markup mid-turn from `Step` objects; this
     takes the dicts a stored message carries, so the two cannot drift into two designs
@@ -529,6 +531,121 @@ def render_error_card(view: View) -> None:
         st.rerun()
 
 
+# The three modes the footer can ask for, and the `Copy` field that says each one.
+# "" is Run again: the same question with nothing added to it.
+_ACTIONS = (("again", ""), ("shorter", "shorter"), ("longer", "longer"))
+
+
+def _last_question(messages: list[dict]) -> tuple[int, dict] | None:
+    """The most recent question, and where it is — what a re-ask has to re-send."""
+    for index in range(len(messages) - 1, -1, -1):
+        if messages[index].get("role") == "user":
+            return index, messages[index]
+    return None
+
+
+def render_answer_actions(view: View) -> None:
+    """The wire and the words for the row of icons `app.js` draws under each answer.
+
+    Nothing here is visible. `app.js:addAnswerActions` builds the row — copy, run
+    again, shorter, longer — appends it to each answer's keyed container, and gives the
+    three re-asks to the LAST answer only. This end of it is the two things a script in
+    an iframe cannot supply for itself: the words, which belong to the profile, and a
+    channel back to Python, which only a `st.button` has. Exactly the arrangement of
+    `composer.render_think_toggle` and `app.js:addThinkButton`.
+
+    **The marker is drawn whenever a conversation is, and the hooks are not.** The
+    marker carries `copy_hint`, and a copy button is on every answer including while a
+    new question generates above them; the re-asks are on one answer and only when
+    clicking one is a thing that can happen. So `app.js` keys the re-asks on the HOOKS
+    being in the document rather than on the marker, and there is no state where it
+    finds words for a button it has no wire for.
+
+    The re-asks are the last answer's, and that is not a shortcut. All three re-run the
+    question, and `start_new_turn(replacing=…)` drops everything from that question on —
+    which is right, and is why `render_user_editor` prints "Sending replaces this
+    question and removes the N later questions" before doing it. An icon cannot carry
+    that sentence. On the last answer there is nothing after it to lose, so the click
+    needs no warning, which is the same ground the error card's "Try again" stands on.
+
+    Not while an error card is up: it offers "Try again" itself, over the same turn.
+
+    Bare `st.button`s, with no `st.container` around them, for the reason
+    `render_edit_hook`'s docstring gives at length — Streamlit reuses a container's DOM
+    node across reruns and only relabels its class, so a keyed wrapper here is a node
+    that used to be an answer and still holds the copy button `app.js` appended to it.
+    Keyed on the widgets themselves, there is no wrapper to reuse.
+    """
+    messages = st.session_state.messages
+    if not messages:
+        return
+    copy = view.copy
+    # `hidden`, so it is markup for `app.js` and nothing else. One div rather than four
+    # attributes on four buttons, because the buttons do not exist yet when this runs.
+    st.markdown(
+        '<div id="answer-acts" hidden'
+        f' data-copy="{html.escape(copy.copy_hint, quote=True)}"'
+        f' data-again="{html.escape(copy.again_hint, quote=True)}"'
+        f' data-shorter="{html.escape(copy.shorter_hint, quote=True)}"'
+        f' data-longer="{html.escape(copy.longer_hint, quote=True)}"></div>',
+        unsafe_allow_html=True,
+    )
+
+    last = messages[-1]
+    if st.session_state.error or last.get("role") != "assistant":
+        return
+    # Text, and not `text or stopped` the way `render_conversation` decides whether to
+    # draw the message at all. A turn the reader stopped is offered all three — an
+    # answer cut off because it rambled is exactly when "shorter" is the remedy — but a
+    # turn stopped before its FIRST token has no answer in it, only a question with the
+    # word `Stopped` under it, and there is nothing there to run again differently.
+    #
+    # The same test `app.js` applies: `addAnswerActions` draws no row at all where
+    # `answerText` finds nothing, so a hook drawn here would be one no control can
+    # reach. The two have to agree on the condition or one of them is describing a
+    # screen the other does not build.
+    if not last.get("text"):
+        return
+    asked = _last_question(messages)
+    if asked is None:
+        return
+    position, question = asked
+
+    for key, steer in _ACTIONS:
+        # The hint is the label: the button is clipped to a pixel and out of the tab
+        # order, so this string is only ever an accessible name, and it is the same
+        # sentence `app.js` puts on the control the reader actually presses.
+        if st.button(
+            getattr(copy, f"{key}_hint"),
+            key=key,
+            # The braces, not the belt, and worth being clear about which. Any click
+            # is a rerun and a rerun mid-turn abandons the answer on screen, so
+            # `disabled` — which is what stops the click reaching the server at all;
+            # an inert handler would not, because the rerun IS the click — is how the
+            # rating row and the pencil survive a turn.
+            #
+            # Here it cannot fire, because the guard above is stricter: while a turn
+            # runs the newest message is the question being answered, so there are no
+            # hooks to disable. It stays because the cost of it being wrong one day is
+            # a click that silently throws away the answer the reader is reading, and
+            # `app.js` mirrors it onto the icon so the state would be visible if it
+            # ever did. The copy button beside these three is never disabled — it does
+            # not reach the server at all, which is why it is the one control that
+            # still works mid-answer.
+            disabled=st.session_state.processing,
+        ):
+            # Through `start_new_turn`, so this goes through `may_start_turn` like any
+            # other turn: it costs the same one-to-five provider calls, and the one
+            # re-run path that skipped that gate kept spending a spent budget, one
+            # click at a time.
+            start_new_turn(
+                question.get("text", ""),
+                question.get("attachments") or [],
+                replacing=position,
+                steer=steer,
+            )
+
+
 def render_conversation(view: View) -> None:
     """Every message so far, then the notice and error strips beneath them."""
     # Marker only: app.js keys page-scroll behaviour off its presence — without it
@@ -552,3 +669,10 @@ def render_conversation(view: View) -> None:
 
     if st.session_state.error and not st.session_state.processing:
         render_error_card(view)
+
+    # Last, and only because that is where the thing it describes is: the row goes
+    # under the newest answer, and the newest answer is the bottom of this loop. Draw
+    # order does not decide anything else here — nothing in it paints, and `app.js`
+    # finds both the marker and the hooks by id and key rather than by position, unlike
+    # the pencils it pairs off by ordinal.
+    render_answer_actions(view)

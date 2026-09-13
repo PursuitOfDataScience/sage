@@ -40,6 +40,7 @@ OTHER = {
     "copy": {
         "welcome_title": "Ask about maps",
         "placeholder": "Ask any question about mapping…",
+        "shorter_hint": "Say it in fewer words",
     },
     "prompt": {"system": "You are {name}. You answer about {subject}. Ask {contact}."},
     "examples": [{"icon": "🗺️", "label": "Pick a projection"}],
@@ -98,6 +99,20 @@ class TestTheProfileIsTheDeployment:
         assert "projections, datums or tiling" in schemas[tools.SEARCH_DOCS]
         assert "handbook/projections.md#utm" in schemas[tools.READ_DOC]
         assert "RCC" not in "".join(schemas.values())
+
+    def test_a_second_profile_changes_the_words_on_the_answer_row(self, atlas):
+        """The four hover strings on the icons under an answer.
+
+        They are the only thing that says what those controls do — the buttons carry
+        no text — so they have to be the deployment's to write, and a key the `Copy`
+        dataclass does not declare is dropped in silence by the loader. An override
+        and a default in one assertion, because the failure modes are opposite: a
+        field missing from the dataclass loses the override, and a field missing from
+        the TOML has to keep working.
+        """
+        assert atlas.copy.shorter_hint == "Say it in fewer words"
+        assert atlas.copy.longer_hint == profile_mod.Copy().longer_hint
+        assert atlas.copy.copy_hint and atlas.copy.again_hint
 
     def test_a_second_profile_changes_where_citations_point(self, atlas):
         source = atlas.source("handbook")

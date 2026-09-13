@@ -85,6 +85,16 @@ SESSION_DEFAULTS: tuple[tuple[str, object], ...] = (
     # slot of `attempts_allowed` that belongs to a model still unasked. Per turn,
     # cleared where the error card is: `config.ROUTER_RETRIES` is the ceiling.
     ("rerolls", 0),
+    # What the answer footer asked this ONE turn to do differently: "" for an
+    # ordinary question, "shorter" or "longer" for the two icons beside Run again.
+    #
+    # Session state rather than an argument, because the click and the turn are two
+    # script runs: the button sets this and reruns, and `turn.run` reads it on the run
+    # after. Per turn and not per conversation — `start_new_turn` takes it as a keyword
+    # defaulting to "", so an ordinary typed question clears it by arriving, the same
+    # way `tried` and `notice` are cleared there. A steer that outlived its turn would
+    # shorten every answer after it for the rest of the session.
+    ("steer", ""),
     # `switched_from` was here — (label, kind) of a model an automatic failover moved
     # off, held until the replacement had answered so the notice could not claim a
     # switch worked while an error card said otherwise. Both failover notices are gone
@@ -303,6 +313,18 @@ def _leave_conversation() -> None:
     st.session_state.notice = ""
     st.session_state.tried = []
     st.session_state.rerolls = 0
+    # Asked of a turn in the conversation being left, so it does not follow the reader
+    # into the one they opened.
+    #
+    # Which also means a steered turn that is ABANDONED and later resumed comes back
+    # unsteered: `abandon_turn` marks the chat pending, this clears the steer, and
+    # `resume_pending` restarts the turn without it. Deliberate, and the cheap side of
+    # the trade — the alternative is stashing it on the conversation record, which is a
+    # second place for it to be wrong, to spare a reader who asked for a shorter answer,
+    # walked off to another chat, and came back. The failure is one ordinary-length
+    # answer they can ask to shorten again; the other way round, a steer stored per
+    # conversation could shape a turn in a chat the reader never asked it of.
+    st.session_state.steer = ""
     # And the MODEL, for the same reason `start_new_turn` resets it: a failover sets
     # `session_state.model` and nothing else writes it back. Resetting only on the next
     # QUESTION left a visible gap — open another chat and the Think pill is absent
@@ -579,7 +601,10 @@ def may_start_turn() -> bool:
 
 
 def start_new_turn(
-    question: str, attachments=None, replacing: int | None = None
+    question: str,
+    attachments=None,
+    replacing: int | None = None,
+    steer: str = "",
 ) -> None:
     # The one place every turn begins — the composer, the starter cards and an edited
     # question all come through here — so it is the one place a turn can be refused.
@@ -587,6 +612,12 @@ def start_new_turn(
     # exactly as it was, or the reader is left looking at their own question with no
     # answer under it and nothing to click, which is the shape of a broken app rather
     # than a busy one.
+    #
+    # `steer` is what the answer footer's Shorter and Longer ask of THIS turn, and it
+    # is a keyword with a default for a reason: every other caller — the composer, a
+    # starter card, an edited question — leaves it "" by saying nothing, which is what
+    # makes "an ordinary question is not steered" true by construction rather than by
+    # five call sites remembering to clear it.
     #
     # `replacing` is an index into `messages`: everything from there on is dropped and
     # this question takes its place. That is what re-sending an edited question means —
@@ -633,6 +664,11 @@ def start_new_turn(
     st.session_state.tried = []
     st.session_state.rerolls = 0
     st.session_state.notice = ""
+    # Set here, from the keyword, rather than by the caller before it calls: this is
+    # the one place a turn begins, so it is the one place that decides what the turn
+    # was asked to do. A caller that wrote `session_state.steer` itself and was then
+    # refused by the gate above would leave the steer set with no turn to carry it.
+    st.session_state.steer = steer
     # And the MODEL, which belongs to the turn that set it and not to the session.
     #
     # A failover exists to rescue the turn it happens in. It was also pinning the
@@ -736,6 +772,13 @@ def finish_stopped_turn(model_key: str, names: dict[str, str] | None = None) -> 
     st.session_state.error = None
     st.session_state.error_detail = ""
     st.session_state.error_kind = ""
+    # What this turn was asked to do differently ends with the turn, for the same
+    # reason `notice` and the three error fields above it do: none of them is true of
+    # anything any more. Nothing can currently read a steer left here — `turn.run` only
+    # runs while `processing`, and this clears it — so this is the invariant being kept
+    # whole rather than a bug being fixed, which is the argument the comment on the
+    # three error fields in `start_new_turn` makes at length.
+    st.session_state.steer = ""
     st.session_state.messages.append(
         {
             "role": "assistant",

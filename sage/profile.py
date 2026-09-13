@@ -196,6 +196,27 @@ class Copy:
     #: lineup the cost is the allowance the next few turns are paid out of.
     think_label: str = "Think"
     think_hint: str = "Work through it before answering. Slower."
+    #: The row of icons under an answer — copy it, ask again, ask shorter, ask longer.
+    #:
+    #: ONE string each, and it is doing two jobs: `app.js` sets it as both the native
+    #: `title` a reader sees on hover and the `aria-label` a screen reader is given.
+    #: The buttons carry no text of their own, so this is the only place their meaning
+    #: is written down — which is the trade the owner asked for ("when users hover
+    #: them, they can be shown for the text to explain what they are"), and why these
+    #: say what the reader GETS rather than naming the control.
+    #:
+    #: `copy_hint` was a literal inside `app.js`. It moved here when the button moved
+    #: into the row, so that all four words are in one place and a deployment changing
+    #: its voice does not have to find one of them in a stylesheet's neighbour.
+    #:
+    #: Not `help=` on a Streamlit button, for the two reasons `think_hint` gives right
+    #: above: the black panel beside the cursor, and the wrapper that carries a second
+    #: zero-sized copy of the button — which is exactly what `tools/render_check.py`
+    #: would then be measuring, and these four now have geometry bounds of their own.
+    copy_hint: str = "Copy this answer"
+    again_hint: str = "Ask again for a fresh answer"
+    shorter_hint: str = "Answer the same question more briefly"
+    longer_hint: str = "Answer the same question in more detail"
 
     @property
     def status_phrases(self) -> tuple[str, ...]:

@@ -600,6 +600,24 @@ def run(view: View) -> None:
             runtime.system_prompt,
             vision=config.sees_images(model.id),
         )
+        # What the answer footer's Shorter and Longer asked of this turn, if anything.
+        #
+        # At the END of the list, not at index 1 beside the system prompt, for the
+        # reason `prompts.last_round_instruction` is appended where it is: a rule about
+        # the shape of the answer has to be the last thing the model reads before it
+        # writes one. Index 1 puts it behind the whole conversation, which on a long
+        # chat is where instructions go to be outvoted.
+        #
+        # And BEFORE the `use_tools` branch below, because `grounded()` rebuilds the
+        # list as `[messages[0], <its own system message>, *messages[1:]]` — anything
+        # appended here rides through that untouched, while anything appended after it
+        # would land on only one of the two paths.
+        if st.session_state.steer:
+            asked = prompts.length_instruction(
+                st.session_state.steer, runtime.identity
+            )
+            if asked:
+                messages.append({"role": "system", "content": asked})
         use_tools = model.supports_tools
 
         if use_tools:
@@ -942,6 +960,11 @@ def run(view: View) -> None:
         # Per turn, unlike `tried` which is per walk — see `state` for why they are two
         # counters. A turn that took a re-roll and then answered has spent it.
         st.session_state.rerolls = 0
+        # And what the footer asked of this turn, which the turn has now done. Cleared
+        # HERE and not in the `finally`, because the reroll and failover paths go
+        # through that on their way to asking again — a turn rescued onto another model
+        # is still the turn the reader asked to be shorter, and must stay shorter.
+        st.session_state.steer = ""
         # NOTHING about the failover reaches the page, and that is the decision
         # rather than an omission. This said "The first model was unavailable (its free
         # allowance is used up), so another answered. This turn took longer than usual."

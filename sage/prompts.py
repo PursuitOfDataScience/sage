@@ -132,6 +132,87 @@ def grounded_instruction(context: str, identity: Identity | None = None) -> str:
     )
 
 
+def length_instruction(mode: str, identity: Identity | None = None) -> str:
+    """What the answer footer's Shorter and Longer ask of one turn.
+
+    Here rather than in the profile prompt because it is about the machinery — two
+    buttons this package draws — and not about the subject, the same division
+    `SELF_DISCLOSURE` is on the other side of. A deployment that rewrote its prompt
+    from scratch still gets these, because they are not in the prompt.
+
+    Three things each mode has to say, and each one is a failure this file has already
+    paid for once:
+
+    * **Keep the inline citations.** `grounded_instruction` learned that a length rule
+      is read as a licence to drop the apparatus: the app numbers each claim's marker
+      against the strip below it at render time (`links.mark_sources`), so an answer
+      that stops writing `[Title](path)` loses the markers AND the strip, which is the
+      one thing this app is for. "Shorter" must cut prose, never provenance.
+    * **Nothing invented, for `longer`.** This is the mode that can do real damage: a
+      model told to write more about a corpus that says three sentences will write more
+      anyway. `last_round_instruction` already carries the honest alternative — answer
+      what is covered, name the part that is not — so this repeats it rather than
+      inventing a second way of saying it.
+    * **Do not mention the change.** A model that opens "Here is a shorter version"
+      has told the reader about a control they pressed, which they know, and about an
+      instruction they cannot see, which is `SELF_DISCLOSURE`'s whole subject. Every
+      sentence below is imperative for the reason recorded there: a prompt sentence
+      that could stand alone in an answer eventually will.
+
+    Neither mode says "again", and that is the same point from the other side. A re-ask
+    goes through `start_new_turn(replacing=…)`, which drops the answer being replaced —
+    so the history this instruction arrives with ends at the question, and there is no
+    previous answer in it. "Answer the same question again" pointed at something the
+    model cannot find, and a model that goes looking for it is a model reconstructing
+    what it thinks it said. These ask for an answer of a given shape, full stop; the
+    clause forbidding a reference to a previous one is what covers the case where it
+    infers the rest anyway.
+
+    An unknown `mode` returns "", so a stale `session_state.steer` from a session open
+    across a deployment cannot put a fragment of this into a request.
+    """
+    who = identity or active().identity
+    if mode not in ("shorter", "longer"):
+        return ""
+
+    keep = (
+        "Keep citing inline as [Title](path) with the exact path, exactly as you "
+        "otherwise would, and print no Sources list — one is printed for you."
+    )
+    silent = (
+        "Do not say that this answer is shorter or longer than any other, do not refer "
+        "to a previous answer, and do not mention being asked for anything. Write the "
+        "answer as if it were the only one."
+    )
+    if mode == "shorter":
+        return (
+            "Answer this question briefly. The reader wants the shortest answer that "
+            "still works, so use as few words as it takes: no preamble, no restatement "
+            "of the question, no recap at the end, and nothing that explains why a "
+            "step exists rather than what it is. Keep every step they need to actually "
+            "do the thing — brevity that drops half the instructions is not brevity. "
+            f"{keep}\n\n{silent}"
+        )
+    return (
+        "Answer this question in full detail. The reader wants the thorough version: "
+        "the steps in order, the exact flags and paths, the limits and caveats, and a "
+        "worked example where the "
+        f"{who.qualifier}documentation gives one.\n\n"
+        "Only from what the retrieved sections actually say. Do not pad, do not "
+        "generalise from another system you know, and never invent a flag, a path, a "
+        "number or a policy to make the answer longer — a longer answer with one made-up "
+        "flag in it is worse than the short one, because the reader cannot tell which "
+        "sentence to distrust. If the sections do not support more detail, give what "
+        "they do support and say plainly which part is not covered"
+        + (
+            f", pointing the reader at {who.contact_label} ({who.contact}) for it"
+            if who.has_contact
+            else ""
+        )
+        + f". {keep}\n\n{silent}"
+    )
+
+
 def last_round_instruction(identity: Identity | None = None) -> str:
     """What the model is told on the final request of a tool turn.
 

@@ -632,8 +632,10 @@ def answer_block(index: int, question: bool = True) -> str:
     # that drew it; a stored message carries its steps now and `transcript.render_steps`
     # draws it again, above the text where the live row already was, so nothing moves
     # when the turn ends. Rendered here because that makes it part of every answer's
-    # geometry — inside the chat message, so the answer's top edge, the copy button's
-    # corner and the gap to the question above are all measured with it present.
+    # geometry — inside the chat message, so the answer's top edge and the gap to the
+    # question above are both measured with it present. It used to be the copy
+    # button's corner that made this matter most; the button is in the row at the
+    # bottom now, and the top edge still is one.
     return asked + f"""
 <div class="st-key-answer-{index} element-container"><div class="stChatMessage">
  <div></div>
@@ -1460,11 +1462,29 @@ STATUS_WIDGET = '[data-testid="stStatusWidget"]'
 # The block holding whatever the reader sent while an answer was still arriving. Named
 # because it is measured as the end of the conversation as well as measured in itself.
 QUEUED_NOTE = ".queued-note"
-# What app.js parks in a finished answer's top-right corner, and the prose it is
-# parked on top of. Absolutely positioned inside the message, so the corner it sits
-# in is a corner the text also uses unless the message reserves it — measured in the
-# running app, the button covered the last 30px of every answer's first line.
+# The row of icons app.js builds as the last child of a finished answer: copy it, ask
+# again, ask it shorter, ask it longer. The row and each button, because the row being
+# the right shape says nothing about what is in it — and because the three re-asks are
+# on the LAST answer only, which is a claim about which row they are in.
+#
+# `ANSWER_COPY` used to be parked in the answer's top-right corner, absolutely
+# positioned inside the message, and the bound on it was that the prose stopped before
+# it: measured in the running app, the button covered the last 30px of every answer's
+# first line. The button moved down here, so that bound is gone with the corner and
+# what replaced it is below — a row, level, inside its container, clear of itself.
 ANSWER_COPY = '[class*="st-key-answer-"] .rcc-copy-btn'
+ANSWER_ACTS = '[class*="st-key-answer-"] .answer-acts'
+ACT_AGAIN = '[class*="st-key-answer-"] [data-sage-act="again"]'
+ACT_SHORTER = '[class*="st-key-answer-"] [data-sage-act="shorter"]'
+ACT_LONGER = '[class*="st-key-answer-"] [data-sage-act="longer"]'
+# Every control in the row, in the order app.js appends them, which is the order the
+# reader reads them in.
+ACT_BUTTONS = ("copy", "last:" + ANSWER_COPY), ("run again", ACT_AGAIN), \
+              ("shorter", ACT_SHORTER), ("longer", ACT_LONGER)
+# One of the clipped widgets the icons click. Named so that the run fails if the clip
+# rule ever stops matching: unclipped, this is a full-width Streamlit button reading
+# "again" in the middle of the page.
+ACT_HOOK = ".st-key-again"
 # A paragraph, not the container: a block fills the content box, so its right edge
 # is where a line of the answer is allowed to end.
 ANSWER_TEXT = '[class*="st-key-answer-"] .stChatMessage p'
@@ -1484,7 +1504,8 @@ SELECTORS = [
     ".source-kind",
     ".st-key-answer-5", ".st-key-answer-0", ".stChatMessage pre",
     ".stChatMessage code", '[data-testid="stBottomBlockContainer"]',
-    ANSWER_COPY, ANSWER_TEXT, ANSWER_TABLE, ANSWER_MARKER,
+    ANSWER_COPY, "last:" + ANSWER_COPY, ANSWER_TEXT, ANSWER_TABLE, ANSWER_MARKER,
+    ANSWER_ACTS, "last:" + ANSWER_ACTS, ACT_AGAIN, ACT_SHORTER, ACT_LONGER, ACT_HOOK,
     STRIP, INPUT, INPUT_BOX, SEND, STOP, EDIT, "last:" + EDIT, QCOPY, EDITOR,
     CHIPS, ".st-key-attachments button", "#paperclip-btn",
     # A question waiting its turn: the block, the bubble, its label and the ✕ that
@@ -1536,6 +1557,12 @@ INTERACTIVE = {
     # reader decided against.
     ".queued-drop",
     ".st-key-retry button p", ".st-key-switch-model button p",
+    # The row under an answer. Icon-only controls with nothing but a `title` to
+    # explain them, sitting at the very end of the page where the composer is fixed
+    # over it — which is the one place on this page a control can be painted on and
+    # still measure correctly. `.rcc-copy-btn` was not on this list while it lived in
+    # the answer's corner; in a row above the composer it belongs here.
+    "last:" + ANSWER_COPY, ACT_AGAIN, ACT_SHORTER, ACT_LONGER,
     *(f".st-key-example-card-{i} button p" for i in range(6)),
 }
 
@@ -1549,7 +1576,15 @@ ELLIPSIS_OK = {PICKER,
                # an ellipsed line reports scrollWidth past clientWidth — that reading
                # IS the feature working. What must not overflow is the row holding it,
                # which is `.status-step`, and that is not on this list.
-               ".status-arg", "last:.status-arg"}
+               ".status-arg", "last:.status-arg",
+               # And a clipped hook is the same reading for the same reason, one step
+               # further: app.css gives it `width: 1px; overflow: hidden`, so a button
+               # whose label is a whole sentence reports 48px of horizontal overflow in
+               # every render. That IS the clip. It is measured at all because an
+               # UNCLIPPED hook is a full-width Streamlit button reading "Ask again for
+               # a fresh answer" in the middle of the conversation, and the bound for
+               # that is its height, asserted in `audit`.
+               ACT_HOOK}
 
 # Text painted as a gradient clipped to the glyphs. `getComputedStyle().color` on these
 # is the fallback a browser without `background-clip: text` would use, not the colour a
@@ -1635,6 +1670,12 @@ MIN_SHIMMER_SWING = 1.8
 # no label to widen them, and both are the ONLY way to reach something the app can do
 # — calling off a generation, reopening a question — so a few pixels of drift in a
 # padding is the difference between a feature and a control nobody can hit. Under the
+# The narrowest an icon button in the answer's action row may be: a 16px glyph, its
+# 6px of side padding and its 1px border, less a pixel for rounding. A floor and not a
+# range — what this catches is a control that collapsed to nothing while still
+# reporting as present, which is the bug the model picker shipped twice.
+MIN_ICON_BUTTON = 27
+
 # 44px WCAG target on purpose: the pencil sits in the gutter beside a bubble and
 # taking 44px there would push the bubble in on a phone, which is a visible change to
 # every question for the sake of a control that also has a full-size route (the
@@ -2489,6 +2530,57 @@ def page(body: str, scheme: str, scroll: bool, generating: bool = False,
         hooks += ('<div data-testid="stElementContainer" '
                   'class="stElementContainer element-container st-key-stop-generation">'
                   "<button>Stop generating</button></div>")
+
+    # What `transcript.render_answer_actions` draws for `addAnswerActions`: the four
+    # hover strings, and a clipped widget per re-ask for the click to arrive on. The
+    # row itself is NOT modelled here — app.js builds it, this file runs the real
+    # app.js, and a replica that drew the row by hand would be measuring its own idea
+    # of it rather than the injector's.
+    #
+    # Counted off the body, like the pencils above, so a new scenario with an answer in
+    # it cannot forget them. The marker goes with any answer at all, because a copy
+    # button does; the hooks only where re-asking is a thing that can happen, which is
+    # what `render_answer_actions` decides and what app.js reads their presence as.
+    #
+    # Read from the profile rather than written out, for the reason THINK_LABEL is:
+    # a literal here would go on passing the day the deployment's wording got longer,
+    # and the row's width bound is the thing that would have caught it.
+    if 'class="st-key-answer-' in body:
+        acts = profile_module.Copy()
+        # In `st.markdown`'s three wrappers, which is not pedantry: a bare div here
+        # measured a tail gap the app does not have. `[data-testid="stMarkdownContainer"]`
+        # carries `margin-bottom: -1rem`, and this marker is the LAST thing in the
+        # conversation's block — between the newest answer and the composer, which is
+        # exactly where `MAX_TAIL_GAP` is measured. `.chat-container`'s marker is
+        # wrapped the same way for the same reason.
+        hooks += (
+            '<div class="element-container"><div class="stMarkdown">'
+            '<div data-testid="stMarkdownContainer">'
+            '<div id="answer-acts" hidden'
+            f' data-copy="{html.escape(acts.copy_hint, quote=True)}"'
+            f' data-again="{html.escape(acts.again_hint, quote=True)}"'
+            f' data-shorter="{html.escape(acts.shorter_hint, quote=True)}"'
+            f' data-longer="{html.escape(acts.longer_hint, quote=True)}"></div>'
+            "</div></div></div>"
+        )
+        # Not while an error card is up, because the card offers "Try again" over the
+        # same turn — and not while one is IN FLIGHT either, which is the part worth
+        # writing down. `render_answer_actions` draws the hooks only when the newest
+        # message is an answer, and while a turn runs the newest message is the
+        # question being answered: the transcript hides it, but it is still the last
+        # entry in `messages`. So mid-turn the page carries rows with a copy button in
+        # them and no re-asks anywhere, and that — not a row of disabled icons — is the
+        # state to model. `audit` reads which of the two it is off this hook rather
+        # than being told, and checks the re-asks are ABSENT when it is: taking them
+        # off a row that is no longer the newest is app.js's job, and this is what
+        # fails if it stops doing it.
+        if "error-card" not in body and not generating:
+            hooks += "".join(
+                f'<div data-testid="stElementContainer" class="stElementContainer '
+                f'element-container st-key-{name}">'
+                f"<button>{name}</button></div>"
+                for name in ("again", "shorter", "longer")
+            )
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <style>{base_css(scheme)}</style><style>{theme_css(scheme)}</style></head>
 <body class="{'bar-sticky' if sticky else 'bar-fixed'}{' doc-scroll' if doc_scroll else ''}{' input-column' if column_input else ''}">
@@ -3474,6 +3566,23 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
     # is exempt is only the button underneath it.
     if generating:
         covered_by_overlay = covered_by_overlay | {SEND}
+    # The row of icons under an answer is IN THE FLOW of the conversation, and that
+    # makes "something is on top of it" mean something different for it than for the
+    # composer's own controls: the thing on top is the fixed input bar, and the reader's
+    # answer to it is to scroll. Which is the app's own rule, decided elsewhere and
+    # recorded at the newest-vs-bar bound below — a conversation shorter than the window
+    # keeps the position it had while it was being answered rather than jumping down to
+    # the composer, so content below the fold at rest is deliberate and the reader
+    # brings it out.
+    #
+    # So these are required clickable exactly where that bound requires clearance:
+    # scrolled to the end, or on a page with nowhere left to scroll. Measured on the
+    # `editing` screen, whose editor box is 115px where a question bubble is ~50, which
+    # puts the row inside the bar's band at every 900px-tall viewport and clear of it at
+    # 1080 — and clickable in `scrolled` at all of them. Demanding more than the prose
+    # above it gets would be this file inventing a rule the app does not have.
+    if state != "scrolled" and data.get("canScroll", True):
+        covered_by_overlay = covered_by_overlay | {sel for _name, sel in ACT_BUTTONS}
     for sel in INTERACTIVE - covered_by_overlay:
         b = els.get(sel)
         # 'offscreen' is covered by the geometry checks above and is expected for
@@ -3487,23 +3596,127 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
     if picker and picker["hit"]:
         problems.append(f"{where}: the model picker is unreachable ({picker['hit']})")
 
-    # Inside an answer: the two things that were drawn on top of it or off the end of
-    # it, neither of which any check here could see until the elements were named.
-    copy, prose = els.get(ANSWER_COPY), els.get(ANSWER_TEXT)
-    if prose and state != "unmeasured" and not copy:
-        # Without the button there is nothing to overlap, so the check below would
-        # pass on a screen it cannot judge. app.js matches finished answers by their
-        # keyed container; if that stops matching, this says so rather than going
-        # quiet.
+    # The row of icons under an answer: copy, run again, shorter, longer.
+    #
+    # Every check below is on the LAST answer's row, because that is the one that has
+    # all four — `addAnswerActions` gives the three re-asks to the newest answer and
+    # takes them off every other, since a re-ask re-runs the question and drops
+    # everything after it.
+    prose = els.get(ANSWER_TEXT)
+    acts = els.get("last:" + ANSWER_ACTS)
+
+    # Whether Python offered this screen a re-ask, read off the wire rather than
+    # passed in: with the hooks there all four controls belong in the row, and without
+    # them only the copy button does — and the three others must be GONE, not merely
+    # unchecked. A row that keeps its re-asks after ceasing to be the newest answer is
+    # a click that re-runs a question three turns back and drops everything after it.
+    wired = bool(els.get(ACT_HOOK))
+    row = [(name, els.get(sel)) for name, sel in ACT_BUTTONS]
+    want = row if wired else row[:1]
+    unwanted = [] if wired else row[1:]
+
+    if prose and state != "unmeasured":
+        # Without the row there is nothing to measure, so every bound below would pass
+        # on a screen it never looked at. app.js matches finished answers by their
+        # keyed container and reads its words off `#answer-acts`; if either stops
+        # matching, this says so rather than going quiet. This half of the check is
+        # inherited from the copy button's old corner bound, and it is the half worth
+        # keeping: it is what fails when an injector matches nothing.
+        if not acts:
+            problems.append(
+                f"{where}: no action row on a finished answer — app.js matched "
+                f"nothing, so every bound on the row passes without looking"
+            )
+        for name, box_ in want:
+            if not box_:
+                problems.append(
+                    f"{where}: the {name} button is missing from the action row"
+                )
+        for name, box_ in unwanted:
+            if box_:
+                problems.append(
+                    f"{where}: the {name} button is in the row with no widget behind "
+                    f"it — a click on it would reach nothing, or worse, re-run a "
+                    f"question the reader has moved on from"
+                )
+
+    present = [(name, box_) for name, box_ in want if box_]
+
+    # Within the answer's own column. Measured against a paragraph rather than against
+    # the keyed container, and that is not a shortcut: the container of the LAST answer
+    # is `.st-key-answer-2` on the screens with three turns on them and nothing
+    # measures that one, while every answer on the page shares one column — so a
+    # paragraph's edges ARE the column's, on every screen, including the ones where the
+    # row's own container is not in the table.
+    #
+    # It is also the edge that matters. The row is injected into the container, so a
+    # stylesheet that stopped laying it out leaves it wherever the flow puts it, and
+    # `padding-right: 2.25rem` on that container is what keeps both of them inside the
+    # same right-hand edge. The vertical half of "inside the answer" is covered twice
+    # over: by the references bound just below, and by `newest`, which now names this
+    # row.
+    if acts and prose:
+        out = []
+        if acts["left"] < prose["left"] - 1:
+            out.append(f"{round(prose['left'] - acts['left'])}px past its left edge")
+        if acts["right"] > prose["right"] + 1:
+            out.append(f"{round(acts['right'] - prose['right'])}px past its right edge")
+        if out:
+            problems.append(
+                f"{where}: the action row is outside the answer's column — "
+                + ", ".join(out)
+            )
+
+    refs = els.get("last:.source-item") or els.get(".source-item")
+    if acts and refs and acts["top"] < refs["bottom"] - 1:
         problems.append(
-            f"{where}: no copy button on a finished answer — app.js matched nothing, "
-            f"so the overlap check cannot fail here"
+            f"{where}: the action row overlaps the references above it by "
+            f"{round(refs['bottom'] - acts['top'])}px"
         )
-    if copy and prose and prose["right"] > copy["left"] + 1:
+
+    # One row, so one floor. The failure this catches is the one that has no CSS at
+    # all behind it: Streamlit's own vertical block stacks its children, so a row
+    # whose `flex-direction` rule stopped matching becomes a column of four, and
+    # every other bound here still passes.
+    if len(present) > 1:
+        floors = [box_["bottom"] for _name, box_ in present]
+        spread = round(max(floors) - min(floors))
+        if spread > MAX_BAND_SPREAD:
+            problems.append(
+                f"{where}: the action row is not one row — its buttons' bottom edges "
+                f"are {spread}px apart (want within {MAX_BAND_SPREAD}), so they have "
+                f"stacked instead of sitting beside each other"
+            )
+
+    # No two of them on top of each other, read left to right in the order app.js
+    # appends them.
+    for (left_name, left_box), (right_name, right_box) in zip(
+        present, present[1:], strict=False
+    ):
+        if left_box["right"] > right_box["left"] + 1:
+            problems.append(
+                f"{where}: the {left_name} and {right_name} buttons overlap by "
+                f"{round(left_box['right'] - right_box['left'])}px"
+            )
+
+    # An icon with no label is exactly the control that can collapse to nothing and
+    # still report as present — the model picker did it twice with a word in it. The
+    # floor is a 16px glyph in its padding and border, minus a pixel of rounding.
+    for name, box_ in present:
+        width = round(box_["right"] - box_["left"])
+        if width < MIN_ICON_BUTTON:
+            problems.append(
+                f"{where}: the {name} button is only {width}px wide (collapsed; want "
+                f"at least {MIN_ICON_BUTTON})"
+            )
+
+    # And the wire stays clipped. Unclipped, this is a full-width Streamlit button
+    # reading "again" sitting in the middle of the conversation.
+    hook = els.get(ACT_HOOK)
+    if hook and hook["bottom"] - hook["top"] > 2:
         problems.append(
-            f"{where}: the copy button is painted over the answer's first line "
-            f"({prose['right'] - copy['left']}px of overlap) — an absolutely "
-            f"positioned corner is only free if the text stops before it"
+            f"{where}: the re-ask hook is {round(hook['bottom'] - hook['top'])}px "
+            f"tall — app.css stopped clipping it, so the reader can see the wire"
         )
 
     # A table wider than the answer column. `html`/`body` hide the document's
@@ -3538,6 +3751,12 @@ def audit(data, scenario, scheme, width, state: str) -> list[str]:
                           # A queued question is the last thing on the page when
                           # there is one, so it is what must clear the composer.
                           QUEUED_NOTE,
+                          # And the row of icons, which is now an answer's last child.
+                          # Named separately from the container holding it, because
+                          # that container's own box being clear of the composer is
+                          # not the question: `.sources` was inside one too, and
+                          # overflowed it by 16px on Streamlit's `-1rem`.
+                          "last:" + ANSWER_ACTS,
                           # And so is the progress block, for as long as the turn is
                           # working: it grows a line per tool call, and on the screens
                           # where nothing has been answered yet it is the only thing

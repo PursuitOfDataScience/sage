@@ -313,6 +313,64 @@ rerun must be re-registered per run**, which is what `__sageHistoryOff`,
 the listener is the part that goes stale. Verified by A/B: reuse the node and the toggle
 is dead from the first click.
 
+**Under an answer there is ONE row of icons, and everything about where it is was
+decided.** Copy, run again, shorter, longer — `app.js:addAnswerActions` builds it and
+parents it to the answer's keyed container, below the Sources and Related strips, which
+is where `.sources` already stopped 20px short because "the 👍/👎 row and then the next
+question" follow. It goes under the citations rather than between them and the prose
+because the claim → inline marker → numbered reference chain is what this app is for,
+and furniture in the middle of it breaks the one thing the reader came for.
+
+**The copy button used to be alone in that container's top-right corner and was moved
+into this row** — asked for, along with the icons and the hover text. Its 2.25rem gutter
+(`padding-right` on `[class*="st-key-answer-"]`) is therefore now load-bearing for
+nothing, and it STAYS: removing it widens every answer by 36px at every width and
+re-wraps every line and every code block, which nobody asked for. Do not tidy it away
+without being told to.
+
+**The three re-asks are on the LAST answer only, and the copy button is on all of them.**
+All three re-run the question through `start_new_turn(replacing=…)`, which drops
+everything from that question on — right, and the reason `render_user_editor` has to
+print "Sending replaces this question and removes the N later questions" before doing the
+same thing. An icon cannot carry that sentence, so the design is not to need one: on the
+last answer there is nothing after it to lose. `addAnswerActions` therefore REMOVES the
+trio from a row that has stopped being the newest, which is not the same as declining to
+add it, and `render_check.py` fails if a row keeps them. Copy goes first in the row so it
+sits at the same offset on every answer while the re-asks extend to its right on one.
+
+**They are injected rather than drawn by Streamlit because an icon needs a `title`.**
+`st.button` has only `help=`, which draws Streamlit's black panel beside the cursor and
+wraps the control in a second zero-sized copy of the button — the thing the geometry
+bounds would then measure; the same decision as `Copy.think_hint`, for the same reason.
+So Python draws only `#answer-acts` (a hidden div carrying the four hover strings out of
+the profile) and three clipped `st.button` hooks, and app.js keys the re-asks on the
+HOOKS, not the marker: the marker is drawn for every conversation because a copy button
+is on every answer, while the hooks appear only when re-asking can happen. Mid-turn there
+are no hooks at all — while a turn runs the newest message is the question being answered
+— so the page carries rows with a copy button and no re-asks, and that is the state the
+harness models, not a row of dimmed icons.
+
+**Shorter and Longer are two bars against four, and the pair that came first was
+measured and rejected.** Chevrons converging and diverging are unmistakable at 4x and
+collapse into a small ✕ at the 16px they are actually drawn — the glyph for close, on a
+control that means "answer more briefly". Arrows with shafts fixed the ✕ and still said
+"resize" rather than "text". Lines of text, differing only in how many, say the thing the
+buttons differ in. What they MEAN is in the hover text; what the pair carries on its own
+is which of the two is which.
+
+**A length request is one system message at the END of the list, and it belongs to one
+turn.** `prompts.length_instruction` is machinery, not subject, so it lives in the
+package beside `grounded_instruction` and `last_round_instruction` — and it is appended
+after `history.build` and before the `use_tools` branch, so it rides through `grounded()`
+rebuilding the list and lands last, where a rule about the shape of an answer has to be.
+`session_state.steer` carries it because the click and the turn are two script runs;
+`start_new_turn` takes it as a keyword defaulting to `""`, which is what makes "an
+ordinary question is not steered" true by construction rather than by five call sites
+remembering. It must say three things, each for a failure already paid for: keep the
+inline `[Title](path)` citations, invent nothing to make an answer longer, and never
+mention the change — "Here is a shorter version" tells the reader about an instruction
+they cannot see, which is `SELF_DISCLOSURE`'s whole subject.
+
 **Anything you put in the top 60px of the page needs a z-index above 999995, and needs
 hit-testing.** That band is `[data-testid="stHeader"]`, transparent and at 999990, and
 it takes every click aimed at whatever is underneath it — the controls row was pinned

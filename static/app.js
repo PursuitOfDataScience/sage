@@ -28,6 +28,31 @@
     var STOP_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"></rect></svg>';
     var CLOSE_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>';
     var PENCIL_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>';
+    /* The three re-asks in the row under an answer. Same house style as COPY_SVG
+     * above — 16px, 24-unit box, `currentColor`, round caps — because they sit beside
+     * it and a row of icons drawn to two conventions reads as two rows.
+     *
+     * `currentColor` is not a preference: `tools/palette_check.py` fails this file for
+     * any colour literal in it, and for any `style.background =` too. The colour of
+     * these is app.css's business, which is where it can be reviewed.
+     *
+     * AGAIN is the glyph the error card already spells `↻`.
+     *
+     * SHORTER and LONGER are lines of text: two of them against four, the last of each
+     * cut to half width the way a paragraph's last line is. They are drawn from one
+     * vocabulary and differ only in how much of it there is, which is exactly what the
+     * two buttons differ in.
+     *
+     * They were chevrons first — closing on the middle for shorter, opening off it for
+     * longer — and that was measured and rejected. At 4x the pair is unmistakable; at
+     * the 16px they are actually drawn, two arrowheads meeting in the middle collapse
+     * into a small ✕, which is the glyph for close. A control that reads as "cancel"
+     * where it means "answer more briefly" is worse than one that reads as nothing.
+     * Arrows with shafts fixed the ✕ and still said "resize", not "text". Bars say
+     * text, and 2 against 4 is a difference you can see without looking. */
+    var AGAIN_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"></path><polyline points="21 3 21 9 15 9"></polyline></svg>';
+    var SHORTER_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14"></path><path d="M5 14h7"></path></svg>';
+    var LONGER_SVG = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14"></path><path d="M5 10h14"></path><path d="M5 15h14"></path><path d="M5 20h7"></path></svg>';
 
     function isProcessing() {
         return !!doc.getElementById('processing-signal');
@@ -1160,6 +1185,11 @@
         '.st-key-stop-generation button',
         '.st-key-think-toggle button',
         '[class*="st-key-edit-open-"] button',
+        // The three re-asks under the newest answer. The reader presses an icon
+        // `addAnswerActions` injected; these are only the wire.
+        '.st-key-again button',
+        '.st-key-shorter button',
+        '.st-key-longer button',
         '[data-testid="stFileUploader"] button',
         '[data-testid="stFileUploaderDropzone"]',
         // The iframe this script is served in: 660x0, focusable, and announced as
@@ -1933,31 +1963,183 @@
         return (copy.innerText || copy.textContent || '').trim();
     }
 
-    function addAnswerCopyButtons() {
+    /* The row of icons under an answer: copy it, ask again, ask it shorter, ask it
+     * longer.
+     *
+     * It replaced `addAnswerCopyButtons`, which put the copy button alone in the
+     * answer's top-right corner. Moving it down here was asked for, and the three
+     * re-asks are why there is a row to move it into: four controls in a corner is a
+     * corner, and the reader reaches the end of an answer at the bottom of it.
+     *
+     * WHY THE ROW IS INJECTED AND NOT DRAWN BY STREAMLIT. The controls carry no text,
+     * so each needs a native `title` for the hover text that explains it — and
+     * `st.button` cannot set one. Its `help=` draws Streamlit's black panel beside the
+     * cursor AND wraps the control in a second, zero-sized copy of the button, which
+     * is what `tools/render_check.py` would then be measuring; see `profile.Copy`'s
+     * comment on `think_hint`, which is the same decision for the same reason. Copying
+     * also has to stay client-side: a widget click is a rerun, and a rerun during a
+     * turn aborts it, so a copy button that reached the server could not be pressed
+     * while an answer streamed.
+     *
+     * WHAT COMES FROM PYTHON. `transcript.render_answer_actions` draws two things and
+     * neither of them paints: `#answer-acts`, a hidden div carrying the four hover
+     * strings out of the profile, and three clipped `st.button` hooks — the only
+     * channel back to the script. The re-asks are keyed on the HOOKS being present,
+     * not on the marker, because the marker is drawn for every conversation (the copy
+     * button is on every answer) while the hooks are drawn only when re-asking is
+     * something that can happen: the last message is an answer, and no error card is up.
+     *
+     * ANCHORED TO THE KEYED CONTAINER, not to `.stChatMessage` — the reason
+     * `addAnswerCopyButtons` gave still holds. app.css hangs the answer's gutter on
+     * the container, and the Sources strip is a sibling of the message inside it, so a
+     * row appended to the message alone would be indented from the citations above it.
+     *
+     * BUILT ONCE PER MESSAGE, NOT ONCE PER PASS. `sync` runs on every DOM mutation and
+     * every 250ms while an answer streams — around thirty times a second — and a node
+     * rebuilt under a reader's focus is a node they cannot focus; that is measured, on
+     * the Think pill, in the comment in `addThinkButton`. So the marker lives on the
+     * message, and `disabled` and the hover text are the only things refreshed on a
+     * pass, exactly as `addEditButtons` refreshes its own.
+     *
+     * AND ONCE PER REALM. `actsBuilt` is a variable in this copy's closure, false in
+     * every new copy, so rows built by a previous copy are torn down rather than
+     * reused. What it guards is the failure that shipped the theme toggle completely
+     * dead: a listener registered from inside a replaced iframe belongs to a realm
+     * that no longer exists, and nothing announces it — the button is still there,
+     * still painted, still hit-tests as itself, and does nothing.
+     *
+     * Insurance, on this version. Measured on Streamlit 1.54 across seven kinds of
+     * rerun, the iframe is NOT rebuilt and the realm survives all of them — so this
+     * flag stays false-then-true once and the teardown above never runs in anger. It
+     * is the right shape for the case that DOES occur (a page reload, a forced realm
+     * swap) and for a version that does rebuild, which is why it is here and why
+     * "the listener is stale" is not the first explanation to reach for when one of
+     * these buttons stops working. See the note on realms in CLAUDE.md. */
+    var actsBuilt = false;
+
+    var ACTIONS = [
+        {key: 'again', svg: AGAIN_SVG, hook: '[class*="st-key-again"]'},
+        {key: 'shorter', svg: SHORTER_SVG, hook: '[class*="st-key-shorter"]'},
+        {key: 'longer', svg: LONGER_SVG, hook: '[class*="st-key-longer"]'}
+    ];
+
+    function addAnswerActions() {
+        if (!actsBuilt) {
+            // Every row on the page belongs to a dead realm. Taking the marker off the
+            // messages is what lets the loop below build them again.
+            doc.querySelectorAll('.answer-acts').forEach(function (row) {
+                row.remove();
+            });
+            doc.querySelectorAll('[data-sage-acts]').forEach(function (message) {
+                delete message.dataset.sageActs;
+            });
+            actsBuilt = true;
+        }
+
+        var marker = doc.getElementById('answer-acts');
+        var rows = [];
         // Keyed answer containers only, so the streaming status row never gets one.
-        var answers = doc.querySelectorAll('[class*="st-key-answer-"] .stChatMessage');
-        answers.forEach(function (message) {
-            if (message.dataset.sageCopy === 'true') return;
-            // A turn stopped before its first token is a real message — it has to be
-            // on the page, or the reader is left with their question and nothing under
-            // it — but it holds no answer. A copy button on it offers to put the empty
-            // string on the clipboard, which is a control that can only disappoint.
-            if (!answerText(message)) return;
-            message.dataset.sageCopy = 'true';
-            // Anchored to the keyed container, not to the message, because app.css
-            // reserves the gutter there — on the message alone the prose and the code
-            // blocks shrank while the Sources strip beside them did not, leaving the
-            // answer with three different right edges. The button still lands in the
-            // same corner: the container's top edge IS the message's.
-            var host = message.closest('[class*="st-key-answer-"]') || message;
-            host.style.setProperty('position', 'relative');
-            var btn = makeCopyButton(function () {
-                return answerText(message);
-            }, 'Copy this answer');
-            btn.style.top = '0';
-            btn.style.right = '0';
-            btn.style.opacity = '0.65';
-            host.appendChild(btn);
+        doc.querySelectorAll('[class*="st-key-answer-"] .stChatMessage')
+            .forEach(function (message) {
+                // A turn stopped before its first token is a real message — it has to
+                // be on the page, or the reader is left with their question and
+                // nothing under it — but it holds no answer. A copy button on it
+                // offers to put the empty string on the clipboard, and a row with one
+                // control in it is furniture under something that says `Stopped`.
+                if (!answerText(message)) return;
+                var host = message.closest('[class*="st-key-answer-"]') || message;
+                if (message.dataset.sageActs !== 'true') {
+                    message.dataset.sageActs = 'true';
+                    // A row already on this host belongs to a message that has been
+                    // replaced, and its copy button closes over that dead node — it
+                    // would copy the answer that used to be here.
+                    var stale = host.querySelector('.answer-acts');
+                    if (stale) stale.remove();
+                    var fresh = injected('div');
+                    // Set before it is in the document. Nothing in `sync` may write a
+                    // class to a node already on the page: the mutation observer
+                    // watches `class`, so that is the shape that feeds itself.
+                    fresh.className = 'answer-acts';
+                    fresh.appendChild(makeCopyButton(function () {
+                        return answerText(message);
+                    }, (marker && marker.getAttribute('data-copy')) || 'Copy'));
+                    host.appendChild(fresh);
+                }
+                var row = host.querySelector('.answer-acts');
+                if (row) rows.push(row);
+            });
+
+        // The re-asks belong to the newest answer and to no other. The set changes as
+        // answers arrive, and a row that was last a moment ago is still on the page —
+        // so this is a removal, not just an omission.
+        var last = rows.length ? rows[rows.length - 1] : null;
+        rows.forEach(function (row) {
+            if (row === last) return;
+            row.querySelectorAll('[data-sage-act]').forEach(function (btn) {
+                btn.remove();
+            });
+        });
+        if (!last) return;
+
+        // The trio, as a unit: the row holds exactly these three keys in exactly this
+        // order, or it is emptied and they are built again.
+        //
+        // An invariant rather than three independent decisions, because the per-button
+        // version got the ORDER wrong the moment they stopped arriving together: a row
+        // that had kept `again` and lost `shorter` re-appended the missing one at the
+        // end, behind `longer`, and nothing on the page said so. Rebuilt only when it
+        // is violated, which is when the newest answer changes — not on every `sync`
+        // pass, for the reason in the header.
+        //
+        // No hook means Python did not offer this turn a re-ask: an error card is up,
+        // the newest message is the question being answered, or this is a turn stopped
+        // before its first token. `want` is then empty and the loop below takes off
+        // whatever is there, the way `addThinkButton` drops the pill when its marker
+        // goes.
+        var wired = marker && ACTIONS.every(function (action) {
+            return !!widgetButton(action.hook);
+        });
+        var have = [];
+        last.querySelectorAll('[data-sage-act]').forEach(function (btn) {
+            have.push(btn.dataset.sageAct);
+        });
+        var want = wired ? ACTIONS.map(function (action) { return action.key; }) : [];
+        if (have.join(',') !== want.join(',')) {
+            last.querySelectorAll('[data-sage-act]').forEach(function (btn) {
+                btn.remove();
+            });
+            ACTIONS.forEach(function (action) {
+                if (want.indexOf(action.key) < 0) return;
+                var btn = injected('button');
+                btn.type = 'button';
+                btn.dataset.sageAct = action.key;
+                btn.innerHTML = action.svg;
+                btn.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    // Looked up again at click time rather than captured: Streamlit
+                    // rebuilds its widgets on every rerun, so the node found when this
+                    // button was made is not the node that is wired up now.
+                    var wire = widgetButton(action.hook);
+                    if (wire && !wire.disabled) wire.click();
+                });
+                last.appendChild(btn);
+            });
+        }
+
+        // What a kept row still needs every pass: the words, in case the profile's
+        // copy changed under a live session, and `disabled`, which is the one thing
+        // about these that moves without the row being rebuilt.
+        ACTIONS.forEach(function (action) {
+            var btn = last.querySelector('[data-sage-act="' + action.key + '"]');
+            if (!btn) return;
+            var hint = marker.getAttribute('data-' + action.key) || '';
+            if (btn.title !== hint) {
+                btn.title = hint;
+                btn.setAttribute('aria-label', hint);
+            }
+            var hook = widgetButton(action.hook);
+            btn.disabled = !!hook && hook.disabled;
         });
     }
 
@@ -2707,7 +2889,7 @@
         growComposer();
         resetComposerOnClear();
         addThinkButton();
-        addAnswerCopyButtons();
+        addAnswerActions();
         addEditButtons();
         addQuestionCopyButtons();
         addSelectionAsk();
