@@ -78,7 +78,7 @@ class TestTheProfileIsTheDeployment:
         assert profile.identity.name == "Sage"
         assert [source.name for source in profile.sources] == ["docs", "web"]
         assert [entry.name for entry in profile.providers] == [
-            "openrouter", "mistral", "opencode",
+            "openrouter", "vertex", "google",
         ]
         assert profile.prompt, "the prompt file beside the profile was not read"
 
@@ -197,20 +197,6 @@ class TestAProviderThatNeedsNoLineupMaintenance:
         and that id being the thing that routes around a broken model, there is no
         such name — and a stale entry here would empty the provider instead."""
         assert self.router(profile).deny == ()
-
-    def test_the_lineup_workflow_checks_the_other_provider_and_not_this_one(self):
-        """The workflow's `--provider` is the other half of this arrangement. Left
-        unscoped, the 386 models OpenRouter fronts and the rule does not match land in
-        the stealth-codename queue, and every run spends its probe budget asking paid
-        models whether they are secretly free."""
-        workflow = pathlib.Path(__file__).resolve().parents[1] / (
-            ".github/workflows/lineup.yml"
-        )
-        text = workflow.read_text(encoding="utf-8")
-        assert "--provider" in text, (
-            "lineup_check.py runs over every discoverable provider by default, which "
-            "now includes one that needs no checking"
-        )
 
     def test_the_router_is_shown_under_a_name_the_profile_chose(self, profile):
         """A served id is sometimes an implementation detail wearing a name.

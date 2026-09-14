@@ -13,11 +13,28 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from sage import config, profile, providers
+from sage import config, providers
+from sage.profile import ProviderEntry
 from sage.providers.mistral import MistralProvider
 from sage.providers.openai_compat import OpenAICompatProvider
 
-ZEN = profile.active().provider("opencode")
+# A synthetic OpenAI-compatible entry, not one read out of the shipped profile.
+#
+# It WAS `profile.active().provider("opencode")`, and that coupled tests about a
+# GENERIC rule — the free/paid filtering `openai_compat` applies to any endpoint that
+# serves both — to this deployment happening to declare that particular provider. The
+# day the profile dropped it, three of these failed on `replace(None, ...)`: a test of
+# machinery broken by a change of subject, which the layering in CLAUDE.md exists to
+# prevent. The rule is the package's; its tests bring their own subject.
+ZEN = ProviderEntry(
+    name="google",
+    kind="openai",
+    key_env="GEMINI_API_KEY",
+    base_url="https://opencode.ai/zen/v1",
+    models=("deepseek-v4-flash-free",),
+    free_marks=("-free", "big-pickle"),
+    free_only=True,
+)
 
 
 def zen(**overrides) -> providers.Provider:
@@ -27,8 +44,8 @@ def zen(**overrides) -> providers.Provider:
 
 class TestModel:
     def test_key_round_trips(self):
-        model = providers.Model("opencode", "deepseek-v4-flash-free")
-        assert model.key == "opencode:deepseek-v4-flash-free"
+        model = providers.Model("google", "deepseek-v4-flash-free")
+        assert model.key == "google:deepseek-v4-flash-free"
         assert providers.parse_key(model.key) == model
 
     def test_labels_are_the_model_name_and_stay_short(self):
@@ -36,7 +53,7 @@ class TestModel:
         width restating what the rest of the row already said, on every line, and
         `mistral-` on the front of the Mistral ids already does that job."""
         mistral = providers.Model("mistral", "mistral-small-latest").label
-        zen = providers.Model("opencode", "deepseek-v4-flash-free").label
+        zen = providers.Model("google", "deepseek-v4-flash-free").label
         assert mistral == "mistral-small-latest"
         assert zen == "deepseek-v4-flash"
         assert "·" not in mistral + zen
@@ -50,29 +67,29 @@ class TestModel:
         substring rule would eat the middle of any model whose name happens to
         contain those four letters.
         """
-        assert providers.Model("opencode", "hy3-free").label == "hy3"
-        assert providers.Model("opencode", "mimo-v2.5-free").label == "mimo-v2.5"
-        assert providers.Model("opencode", "big-pickle").label == "big-pickle"
-        assert providers.Model("opencode", "freeform-7b").label == "freeform-7b"
+        assert providers.Model("google", "hy3-free").label == "hy3"
+        assert providers.Model("google", "mimo-v2.5-free").label == "mimo-v2.5"
+        assert providers.Model("google", "big-pickle").label == "big-pickle"
+        assert providers.Model("google", "freeform-7b").label == "freeform-7b"
         # The id itself is untouched, so the request still names what Zen serves.
-        assert providers.Model("opencode", "hy3-free").key == "opencode:hy3-free"
+        assert providers.Model("google", "hy3-free").key == "google:hy3-free"
 
     @pytest.mark.parametrize("bad", ["", "nope", "mistral:", ":model", "other:m"])
     def test_malformed_keys_are_rejected(self, bad):
         assert providers.parse_key(bad) is None
 
     def test_a_model_id_containing_a_colon_survives(self):
-        model = providers.parse_key("opencode:vendor/model:v2")
+        model = providers.parse_key("google:vendor/model:v2")
         assert model.id == "vendor/model:v2"
 
     def test_tool_support_is_configurable(self, monkeypatch):
         monkeypatch.setattr(config, "TOOLLESS_MODELS", ("big-pickle",))
-        assert not providers.Model("opencode", "Big-Pickle").supports_tools
-        assert providers.Model("opencode", "deepseek-v4-flash").supports_tools
+        assert not providers.Model("google", "Big-Pickle").supports_tools
+        assert providers.Model("google", "deepseek-v4-flash").supports_tools
 
     def test_everything_supports_tools_by_default(self, monkeypatch):
         monkeypatch.setattr(config, "TOOLLESS_MODELS", ())
-        assert providers.Model("opencode", "anything").supports_tools
+        assert providers.Model("google", "anything").supports_tools
 
 
 class TestParseSSE:
@@ -300,7 +317,7 @@ class TestOpenAICompat:
         provider = OpenAICompatProvider(zen(base_url="http://127.0.0.1:1/v1"), "k")
         found = provider.models()
         assert [model.id for model in found] == list(ZEN.models)
-        assert all(model.provider == "opencode" for model in found)
+        assert all(model.provider == "google" for model in found)
 
     def test_discovery_keeps_the_preferred_order_and_appends_the_rest(self):
         """Order is not cosmetic: it picks the session default *and* what an
@@ -563,13 +580,13 @@ class TestFreeZenModels:
 def test_a_model_label_is_just_the_model_name():
     """The provider prefix spent a third of the picker's width restating what the row
     already said, on every line."""
-    assert providers.Model("opencode", "deepseek-v4-flash-free").label == (
+    assert providers.Model("google", "deepseek-v4-flash-free").label == (
         "deepseek-v4-flash"
     )
     assert providers.Model("mistral", "mistral-small-latest").label == (
         "mistral-small-latest"
     )
-    assert "Zen" not in providers.Model("opencode", "big-pickle").label
+    assert "Zen" not in providers.Model("google", "big-pickle").label
 
 
 class TestAStreamThatIsNotShapedLikeAStream:

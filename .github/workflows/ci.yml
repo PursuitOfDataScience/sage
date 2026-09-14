@@ -82,15 +82,13 @@ jobs:
         run: pip install --disable-pip-version-check -r requirements.txt
 
       # Guards the class of bug this replaced: requirements.txt listed a package
-      # that was never imported while omitting one that was, and the SDK import
-      # path differs between mistralai 0.x and 1.x.
+      # that was never imported while omitting one that was.
       - name: Verify the imports the app actually uses
         run: |
           python - <<'PY'
           import httpx
           import streamlit
           import pymupdf
-          from mistralai import Mistral
           from pypdf import PdfReader
           print("streamlit", streamlit.__version__)
           print("imports OK")

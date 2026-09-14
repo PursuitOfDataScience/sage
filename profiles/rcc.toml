@@ -316,129 +316,100 @@ free_only = true
 free_only_env = "SAGE_OPENROUTER_FREE_ONLY"
 
 [[providers]]
-name = "mistral"
-kind = "mistral"
-key_env = "MISTRAL_API_KEY"
-models = ["mistral-small-latest", "mistral-medium-latest", "mistral-large-latest"]
-models_env = "SAGE_MISTRAL_MODELS"
+name = "vertex"
+kind = "vertex"
+# `SAGE_VERTEX` is a SWITCH, not a secret: set it to anything and this provider is in
+# the lineup. Vertex needs no credential — the instance mints its own token from the
+# metadata server — but `ui.access.configured_providers` decides a provider is usable
+# by whether `key_env` names a variable that is set, so a provider declaring no
+# key_env at all is silently never offered. Found by test, not in production.
+#
+# A switch rather than changing that rule, because "needs no key" and "needs a key
+# nobody set" look identical from there, and conflating them would delete the clear
+# "set an API key" gate a fresh clone depends on.
+key_env = "SAGE_VERTEX"
+hint = "Vertex needs no API key: set SAGE_VERTEX=1 and grant the runtime service account roles/aiplatform.user."
+# No base_url either: it carries the project id, which is deployment and not subject,
+# so sage/providers/vertex.py reads it from the instance. Set base_url only to point a
+# local run at a specific project.
+#
+# FIRST, because it is the only route that spends Google Cloud credit. The Gemini
+# Developer API below bills an AI Studio prepayment balance that Cloud Billing credit
+# does not reach — measured as `Your prepayment credits are depleted` from a key minted
+# in a project with billing on and $300 unspent.
+#
+# Measured on the `global` endpoint, which is not optional: `us-central1` answers for
+# gemini-2.5-flash and returns `Publisher model ... not found` for 3.5, 3.6 and 3.8.
+#   google/gemini-3.8-flash   OK
+#   google/gemini-3.6-flash   OK
+#   google/gemini-3.5-flash   OK   <- shed as "high demand" 0/4 on the free tier
+#
+# WHAT TO KNOW BEFORE LEAVING THIS FIRST. Vertex has no free tier; every token bills,
+# and on a pay-as-you-go account a spent credit produces NO error — it produces an
+# invoice. So nothing here fails over on its own when the money runs out. What catches
+# it is the budget alert on the project, which measures NET spend and is therefore
+# silent for as long as credit covers the usage and mails the moment it does not.
+# If that mail arrives and the answer is "stop paying", delete this block; the free
+# `google` entry below is already the next in line.
+models = [
+    "google/gemini-3.8-flash",
+    "google/gemini-3.6-flash",
+    "google/gemini-3.5-flash",
+]
+# Vertex's OpenAI surface serves no `/models`, so discovery fails and the adapter falls
+# back to the list above. Documented behaviour, not a workaround.
 
 [[providers]]
-name = "opencode"
+name = "google"
 kind = "openai"
-key_env = "OPENCODE_API_KEY"
-hint = "OpenCode Zen keys are free and start with `sk-zen-`."
-# OpenCode Zen is an OpenAI-compatible endpoint fronting a set of free models — a way
-# to keep working once a paid key is out of credit.
-base_url = "https://opencode.ai/zen/v1"
-base_url_env = "OPENCODE_BASE_URL"
-models_env = "SAGE_OPENCODE_MODELS"
-# The live list is discovered from GET /models at runtime; this is only the fallback,
-# since a free tier's lineup changes without notice.
+key_env = "GEMINI_API_KEY"
+hint = "Gemini keys start with `AIza`. Make it in AI Studio on a project with NO billing account — that, and not the key, is what puts it on the free tier."
+# Gemini speaks OpenAI over `/v1beta/openai`, so this is a profile entry and not an
+# adapter. Measured: discovery returns 56 ids, tool calls come back well formed,
+# streaming emits `data:` chunks and `[DONE]`, and the `models/`-prefixed ids the
+# listing returns are accepted as model ids.
 #
-# `hy3-free` was taken off this list and is back on it, which is the whole argument
-# for the rule below rather than a list. It answered `401 {"message": "Model hy3-free
-# is not supported"}` and was not in the served catalogue at all; two days later Zen
-# serves it again and it answers. Nothing about this deployment changed.
+# WHY THE KEY COMES FROM AN UNBILLED PROJECT, which is the opposite of the tidy move.
+# Gemini's tier is decided by whether an active billing account is linked to the KEY'S
+# PROJECT, not by anything about the key. A key minted in the project this app deploys
+# to would be Tier 1 — paid — while one from a project with no billing is free tier and
+# stays free. Moving it somewhere tidier would silently start a bill.
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+base_url_env = "GEMINI_BASE_URL"
+# Second in the lineup: the backup, which is the right slot for a low rate limit.
+# Failover reaches it when OpenRouter's free pool is capped, which is not sustained
+# traffic, so a quota too small to serve every turn is ample for the turns nothing else
+# will take.
 #
-# So nothing comes off this list for being broken today. `north-mini-code-free`
-# returned 401 from Zen's own upstream and `ling-3.0-tiny-free` returned 503 "Endpoint
-# is unavailable" while both were still being served, and neither was removed for it: an
-# endpoint that is down this week is back the next, and a blocklist that quietly
-# outlives the outage it was written for is worse than no blocklist. What the app does
-# with a broken model is already right — a 401 fails over, a 503 offers Try again and a
-# different model.
+# THE LINEUP IS MEASURED, and the first attempt at it was wrong in a way worth
+# recording: it listed `gemini-2.5-flash` because the substring scan that produced it
+# never looked past `gemini-3-flash-preview`. The API serves 3.5, 3.6, 3.7 and 3.8
+# flash. Picking from a partial scan is how a lineup ends up three generations stale on
+# the day it is written.
 #
-# Being gone is a different thing from being broken, and it is the one this list has to
-# follow. Those two, with `longcat-2.0-free` and `ling-3.0-flash-free`, then left the
-# catalogue altogether and stayed away, and sat here for three days being reported every
-# morning to an issue nobody had a reason to open. `.github/workflows/lineup.yml` now
-# opens a pull request for a removal the way it always did for an addition, once an
-# absence has run seven days — comfortably past `hy3-free`'s two. That is what keeps this
-# list true without a person having to read a daily report.
+# Four attempts each, same question and tool schema:
+#   gemini-3.8-flash        4/4  ~1s    <- newest, and it works
+#   gemini-3.6-flash        4/4  1.0s
+#   gemini-3.5-flash-lite   ok   0.5s   <- fastest
+#   gemini-3.1-flash-lite   ok   2.2s
+#   gemini-3.7-flash        0/4         truncated/timed out every time
+#   gemini-3.5-flash        0/4         "currently experiencing high demand"
+#   gemini-3.1-pro-preview   -          "exceeded your current quota" (pro is not free)
 #
-# Ordering is a separate job from membership: the OpenAI-compatible adapter keeps a
-# family's models adjacent in the picker whatever order they appear in here, so this
-# list only has to say which model a fresh session starts on and which one a failover
-# reaches for.
+# The two that fail are the free tier being shed first when capacity is tight — 3.8 did
+# it once on the first try and then went 4/4. That is the honest cost of the free tier,
+# and the reason a paid key is a real option rather than a waste: Tier 1 is not the
+# traffic that gets turned away.
 models = [
-    # First, because this list decides two things and both now point here: which
-    # model a fresh session starts on when `SAGE_DEFAULT_MODEL` names it, and which
-    # one an automatic failover reaches for. The default moved to this model and the
-    # order did not follow, so a turn that lost its allowance failed over to
-    # `nemotron-3-ultra-free` — which answers a tool round in 23s when it answers at
-    # all, and was returning 503 from Zen's own upstream at the time. This one
-    # answers in 2.2s.
-    "nemotron-3.5-lightning-free",
-    "deepseek-v4-flash-free",
-    "big-pickle",
-    # Zen started serving Muse Spark 1.2 free under a `-contributor-free` suffix, which
-    # the rule below already matched, so the picker offered it before this line existed
-    # — the line is here to give it a rank rather than to admit it.
-    #
-    # Not higher, because a reasoning model spends `max_tokens` on thinking it does not
-    # emit: at 200 tokens it returns `completion_tokens: 200` and no content at all, and
-    # three probes in a row read as a dead endpoint. `SAGE_MAX_TOKENS` is 8000 here so
-    # the app never sees that, but a failover target should be a model whose failure
-    # mode is not "silence under a tight budget".
-    "muse-spark-1.2-contributor-free",
-    "mimo-v2.5-free",
-    "nemotron-3-ultra-free",
-    "hy3-free",
-    "laguna-s-2.1-free",
-    "x-preview-f-free",
+    "models/gemini-3.8-flash",
+    "models/gemini-3.6-flash",
+    "models/gemini-3.5-flash-lite",
 ]
-# Zen serves paid models from the same endpoint as the free ones — the discovery call
-# came back with the whole Claude and GPT lineup, none of which this deployment has a
-# balance for, and every one of which was offered in the picker as if it worked.
-#
-# Filtered by a RULE rather than a list, because Zen's free lineup changes without
-# notice and a hardcoded set goes stale silently: every free model it serves is named
-# with a `-free` suffix, the exception being the stealth models it publishes under a
-# codename while they are free. Naming the convention keeps working when the list
-# changes; naming the list does not.
-# Served, and dead. Maintained by `.github/workflows/lineup.yml`, which adds a model
-# that has failed every probe for the retirement threshold and REMOVES it the moment it
-# answers again — that self-clearing property is the only thing that makes a blocklist
-# safe here, because `hy3-free` was down for two days and came back.
-#
-# Not the same question as `free_marks`. These names are free and are genuinely served:
-# `GET /models` lists them, the rule matches them, the picker offered them, and the
-# reader got an error card. `muse-spark-1.2-contributor-free` answered `500 Internal
-# server error` three times out of three and `deepseek-v4-flash-free` answered `400
-# Model is unavailable` three out of three, the second of them ranked high enough to be
-# what an automatic failover reached for. Filtering happens in the adapter's `models()`,
-# so nothing downstream can select one.
-#
-# The two Nemotrons joined on 2026-08-28, reported from the running app and confirmed by
-# probe: both still in `GET /models`, neither able to answer. `nemotron-3.5-lightning-free`
-# was this deployment's default model, chosen for being the fastest thing on the tier at
-# 2.2s, and it now returns an empty stream; `nemotron-3-ultra-free` was what an automatic
-# failover reached for. The same two models on OpenRouter return zero chunks as well, so
-# this is the model family rather than the gateway, and no amount of retrying reaches an
-# answer through them.
-#
-# Left in `models` above rather than deleted from it, deliberately: that list is the
-# preference order, this list is what is offered, and a model that comes back should come
-# back at the rank it had. `lineup_check.py` takes a name off here the moment a probe
-# answers.
-deny = [
-    "deepseek-v4-flash-free",
-    "muse-spark-1.2-contributor-free",
-    # Added by hand, and how it got here is the point. `tools/lineup_check.py` had
-    # already found it and proposed it on the `lineup/auto` branch; that PR was closed
-    # unmerged because the Zen lineup is not what answers. It is what answers on a
-    # FAILOVER, and an audit of 13 real turns then measured this: the router returned an
-    # empty answer on 9 of them, every one failed over to Zen, and Zen answered
-    # `HTTP 500 Internal server error` EVERY time — so the reader got
-    # "The assistant is temporarily unavailable" instead of an answer on most questions.
-    # The automation was right and the close was wrong.
-    "muse-spark-1.3-contributor-free",
-    "nemotron-3-ultra-free",
-    "nemotron-3.5-lightning-free",
-]
-deny_env = "SAGE_ZEN_DENY"
-free_marks = ["-free", "big-pickle"]
-free_marks_env = "SAGE_ZEN_FREE_MARKS"
-# Off for a deployment with a paid Zen balance, which should see everything it can use.
+# 56 -> 3, and no `deny` needed: each of these three marks is unique as a substring
+# across everything the API serves. `gemini-2.5-flash` was not — it also caught the
+# tts, image, lite and native-audio variants built on it, which is what the deny list
+# that used to be here existed to undo.
 free_only = true
-free_only_env = "SAGE_ZEN_FREE_ONLY"
+free_marks = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]
+free_marks_env = "SAGE_GOOGLE_FREE_MARKS"
+

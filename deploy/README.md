@@ -1,11 +1,5 @@
 # Deploying Sage to Cloud Run
 
-**Live:** <https://sage-48371073389.us-central1.run.app> — project `sage-rcc-8dbf5f`,
-region `us-central1`, first deployed 2026-09-14. Cloud Run also answers on the legacy
-hostname `https://sage-tkbkdk3uka-uc.a.run.app`; both point at the same service, and
-the URL is stable across redeploys because it is derived from the service name,
-region and project rather than the revision.
-
 `cloudrun.sh` does everything that can be scripted. What is left here is the part
 that needs a browser and a human.
 

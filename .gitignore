@@ -39,3 +39,6 @@ tools/*.html
 # so "missing since" is a date rather than "gone today, every day", and it lives in the
 # Actions cache between runs. Losing it costs one run's worth of accrual.
 report/lineup.json
+
+# Billing and account specifics. The repo is public.
+deploy/ACCOUNT-NOTES.md

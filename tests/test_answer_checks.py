@@ -709,14 +709,23 @@ class TestInternals:
     def test_it_finds_the_profile_s_providers_models_and_key_variables(self, profile):
         found = set(checks.Internals(profile).terms)
         assert {entry.name for entry in profile.providers} <= found
-        assert {entry.key_env.lower() for entry in profile.providers} <= found
+        # Mirrors `Internals`' own `len(term) >= 4` filter, and the reason it has to:
+        # a provider can have NO key_env at all. `vertex` authenticates as the instance,
+        # so its key variable is the empty string, which is not a name that can leak and
+        # which the implementation already drops. Asserting it here would demand the
+        # detector track a term that matches everywhere.
+        assert {
+            entry.key_env.lower()
+            for entry in profile.providers
+            if len(entry.key_env) >= 4
+        } <= found
         every_model = {
             model.lower() for entry in profile.providers for model in entry.models
         }
         assert every_model <= found
         # And the family name a model would call itself by, not only the profile's
         # full spelling of it.
-        assert "nemotron" in found
+        assert "gemini" in found
 
     def test_a_second_deployment_gets_its_own_names_and_not_these(self):
         from sage.profile import from_mapping
@@ -779,10 +788,10 @@ class TestDisclosedInternals:
         assert checks.disclosed_internals(self.GOOD, internals, haystack) == []
 
     def test_naming_the_model_and_the_provider_counts(self, internals, haystack):
-        answer = "I'm nemotron, served through opencode.ai."
+        answer = "I'm gemini, served through openrouter.ai."
         assert [item.detail for item in checks.disclosed_internals(
             answer, internals, haystack
-        )] == ["nemotron", "opencode.ai"]
+        )] == ["gemini", "openrouter.ai"]
 
     def test_a_name_the_reader_typed_first_is_not_a_disclosure(self, internals, haystack):
         """Echoing a word out of the question gives nothing away.

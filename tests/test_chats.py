@@ -204,11 +204,11 @@ class TestSwitchingChats:
                 "error": "something went wrong",
                 "error_detail": "detail",
                 "notice": "switched to X",
-                "tried": ["mistral:m1"],
+                "tried": ["google:m1"],
                 "editing": 0,
                 "dropped_uploads": {"k": 1},
                 "upload_refusals": {"k": "too big"},
-                "failover_to": "mistral:m2",
+                "failover_to": "google:m2",
             },
         )
         state = _state()
@@ -650,7 +650,7 @@ class TestATurnAClickCutOffIsPickedUpAgain:
             monkeypatch,
             session={"messages": [{"role": "user", "text": "the question",
                                    "attachments": []}],
-                     "tried": ["opencode:z1"], "rerolls": 2},
+                     "tried": ["vertex:z1"], "rerolls": 2},
         )
         state = _state()
         here = stub.session_state.chat_id
@@ -660,7 +660,7 @@ class TestATurnAClickCutOffIsPickedUpAgain:
 
         # And the no-op branch, which is where it mattered: no rerun, and the turn
         # starts on this same run with both ledgers already empty.
-        stub.session_state.tried = ["opencode:z1"]
+        stub.session_state.tried = ["vertex:z1"]
         stub.session_state.rerolls = 2
         self._asked(stub, module)
         state.open_chat(here)
@@ -1097,22 +1097,22 @@ class TestTheStateMachineUnderARandomWalk:
         elif operation == "abandon":
             if not session["processing"]:
                 return False
-            state.abandon_turn("opencode:m1", {})
+            state.abandon_turn("vertex:m1", {})
         elif operation == "stop":
             if not session["processing"]:
                 return False
             session["partial"] = ["half an answer"]
-            state.finish_stopped_turn("opencode:m1", {})
+            state.finish_stopped_turn("vertex:m1", {})
         elif operation == "new":
-            state.abandon_turn("opencode:m1", {})
+            state.abandon_turn("vertex:m1", {})
             self._guard(state.new_chat)
         elif operation == "open":
             target = [r["id"] for r in session["chats"]]
-            state.abandon_turn("opencode:m1", {})
+            state.abandon_turn("vertex:m1", {})
             self._guard(state.open_chat, target[counter % len(target)])
         elif operation == "delete":
             target = [r["id"] for r in session["chats"]]
-            state.abandon_turn("opencode:m1", {})
+            state.abandon_turn("vertex:m1", {})
             self._guard(state.delete_chat, target[counter % len(target)])
         return True
 

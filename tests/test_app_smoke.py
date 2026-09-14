@@ -28,7 +28,12 @@ def tool_call(index, cid, name, arguments):
 class ScriptedProvider:
     """Replays a list of turns, one per `stream(...)` call."""
 
-    def __init__(self, turns, error=None, name="mistral", models=("m1",)):
+    # `name` must be a provider the PROFILE declares: `run_app` registers this object
+    # under it and `providers.parse_key` rejects a model key whose provider half is not
+    # in the lineup, so a stub named after a provider the deployment has dropped is
+    # never reached and the turn simply does not happen. It read as an answer coming
+    # back as the question.
+    def __init__(self, turns, error=None, name="google", models=("m1",)):
         self.name = name
         self.turns = list(turns)
         self.error = error
@@ -70,10 +75,12 @@ def clear_provider_keys(monkeypatch):
 
 
 def run_app(monkeypatch, *, client=None, session=None, extra=None,
-            opencode=False, openrouter=False, **stub_kwargs):
+            second=False, openrouter=False, **stub_kwargs):
     """Import app.py under the stub and return (stub, module-or-None).
 
-    `opencode=True` configures a second provider, so more than one model is offered.
+    `second=True` configures a second provider, so more than one model is offered.
+    (It was `second=True` until the profile dropped that provider; `vertex` plays the
+    same role and, like the old one, is not the `reasoning` entry.)
     `openrouter=True` configures the one provider in the shipped profile that declares
     `reasoning`, which is what draws the Think pill — set here rather than by a caller's
     `setenv`, because `clear_provider_keys` below runs after the caller and would undo
@@ -81,9 +88,16 @@ def run_app(monkeypatch, *, client=None, session=None, extra=None,
     draw.
     """
     clear_provider_keys(monkeypatch)
-    monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
-    if opencode:
-        monkeypatch.setenv("OPENCODE_API_KEY", "sk-zen-test")
+    # SOME provider must hold a key or the app renders its no-key gate instead of a
+    # conversation, and every test about the page then asserts against nothing. This
+    # was MISTRAL_API_KEY until the profile stopped declaring that provider, at which
+    # point twelve tests failed on `editing is None` — a symptom three layers from the
+    # cause. `google` is the right stand-in: it is in the shipped lineup, it is keyed,
+    # and it is not the `reasoning` one, so it does not draw the Think pill that
+    # `openrouter=True` exists to control.
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    if second:
+        monkeypatch.setenv("SAGE_VERTEX", "1")
     if openrouter:
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     stub = stub_streamlit.install(**stub_kwargs)
@@ -156,7 +170,7 @@ class TestWelcome:
         stub = stub_streamlit.install()
         with pytest.raises(stub_streamlit.Stop):
             import app  # noqa: F401, PLC0415
-        assert any("MISTRAL_API_KEY" in error for error in stub.errors)
+        assert any("OPENROUTER_API_KEY" in error for error in stub.errors)
 
 
 class TestTurnLoop:
@@ -594,7 +608,7 @@ class TestTheThinkToggle:
         # a Mistral model first in the lineup and made it the one answering.
         return run_app(
             monkeypatch, client=provider, session=session,
-            extra={"mistral": ScriptedProvider([], name="mistral", models=())},
+            extra={"google": ScriptedProvider([], name="google", models=())},
             **kwargs)
 
     def openrouter(self, monkeypatch, session, **kwargs):
@@ -605,7 +619,7 @@ class TestTheThinkToggle:
     def zen(self, monkeypatch, session, **kwargs):
         """And one that does not. Same wire format, no `reasoning` field."""
         return self._run(monkeypatch, session, "opencode", "big-pickle",
-                         opencode=True, **kwargs)
+                         second=True, **kwargs)
 
     def test_the_pill_is_drawn_where_the_provider_takes_the_parameter(self, monkeypatch):
         stub, _m = self.openrouter(monkeypatch, self.session())
@@ -662,18 +676,18 @@ class TestComposerStrip:
         )
 
     def two_providers(self, monkeypatch, session, **kwargs):
-        mistral = ScriptedProvider([], name="mistral", models=("mistral-small-latest",))
+        mistral = ScriptedProvider([], name="google", models=("mistral-small-latest",))
         # Serving the model the default names — and naming it here rather than reading
         # `config.DEFAULT_MODEL`, so the picker shows what a fresh session actually
         # starts on whatever the shipped deployment has chosen this week.
         monkeypatch.setattr(config, "DEFAULT_MODEL",
-                            "opencode:nemotron-3.5-lightning-free")
+                            "vertex:nemotron-3.5-lightning-free")
         zen = ScriptedProvider(
-            [], name="opencode",
+            [], name="vertex",
             models=("nemotron-3.5-lightning-free", "deepseek-v4-flash-free"),
         )
-        return run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                       session=session, opencode=True, **kwargs)
+        return run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                       session=session, second=True, **kwargs)
 
     def test_the_controls_live_in_the_strip_under_the_input(self, monkeypatch):
         stub, _m = self.two_providers(monkeypatch, {"messages": [], "processing": False})
@@ -1331,11 +1345,11 @@ class TestToollessModels:
     def test_a_configured_toolless_model_retrieves_up_front(self, monkeypatch):
         # config reads env at import, so patch the value the app actually uses.
         monkeypatch.setattr(config, "TOOLLESS_MODELS", ("big-pickle",))
-        zen = ScriptedProvider([[event("Your quota is 30 GB.")]], name="opencode",
+        zen = ScriptedProvider([[event("Your quota is 30 GB.")]], name="vertex",
                                models=("big-pickle",))
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=self.session("opencode:big-pickle"), opencode=True)
+        mistral = ScriptedProvider([], name="google", models=("m1",))
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                           session=self.session("vertex:big-pickle"), second=True)
         assert zen.calls == 1
         assert zen.tools_seen == [None], "tools must not be offered"
         sent = "\n".join(m["content"] for m in zen.sent[0])
@@ -1360,13 +1374,13 @@ class TestToollessModels:
         monkeypatch.setattr(config, "TOOLLESS_MODELS", ("big-pickle",))
         zen = ScriptedProvider(
             [[event("I could not find that in the documentation.")]],
-            name="opencode", models=("big-pickle",),
+            name="vertex", models=("big-pickle",),
         )
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
-        session = self.session("opencode:big-pickle")
+        mistral = ScriptedProvider([], name="google", models=("m1",))
+        session = self.session("vertex:big-pickle")
         session["messages"][0]["text"] = "sbatchh"
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=session, opencode=True)
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                           session=session, second=True)
         sent = "\n".join(m["content"] for m in zen.sent[0])
         assert "No matching RCC documentation was found" in sent
         assert "help@rcc.uchicago.edu" in sent
@@ -1391,7 +1405,7 @@ class TestToollessModels:
 
         provider = RejectsTools([], models=("m1",))
         stub, _m = run_app(monkeypatch, client=provider,
-                           session=self.session("mistral:m1"))
+                           session=self.session("google:m1"))
         assert provider.tools_seen[0] is not None
         assert provider.tools_seen[-1] is None
         assert stub.session_state["messages"][-1]["text"] == "Answered without tools."
@@ -1406,7 +1420,7 @@ class TestQuotaFailover:
             "messages": [{"role": "user", "text": "what can you do?",
                           "attachments": []}],
             "processing": True,
-            "model": "mistral:m1",
+            "model": "google:m1",
         }
 
     @staticmethod
@@ -1428,12 +1442,12 @@ class TestQuotaFailover:
         assert not llm.classify(self._payment_required()).retryable
 
     def test_a_spent_quota_switches_to_the_other_provider(self, monkeypatch):
-        mistral = ScriptedProvider([], name="mistral", models=("m1",),
+        mistral = ScriptedProvider([], name="google", models=("m1",),
                                    error=self._payment_required())
-        zen = ScriptedProvider([], name="opencode", models=("deepseek-v4-flash-free",))
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=self.session(), opencode=True)
-        assert stub.session_state["model"] == "opencode:deepseek-v4-flash-free"
+        zen = ScriptedProvider([], name="vertex", models=("deepseek-v4-flash-free",))
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                           session=self.session(), second=True)
+        assert stub.session_state["model"] == "vertex:deepseek-v4-flash-free"
         assert stub.session_state["processing"] is True, "the turn should be retried"
         assert stub.session_state["error"] is None
         assert stub.session_state["notice"] == "", (
@@ -1450,28 +1464,28 @@ class TestQuotaFailover:
         reader had asked for — "this is noise to users", "the users don't need to know
         any shit like this". The status row already says the turn is working.
         """
-        mistral = ScriptedProvider([], name="mistral", models=("m1",),
+        mistral = ScriptedProvider([], name="google", models=("m1",),
                                    error=self._payment_required())
-        zen = ScriptedProvider([], name="opencode", models=("z1",))
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=self.session(), opencode=True)
+        zen = ScriptedProvider([], name="vertex", models=("z1",))
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                           session=self.session(), second=True)
         assert stub.session_state["notice"] == ""
         # Still a failover: the state that matters is unchanged.
-        assert stub.session_state["model"] == "opencode:z1"
+        assert stub.session_state["model"] == "vertex:z1"
         assert stub.session_state["processing"] is True
-        assert stub.session_state["tried"] == ["mistral:m1"]
+        assert stub.session_state["tried"] == ["google:m1"]
 
     def test_and_says_nothing_once_the_answer_lands_either(self, monkeypatch):
         """The state a failover rerun arrives in: switched, and about to answer."""
-        zen = ScriptedProvider([[event("Zen answered.")]], name="opencode",
+        zen = ScriptedProvider([[event("Zen answered.")]], name="vertex",
                                models=("z1",))
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
+        mistral = ScriptedProvider([], name="google", models=("m1",))
         session = self.session() | {
-            "model": "opencode:z1",
-            "tried": ["mistral:m1"],
+            "model": "vertex:z1",
+            "tried": ["google:m1"],
         }
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=session, opencode=True)
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                           session=session, second=True)
         assert stub.session_state["notice"] == ""
         assert stub.session_state["messages"][-1]["text"] == "Zen answered."
         assert stub.session_state["error"] is None
@@ -1482,19 +1496,19 @@ class TestQuotaFailover:
         """A "retrying with Zen…" banner above "could not complete that request"
         is the UI arguing with itself. One of them has to go, and it is not the
         error."""
-        zen = ScriptedProvider([], name="opencode", models=("z1",),
+        zen = ScriptedProvider([], name="vertex", models=("z1",),
                                error=self._payment_required())
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
+        mistral = ScriptedProvider([], name="google", models=("m1",))
         session = self.session() | {
-            "model": "opencode:z1",
+            "model": "vertex:z1",
             # The lineup is m1 and z1, and m1 has had its turn: nothing is left.
-            "tried": ["mistral:m1"],
+            "tried": ["google:m1"],
         }
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=session, opencode=True)
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                           session=session, second=True)
         assert stub.session_state["error"], "the second failure must surface"
         assert stub.session_state["notice"] == ""
-        assert "opencode:z1" in stub.session_state["error_detail"], (
+        assert "vertex:z1" in stub.session_state["error_detail"], (
             "the details must name the model that actually failed"
         )
 
@@ -1502,28 +1516,28 @@ class TestQuotaFailover:
         """Advice to "switch to another model" is useless if the control is at the
         other end of the page — and worse than useless if that control is the one
         that failed to render."""
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
-        zen = ScriptedProvider([], name="opencode", models=("z1",))
+        mistral = ScriptedProvider([], name="google", models=("m1",))
+        zen = ScriptedProvider([], name="vertex", models=("z1",))
         session = self.session() | {
             "processing": False,
             "error": "This model is out of credit or its quota is used up.",
             "error_detail": "HTTP 402",
         }
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=session, opencode=True)
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                           session=session, second=True)
         assert stub.button_labels.get("switch-model") == "→ Use z1"
 
     def test_taking_that_switch_reruns_the_question_on_the_new_model(self, monkeypatch):
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
-        zen = ScriptedProvider([], name="opencode", models=("z1",))
+        mistral = ScriptedProvider([], name="google", models=("m1",))
+        zen = ScriptedProvider([], name="vertex", models=("z1",))
         session = self.session() | {
             "processing": False, "error": "out of credit", "error_detail": "HTTP 402",
-            "tried": ["mistral:m1"],
+            "tried": ["google:m1"],
         }
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=session, opencode=True,
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                           session=session, second=True,
                            buttons={"switch-model": True})
-        assert stub.session_state["model"] == "opencode:z1"
+        assert stub.session_state["model"] == "vertex:z1"
         assert stub.session_state["processing"] is True
         assert stub.session_state["error"] is None
         assert stub.session_state["tried"] == [], (
@@ -1553,16 +1567,16 @@ class TestQuotaFailover:
         `render_error_card` read `view.fallback` without looking at what had gone
         wrong. Try again stays: clearing the chat and pressing it is the remedy.
         """
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
-        zen = ScriptedProvider([], name="opencode", models=("z1",))
+        mistral = ScriptedProvider([], name="google", models=("m1",))
+        zen = ScriptedProvider([], name="vertex", models=("z1",))
         session = self.session() | {
             "processing": False,
             "error": llm.AssistantError("context").user_message,
             "error_detail": "HTTP 400 … maximum context length is 8192 tokens",
             "error_kind": "context",
         }
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=session, opencode=True)
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                           session=session, second=True)
         assert "retry" in stub.button_labels
         assert "switch-model" not in stub.button_labels, (
             "a switch is offered for a failure that switching cannot help"
@@ -1570,16 +1584,16 @@ class TestQuotaFailover:
 
     def test_every_other_kind_still_gets_the_switch(self, monkeypatch):
         """The guard is one kind wide. A quota with somewhere to go still says so."""
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
-        zen = ScriptedProvider([], name="opencode", models=("z1",))
+        mistral = ScriptedProvider([], name="google", models=("m1",))
+        zen = ScriptedProvider([], name="vertex", models=("z1",))
         session = self.session() | {
             "processing": False,
             "error": llm.AssistantError("quota").user_message,
             "error_detail": "HTTP 402",
             "error_kind": "quota",
         }
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=session, opencode=True)
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                           session=session, second=True)
         assert stub.button_labels.get("switch-model") == "→ Use z1"
 
     def test_a_clean_answer_clears_a_notice_from_an_earlier_turn(self, monkeypatch):
@@ -1597,20 +1611,20 @@ class TestQuotaFailover:
         the error card is what is left. There is no hop budget doing this work: a
         finite lineup asked without repeats terminates on its own.
         """
-        mistral = ScriptedProvider([], name="mistral", models=("m1",),
+        mistral = ScriptedProvider([], name="google", models=("m1",),
                                    error=self._payment_required())
-        zen = ScriptedProvider([], name="opencode", models=("z1",),
+        zen = ScriptedProvider([], name="vertex", models=("z1",),
                                error=self._payment_required())
         session = self.session()
-        session["tried"] = ["mistral:m1"]
-        session["model"] = "opencode:z1"
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=session, opencode=True)
+        session["tried"] = ["google:m1"]
+        session["model"] = "vertex:z1"
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                           session=session, second=True)
         assert stub.session_state["processing"] is False
         assert stub.session_state["error"], "the second failure must surface"
 
     def test_with_one_provider_the_error_surfaces_instead(self, monkeypatch):
-        mistral = ScriptedProvider([], name="mistral", models=("m1",),
+        mistral = ScriptedProvider([], name="google", models=("m1",),
                                    error=self._payment_required())
         stub, _m = run_app(monkeypatch, client=mistral, session=self.session())
         assert stub.session_state["processing"] is False
@@ -1665,18 +1679,18 @@ class TestASpentFreeAllowance:
         whose own key may be out of credit. In the deployment this came from, it was.
         """
         zen = ScriptedProvider(
-            [], name="opencode", error=self._free_limit_429(),
+            [], name="vertex", error=self._free_limit_429(),
             models=("deepseek-v4-flash-free", "nemotron-3-ultra-free"),
         )
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
+        mistral = ScriptedProvider([], name="google", models=("m1",))
         session = {
             "messages": [{"role": "user", "text": "hello", "attachments": []}],
             "processing": True,
-            "model": "opencode:deepseek-v4-flash-free",
+            "model": "vertex:deepseek-v4-flash-free",
         }
-        stub, _m = run_app(monkeypatch, client=zen, extra={"mistral": mistral},
-                           session=session, opencode=True)
-        assert stub.session_state["model"] == "opencode:nemotron-3-ultra-free"
+        stub, _m = run_app(monkeypatch, client=zen, extra={"google": mistral},
+                           session=session, second=True)
+        assert stub.session_state["model"] == "vertex:nemotron-3-ultra-free"
         assert stub.session_state["processing"] is True, "the turn should be retried"
         assert stub.session_state["error"] is None
         assert stub.session_state["notice"] == ""
@@ -1689,19 +1703,19 @@ class TestASpentFreeAllowance:
         every model asked, there is no alternative left and the turn stops on an error
         card the reader can act on rather than on a spinner."""
         zen = ScriptedProvider(
-            [], name="opencode", error=self._free_limit_429(),
+            [], name="vertex", error=self._free_limit_429(),
             models=("nemotron-3.5-lightning-free", "deepseek-v4-flash-free",
                     "hy3-free", "mimo-v2.5-free", "big-pickle"),
         )
         session = {
             "messages": [{"role": "user", "text": "hello", "attachments": []}],
             "processing": True,
-            "model": "opencode:nemotron-3.5-lightning-free",
+            "model": "vertex:nemotron-3.5-lightning-free",
             # Four of the five already refused this turn, and this is the fifth.
-            "tried": ["opencode:deepseek-v4-flash-free", "opencode:hy3-free",
-                      "opencode:mimo-v2.5-free", "opencode:big-pickle"],
+            "tried": ["vertex:deepseek-v4-flash-free", "vertex:hy3-free",
+                      "vertex:mimo-v2.5-free", "vertex:big-pickle"],
         }
-        stub, _m = run_app(monkeypatch, client=zen, session=session, opencode=True)
+        stub, _m = run_app(monkeypatch, client=zen, session=session, second=True)
         assert stub.session_state["processing"] is False, "it must not spin"
         assert "free allowance" in stub.session_state["error"]
         assert stub.session_state["notice"] == "", (
@@ -1786,16 +1800,16 @@ class TestSwitchingWithinAProvider:
             "processing": False,
             "error": "This model has used up its free allowance for now.",
             "error_detail": "HTTP 429",
-            "model": "opencode:deepseek-v4-flash-free",
+            "model": "vertex:deepseek-v4-flash-free",
         }
 
     def test_it_offers_another_model_on_the_same_provider(self, monkeypatch):
         zen = ScriptedProvider(
-            [], name="opencode",
+            [], name="vertex",
             models=("deepseek-v4-flash-free", "nemotron-3-ultra-free"),
         )
         stub, _m = run_app(monkeypatch, client=zen, session=self.session(),
-                           opencode=True)
+                           second=True)
         assert stub.button_labels.get("switch-model") == "→ Use nemotron-3-ultra"
 
     def test_it_skips_a_sibling_that_shares_the_daily_bucket(self, monkeypatch):
@@ -1804,12 +1818,12 @@ class TestSwitchingWithinAProvider:
         one counter. Hopping from one to the other hands the turn a counter that is
         already spent by definition — the failover has to leave the family."""
         zen = ScriptedProvider(
-            [], name="opencode",
+            [], name="vertex",
             models=("nemotron-3.5-lightning-free", "nemotron-3-ultra-free",
                     "deepseek-v4-flash-free"),
         )
-        session = self.session() | {"model": "opencode:nemotron-3.5-lightning-free"}
-        stub, _m = run_app(monkeypatch, client=zen, session=session, opencode=True)
+        session = self.session() | {"model": "vertex:nemotron-3.5-lightning-free"}
+        stub, _m = run_app(monkeypatch, client=zen, session=session, second=True)
         assert stub.button_labels.get("switch-model") == "→ Use deepseek-v4-flash"
 
     def test_a_chain_of_hops_never_returns_to_a_spent_family(self, monkeypatch):
@@ -1844,22 +1858,22 @@ class TestSwitchingWithinAProvider:
         """Leaving the family is a preference, not a requirement: with only siblings
         left, one of them is the last thing between the reader and a dead end."""
         zen = ScriptedProvider(
-            [], name="opencode",
+            [], name="vertex",
             models=("nemotron-3.5-lightning-free", "nemotron-3-ultra-free"),
         )
-        session = self.session() | {"model": "opencode:nemotron-3.5-lightning-free"}
-        stub, _m = run_app(monkeypatch, client=zen, session=session, opencode=True)
+        session = self.session() | {"model": "vertex:nemotron-3.5-lightning-free"}
+        stub, _m = run_app(monkeypatch, client=zen, session=session, second=True)
         assert stub.button_labels.get("switch-model") == "→ Use nemotron-3-ultra"
 
     def test_another_provider_is_still_preferred_when_there_is_one(self, monkeypatch):
         """A spent *key* kills every model behind it, so a different key comes first."""
         zen = ScriptedProvider(
-            [], name="opencode",
+            [], name="vertex",
             models=("deepseek-v4-flash-free", "nemotron-3-ultra-free"),
         )
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
-        stub, _m = run_app(monkeypatch, client=mistral, extra={"opencode": zen},
-                           session=self.session(), opencode=True)
+        mistral = ScriptedProvider([], name="google", models=("m1",))
+        stub, _m = run_app(monkeypatch, client=mistral, extra={"vertex": zen},
+                           session=self.session(), second=True)
         assert stub.button_labels.get("switch-model") == "→ Use m1"
 
 
@@ -1891,7 +1905,7 @@ class TestWalkingTheLineup:
         lineup where the fourth one works is expressible.
         """
 
-        name = "opencode"
+        name = "vertex"
 
         def __init__(self, ids, answers=(), error=None):
             self._ids = tuple(ids)
@@ -1916,7 +1930,7 @@ class TestWalkingTheLineup:
             "messages": [{"role": "user", "text": "what is a service unit?",
                           "attachments": []}],
             "processing": True,
-            "model": "opencode:z1",
+            "model": "vertex:z1",
         } | extra
 
     CARRIED = ("messages", "processing", "model", "tried", "notice")
@@ -1930,7 +1944,7 @@ class TestWalkingTheLineup:
         session = session or self.session()
         for _ in range(runs):
             stub, _module = run_app(monkeypatch, client=provider, session=session,
-                                    opencode=True)
+                                    second=True)
             state = stub.session_state
             if not state.get("processing"):
                 return stub
@@ -1941,13 +1955,13 @@ class TestWalkingTheLineup:
         """The bug, at its smallest: one model says nothing, so ask another."""
         zen = self.Lineup(self.LINEUP)
         stub, _module = run_app(monkeypatch, client=zen, session=self.session(),
-                                opencode=True)
+                                second=True)
         assert stub.session_state["error"] is None, (
             "an empty answer is not something to show a card about while models remain"
         )
-        assert stub.session_state["model"] != "opencode:z1"
+        assert stub.session_state["model"] != "vertex:z1"
         assert stub.session_state["processing"] is True, "the turn should be retried"
-        assert stub.session_state["tried"] == ["opencode:z1"]
+        assert stub.session_state["tried"] == ["vertex:z1"]
 
     def test_the_walk_says_nothing_while_it_walks(self, monkeypatch):
         """It used to narrate every hop — "That model is unavailable (it returned no
@@ -1955,7 +1969,7 @@ class TestWalkingTheLineup:
         and nothing else. Both are gone: "this is noise to users"."""
         zen = self.Lineup(self.LINEUP)
         stub, _module = run_app(monkeypatch, client=zen, session=self.session(),
-                                opencode=True)
+                                second=True)
         assert stub.session_state["notice"] == ""
         assert stub.session_state["processing"] is True, "and it is still walking"
 
@@ -1986,7 +2000,7 @@ class TestWalkingTheLineup:
         reply = stub.session_state["messages"][-1]
         assert reply["role"] == "assistant"
         assert reply["text"] == "A service unit is an hour."
-        assert reply["model"] == "opencode:z4"
+        assert reply["model"] == "vertex:z4"
         assert stub.session_state["error"] is None
         # And nothing on the page about the three models it went through to get here.
         assert stub.session_state["notice"] == ""
@@ -2013,7 +2027,7 @@ class TestWalkingTheLineup:
         error.status_code = 400
         zen = self.Lineup(self.LINEUP, error=error)
         stub, _module = run_app(monkeypatch, client=zen, session=self.session(),
-                                opencode=True)
+                                second=True)
         assert zen.asked == ["z1"], "it must not try the same oversized request again"
         assert "too long" in stub.session_state["error"]
         assert stub.session_state["processing"] is False
@@ -2025,7 +2039,7 @@ class TestWalkingTheLineup:
         monkeypatch.setattr(config, "MAX_MODEL_ATTEMPTS", 1)
         zen = self.Lineup(self.LINEUP)
         stub, _module = run_app(monkeypatch, client=zen, session=self.session(),
-                                opencode=True)
+                                second=True)
         assert zen.asked == ["z1"]
         assert stub.session_state["error"] == llm.AssistantError("empty").user_message
         assert stub.session_state["processing"] is False
@@ -2273,7 +2287,7 @@ class TestAttachments:
             return self._data
 
     def app(self, monkeypatch, uploads, session=None, **stub_kwargs):
-        mistral = ScriptedProvider([], name="mistral", models=("mistral-small-latest",))
+        mistral = ScriptedProvider([], name="google", models=("mistral-small-latest",))
         return run_app(
             monkeypatch, client=mistral, upload=uploads,
             session={"messages": [], "processing": False, **(session or {})},
@@ -2519,9 +2533,9 @@ class TestVisionModels:
     def content_sent(self, monkeypatch, model_id):
         """The user turn as the provider received it."""
         provider = ScriptedProvider([[event("That is an out-of-memory kill.")]],
-                                    name="mistral", models=(model_id,))
+                                    name="google", models=(model_id,))
         run_app(monkeypatch, client=provider,
-                session=self.session(f"mistral:{model_id}"))
+                session=self.session(f"google:{model_id}"))
         assert provider.calls == 1
         return provider.sent[0][-1]["content"]
 
@@ -2551,7 +2565,7 @@ class TestComposerReset:
     """
 
     def app(self, monkeypatch, session=None, **kwargs):
-        client = ScriptedProvider([], name="mistral", models=("m1",))
+        client = ScriptedProvider([], name="google", models=("m1",))
         return run_app(monkeypatch, client=client,
                        session={"processing": False, **(session or {})}, **kwargs)
 
@@ -2918,23 +2932,23 @@ class TestUsageLimits:
             limits.Limiter, "check",
             lambda self, who, now: limits.Verdict(False, 30.0, "Not right now."),
         )
-        mistral = ScriptedProvider([], name="mistral", models=("m1",))
-        zen = ScriptedProvider([], name="opencode", models=("z1",))
+        mistral = ScriptedProvider([], name="google", models=("m1",))
+        zen = ScriptedProvider([], name="vertex", models=("z1",))
         stub, _ = run_app(
             monkeypatch,
             chat_input=None,
-            opencode=True,
+            second=True,
             client=mistral,
-            extra={"opencode": zen},
+            extra={"vertex": zen},
             buttons={"switch-model": True},
             session={
                 "messages": [{"role": "user", "text": "why did my job fail?",
                               "attachments": []}],
-                "model": "mistral:m1",
+                "model": "google:m1",
                 "error": "This model is out of credit or its quota is used up.",
             },
         )
-        assert stub.session_state["model"] == "opencode:z1", "the model moved"
+        assert stub.session_state["model"] == "vertex:z1", "the model moved"
         assert stub.session_state["processing"] is False, "but no turn was started"
         assert stub.session_state["notice"] == "Not right now."
         assert mistral.calls == 0 and zen.calls == 0, "and nothing was spent"
@@ -3061,7 +3075,7 @@ class TestLoginGate:
 
     def test_a_configured_gate_stops_an_anonymous_visitor(self, monkeypatch):
         configure(monkeypatch, REQUIRE_LOGIN=True)
-        monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
         stub = with_auth(stub_streamlit.install(chat_input=None))
         with pytest.raises(stub_streamlit.Stop):
             import app  # noqa: F401,PLC0415
@@ -3075,7 +3089,7 @@ class TestLoginGate:
     def test_a_wrong_domain_is_refused(self, monkeypatch):
         configure(monkeypatch, REQUIRE_LOGIN=True,
                   ALLOWED_EMAIL_DOMAINS=("uchicago.edu",))
-        monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
         stub = with_auth(
             stub_streamlit.install(chat_input=None),
             is_logged_in=True, email="someone@example.com", sub="abc",
@@ -3087,7 +3101,7 @@ class TestLoginGate:
     def test_the_right_domain_gets_in(self, monkeypatch):
         configure(monkeypatch, REQUIRE_LOGIN=True,
                   ALLOWED_EMAIL_DOMAINS=("uchicago.edu",))
-        monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
         with_auth(
             stub_streamlit.install(chat_input=None),
             is_logged_in=True, email="someone@uchicago.edu", sub="abc",
@@ -3174,7 +3188,7 @@ class TestSessionsAreNotShared:
         stub, state, _ = self.sessions(1)
         stub.session_state["attachments"].append("private.pdf")
         stub.session_state["dropped_uploads"]["k"] = 1
-        stub.session_state["tried"].append("opencode:m1")
+        stub.session_state["tried"].append("vertex:m1")
         stub.session_state.clear()
         state.initialise()
         assert stub.session_state["attachments"] == []

@@ -114,10 +114,10 @@ class TestStopping:
         """Left set, the switch fires on the next run and the turn the reader just
         stopped starts over on a different model."""
         session = self.session()
-        session["failover_to"] = "opencode:other"
+        session["failover_to"] = "vertex:other"
         session["switched_from"] = ("mistral-small-latest", "quota")
         stub, _module = run_app(
-            monkeypatch, client=ScriptedProvider([]), session=session, opencode=True
+            monkeypatch, client=ScriptedProvider([]), session=session, second=True
         )
         assert "failover_to" not in stub.session_state
         assert stub.session_state["processing"] is False

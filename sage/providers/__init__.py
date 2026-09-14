@@ -71,6 +71,19 @@ def _mistral(entry: ProviderEntry, api_key: str) -> Provider:
 adapters.register("mistral", _mistral)
 
 
+def _vertex(entry: ProviderEntry, api_key: str) -> Provider:
+    # On demand for symmetry with mistral, though this one has no extra dependency:
+    # it is a subclass of the OpenAI adapter that swaps a static key for a token the
+    # instance mints for itself. See sage/providers/vertex.py for why that is worth
+    # a module.
+    from .vertex import VertexProvider  # noqa: PLC0415
+
+    return VertexProvider(entry, api_key)
+
+
+adapters.register("vertex", _vertex)
+
+
 def names() -> tuple[str, ...]:
     """Every provider the profile declares, in preference order."""
     return tuple(item.name for item in _active().providers)

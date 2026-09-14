@@ -734,9 +734,14 @@ class Internals:
                 # `big-pickle` is a word and the head of `mimo-v2.5-free` is too short to
                 # be one safely; both would be dropped by the corpus below anyway, and a
                 # rule that does not depend on that is the better rule.
+                # And again after any vendor prefix. Vertex spells its ids
+                # `google/gemini-3.8-flash`, so the head alone is `google/gemini` —
+                # which no model would ever call itself. The bare family name is the
+                # one that leaks.
                 head = model.split("-", 1)[0]
-                if len(head) >= 5:
-                    terms.add(head)
+                for part in (head, head.rsplit("/", 1)[-1]):
+                    if len(part) >= 5:
+                        terms.add(part)
         self.terms = tuple(sorted(term.lower() for term in terms if len(term) >= 4))
         # Longest first. `re` takes the first alternative that matches at a position, and
         # sorted() puts `opencode` before `opencode.ai` — so the endpoint was reported as
