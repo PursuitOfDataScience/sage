@@ -1,0 +1,86 @@
+# Keep the Cloud Run deployment in step with `main`.
+#
+# Deploy hangs off CI rather than off the push, so a commit that fails lint, the
+# tests or the layout check never reaches the deployment. `workflow_run` gives the
+# SHA CI actually ran on, which is the one to check out -- reading `main` again
+# would deploy whatever landed in the meantime, tested or not.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # Mints the OIDC token Google exchanges for a short-lived access token. Without
+  # this line the auth step fails with a message that does not mention it.
+  id-token: write
+
+env:
+  PROJECT_ID: sage-rcc-8dbf5f
+  REGION: us-central1
+  SERVICE: sage
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    # A completed workflow_run is not a passing one -- `completed` fires for
+    # failure and cancellation too.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # No service-account key anywhere. GitHub mints a short-lived OIDC token for
+      # this run; Google trades it for a ~1h access token, and the provider's
+      # attribute condition means only this repository can make that trade.
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/48371073389/locations/global/workloadIdentityPools/github/providers/github
+          service_account: sage-deployer@sage-rcc-8dbf5f.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy
+        env:
+          SKIP_SETUP: "1"
+          REGION: ${{ env.REGION }}
+          SERVICE: ${{ env.SERVICE }}
+        run: ./deploy/cloudrun.sh
+
+      # A deploy that returns 0 is not a deploy that works: Cloud Run reports the
+      # revision ready as soon as the port is open, which for Streamlit is before
+      # the corpus is indexed.
+      - name: Verify the new revision actually serves
+        run: |
+          URL=$(gcloud run services describe "$SERVICE" --region="$REGION" \
+                  --format='value(status.url)')
+          echo "checking $URL"
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -m 30 "$URL/_stcore/health" || true)
+            [ "$code" = "200" ] && echo "healthy after ${i} attempt(s)" && exit 0
+            sleep 10
+          done
+          echo "service did not become healthy" >&2
+          gcloud run services logs read "$SERVICE" --region="$REGION" --limit=40 >&2
+          exit 1
+
+      - name: Summary
+        run: |
+          echo "### Deployed \`${{ github.event.workflow_run.head_sha || github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          gcloud run services describe "$SERVICE" --region="$REGION" \
+            --format='value(status.url)' >> $GITHUB_STEP_SUMMARY

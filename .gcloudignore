@@ -1,0 +1,48 @@
+# What `gcloud builds submit` uploads as the build context.
+#
+# Without this file gcloud falls back to .gitignore, which keeps .git -- 57 MB of
+# the repo's 65 MB. Excluding it and the non-runtime directories takes the upload
+# to roughly 2 MB, which is the difference between a build that starts immediately
+# and one that spends a minute on transfer.
+#
+# Anything the running app reads must NOT be listed here: app.py, sage/, static/,
+# profiles/, web/ and docs_snapshot.json all ship.
+
+.git/
+.gitignore
+.github/
+.devcontainer/
+
+# Development-only trees. None of these are imported at runtime.
+tests/
+tools/
+evals/
+report/
+
+# `docs/` is NOT a development tree -- it is the primary corpus. `profiles/rcc.toml`
+# indexes it at weight 1.15, ABOVE the scraped `web/` pages, so an image built without
+# it answers every User Guide question from marketing copy or not at all. What is
+# excluded is only the 42 MB of screenshots the markdown links to: the reader follows
+# a citation to docs.rcc.uchicago.edu and sees the picture there, and the source is
+# declared `extensions = [".md"]`, so nothing in the image ever opens them.
+# 72 .md files, 767 KB, ship; 141 images stay behind.
+docs/**/*.png
+docs/**/*.jpg
+docs/**/*.jpeg
+docs/**/*.pptx
+
+# Local artifacts
+.doc-backups/
+.user-guide/
+refresh-docs.log
+*.jsonl
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.claude/
+
+# Never build a key into an image.
+.streamlit/secrets.toml
