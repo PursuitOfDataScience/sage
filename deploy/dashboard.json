@@ -1,0 +1,44 @@
+{
+  "displayName": "Sage — Cloud Run",
+  "mosaicLayout": {
+    "columns": 12,
+    "tiles": [
+      {"width": 6, "height": 4, "xPos": 0, "yPos": 0, "widget": {
+        "title": "Requests by response code",
+        "xyChart": {"dataSets": [{"timeSeriesQuery": {"timeSeriesFilter": {
+          "filter": "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"",
+          "aggregation": {"alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_RATE", "crossSeriesReducer": "REDUCE_SUM", "groupByFields": ["metric.label.\"response_code_class\""]}}}}]}}},
+
+      {"width": 6, "height": 4, "xPos": 6, "yPos": 0, "widget": {
+        "title": "Request latency (p50 / p95 / p99)",
+        "xyChart": {"dataSets": [
+          {"timeSeriesQuery": {"timeSeriesFilter": {"filter": "metric.type=\"run.googleapis.com/request_latencies\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"", "aggregation": {"alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_PERCENTILE_50"}}}},
+          {"timeSeriesQuery": {"timeSeriesFilter": {"filter": "metric.type=\"run.googleapis.com/request_latencies\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"", "aggregation": {"alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_PERCENTILE_95"}}}},
+          {"timeSeriesQuery": {"timeSeriesFilter": {"filter": "metric.type=\"run.googleapis.com/request_latencies\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"", "aggregation": {"alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_PERCENTILE_99"}}}}]}}},
+
+      {"width": 6, "height": 4, "xPos": 0, "yPos": 4, "widget": {
+        "title": "Instances (free tier burns while this is above zero)",
+        "xyChart": {"dataSets": [{"timeSeriesQuery": {"timeSeriesFilter": {
+          "filter": "metric.type=\"run.googleapis.com/container/instance_count\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"",
+          "aggregation": {"alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_MEAN", "crossSeriesReducer": "REDUCE_SUM", "groupByFields": ["metric.label.\"state\""]}}}}]}}},
+
+      {"width": 6, "height": 4, "xPos": 6, "yPos": 4, "widget": {
+        "title": "Egress — the binding free-tier limit (1 GB/month)",
+        "xyChart": {"dataSets": [{"timeSeriesQuery": {"timeSeriesFilter": {
+          "filter": "metric.type=\"run.googleapis.com/container/network/sent_bytes_count\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"",
+          "aggregation": {"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM"}}}}]}}},
+
+      {"width": 6, "height": 4, "xPos": 0, "yPos": 8, "widget": {
+        "title": "Memory utilisation of 512 MiB",
+        "xyChart": {"dataSets": [{"timeSeriesQuery": {"timeSeriesFilter": {
+          "filter": "metric.type=\"run.googleapis.com/container/memory/utilizations\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"",
+          "aggregation": {"alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_PERCENTILE_99"}}}}]}}},
+
+      {"width": 6, "height": 4, "xPos": 6, "yPos": 8, "widget": {
+        "title": "Container startup latency (the cold start a reader feels)",
+        "xyChart": {"dataSets": [{"timeSeriesQuery": {"timeSeriesFilter": {
+          "filter": "metric.type=\"run.googleapis.com/container/startup_latencies\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"",
+          "aggregation": {"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_PERCENTILE_95"}}}}]}}}
+    ]
+  }
+}

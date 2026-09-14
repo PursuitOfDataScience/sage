@@ -57,10 +57,17 @@ done
 
 # `gcloud run deploy --source` uploads a zip to this bucket. Scoped to the one bucket
 # rather than granted project-wide, which is what Google's own guide tells you to do.
+#
+# roles/storage.admin, not objectAdmin, and the difference cost a failed deploy:
+# before writing the zip gcloud calls buckets.get to check the bucket exists, and
+# objectAdmin grants object permissions only -- no bucket-level read. The error names
+# `storage.buckets.get` and then says "(or it may not exist)", which sends you looking
+# for a missing bucket rather than a missing permission. Bucket-scoped admin is still
+# a long way from project-wide: it is full control of this one bucket and nothing else.
 BUCKET="gs://run-sources-${PROJECT}-${REGION}"
 if gcloud storage buckets describe "$BUCKET" >/dev/null 2>&1; then
   gcloud storage buckets add-iam-policy-binding "$BUCKET" \
-    --member="serviceAccount:${SA}" --role=roles/storage.objectAdmin >/dev/null
+    --member="serviceAccount:${SA}" --role=roles/storage.admin >/dev/null
 fi
 
 # Deploying a service that RUNS AS sage-run means acting as sage-run. Same for the
