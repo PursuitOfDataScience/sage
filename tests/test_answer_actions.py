@@ -244,7 +244,7 @@ class TestTheSteerBelongsToOneTurn:
                 "steer": "shorter",
             }
         )
-        state.finish_stopped_turn("mistral:m1")
+        state.finish_stopped_turn("google:m1")
         assert stub.session_state["steer"] == ""
 
     def test_it_is_a_session_default(self):

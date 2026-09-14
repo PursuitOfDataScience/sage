@@ -41,7 +41,7 @@ ANSWER = [event("Your /home quota is "), event("30 GB.")]
 class Programmable:
     """A provider whose next turns a test sets. One `stream()` call per turn."""
 
-    name = "mistral"
+    name = "google"
 
     def __init__(self) -> None:
         self.turns: list = []
@@ -49,7 +49,7 @@ class Programmable:
         self.tools_seen: list = []
 
     def models(self):
-        return [providers.Model("mistral", "m1")]
+        return [providers.Model("google", "m1")]
 
     def stream(self, model, messages, tools, thinking=False, tool_choice="auto"):
         self.sent.append(messages)
@@ -63,7 +63,7 @@ class Programmable:
 
 
 PROVIDER = Programmable()
-MODEL = "mistral:m1"
+MODEL = "google:m1"
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -83,9 +83,11 @@ def prepared():
 @pytest.fixture(autouse=True)
 def keys(monkeypatch):
     # conftest clears the environment before every test, so the app would find no
-    # provider at all and stop before it reached the turn.
-    monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
-    monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
+    # provider at all and stop before it reached the turn. The variable has to name a
+    # provider the PROFILE still declares — it was MISTRAL_API_KEY, and the day the
+    # profile dropped that provider all 47 tests in this file failed at once, in a
+    # local run that had passed because the developer's own shell exported the key.
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     PROVIDER.turns = []
     PROVIDER.sent = []
 

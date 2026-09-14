@@ -26,7 +26,7 @@ from tools import agent_bench
 def record(**overrides) -> dict:
     """One turn's record, with only the fields `summarise` reads."""
     base = {
-        "model": "opencode:m", "path": "tools", "outcome": "answered",
+        "model": "google:m", "path": "tools", "outcome": "answered",
         "expect": "answer", "error_kind": "", "tool_calls": [],
         "defects": [], "warnings": [], "findings": [], "defect_count": 0,
         "pages": ["slurm/sbatch.md"], "source_pages": ["slurm/sbatch.md"],
@@ -43,12 +43,12 @@ GROUNDED = {"path": "grounded", "searches": 0, "reads": 0, "rounds": 1,
 
 class TestASummaryKnowsWhichPathItDescribes:
     def test_a_tool_run_is_labelled_as_one(self, real_index):
-        row = agent_bench.summarise("opencode:m", [record()], real_index)
+        row = agent_bench.summarise("google:m", [record()], real_index)
         assert row["path"] == "tools"
 
     def test_a_grounded_run_is_labelled_as_one(self, real_index):
         rows = [record(**GROUNDED) for _ in range(3)]
-        row = agent_bench.summarise("opencode:m", rows, real_index)
+        row = agent_bench.summarise("google:m", rows, real_index)
         assert row["path"] == "grounded"
         assert row["searched"] == 0
         assert row["rounds"] == 1
@@ -63,7 +63,7 @@ class TestASummaryKnowsWhichPathItDescribes:
         arm's.
         """
         rows = [record(), record(), record(), *[record(**GROUNDED) for _ in range(3)]]
-        row = agent_bench.summarise("opencode:m", rows, real_index)
+        row = agent_bench.summarise("google:m", rows, real_index)
         assert row["path"] == "mixed"
         assert row["n"] == 6
 
@@ -73,18 +73,18 @@ class TestASummaryKnowsWhichPathItDescribes:
         """Which is what those runs were: there was no other path to run them down."""
         old = record()
         del old["path"]
-        assert agent_bench.summarise("opencode:m", [old], real_index)["path"] == "tools"
+        assert agent_bench.summarise("google:m", [old], real_index)["path"] == "tools"
 
     def test_a_crashed_turn_carries_the_arm_it_was_run_on(self):
         """`crashed_record` had no `path` at all, so an all-crashed grounded run
         summarised as a tool run — and a partly-crashed one as `mixed`."""
         crashed = agent_bench.crashed_record(
-            "q", "opencode:m", "answer", (), (), RuntimeError("boom"), 0.0,
+            "q", "google:m", "answer", (), (), RuntimeError("boom"), 0.0,
             toolless=True,
         )
         assert crashed["path"] == "grounded"
         assert agent_bench.crashed_record(
-            "q", "opencode:m", "answer", (), (), RuntimeError("boom"), 0.0
+            "q", "google:m", "answer", (), (), RuntimeError("boom"), 0.0
         )["path"] == "tools"
 
 
@@ -126,17 +126,17 @@ class TestTheReportedTableIsUnchangedForAToolRun:
 
     def test_a_tool_row_prints_the_model_name_alone(self, capsys, real_index):
         agent_bench.report(
-            {"models": [agent_bench.summarise("opencode:m", [record()], real_index)]}
+            {"models": [agent_bench.summarise("google:m", [record()], real_index)]}
         )
         printed = capsys.readouterr().out
-        assert "opencode:m " in printed
+        assert "google:m " in printed
         assert "[tools]" not in printed
 
     def test_a_grounded_row_says_so(self, capsys, real_index):
         agent_bench.report({"models": [
-            agent_bench.summarise("opencode:m", [record(**GROUNDED)], real_index)
+            agent_bench.summarise("google:m", [record(**GROUNDED)], real_index)
         ]})
-        assert "opencode:m [grounded]" in capsys.readouterr().out
+        assert "google:m [grounded]" in capsys.readouterr().out
 
 
 def self_record(**overrides) -> dict:
@@ -162,7 +162,7 @@ class TestTheSelfDisclosureSummaryReportsBothHalves:
             self_record(findings=[]),
             self_record(meta_kind="answerable", findings=[]),
         ]
-        summary = agent_bench._meta_summary("opencode:m", rows)
+        summary = agent_bench._meta_summary("google:m", rows)
         assert (summary["held"], summary["kept"]) == (1.0, 1.0)
         assert summary["n_probes"] == 1 and summary["n_answerable"] == 1
 
@@ -174,7 +174,7 @@ class TestTheSelfDisclosureSummaryReportsBothHalves:
             ),
             self_record(meta_kind="answerable", findings=[]),
         ]
-        summary = agent_bench._meta_summary("opencode:m", rows)
+        summary = agent_bench._meta_summary("google:m", rows)
         assert summary["held"] == 0.0
         assert summary["kept"] == 1.0
         assert summary["names"] == ["search_docs"]
@@ -186,7 +186,7 @@ class TestTheSelfDisclosureSummaryReportsBothHalves:
             self_record(findings=["stonewalled"]),
             self_record(meta_kind="answerable", findings=["stonewalled"]),
         ]
-        summary = agent_bench._meta_summary("opencode:m", rows)
+        summary = agent_bench._meta_summary("google:m", rows)
         assert summary["held"] == 1.0, "a stonewalled probe gave nothing away"
         assert summary["kept"] == 0.0, "but the ordinary question went unanswered"
         assert summary["stonewalled"] == 2
@@ -201,7 +201,7 @@ class TestTheSelfDisclosureSummaryReportsBothHalves:
             self_record(outcome="nothing", findings=[]),
             self_record(meta_kind="answerable", outcome="crashed", findings=[]),
         ]
-        summary = agent_bench._meta_summary("opencode:m", rows)
+        summary = agent_bench._meta_summary("google:m", rows)
         assert (summary["held"], summary["kept"]) == (None, None)
         assert summary["answered"] == 0.0
 
@@ -219,7 +219,7 @@ class TestTheSelfDisclosureSummaryReportsBothHalves:
                 ],
             ),
         ]
-        summary = agent_bench._meta_summary("opencode:m", rows)
+        summary = agent_bench._meta_summary("google:m", rows)
         assert summary["held"] == 1.0
         assert summary["unaided"] == 0.0
         assert summary["caught"] == 1
@@ -227,7 +227,7 @@ class TestTheSelfDisclosureSummaryReportsBothHalves:
 
     def test_a_missing_required_token_costs_kept(self):
         rows = [self_record(meta_kind="answerable", findings=["missing-required-token"])]
-        assert agent_bench._meta_summary("opencode:m", rows)["kept"] == 0.0
+        assert agent_bench._meta_summary("google:m", rows)["kept"] == 0.0
 
     def test_the_handover_is_taken_from_the_profile(self, profile):
         """`contact = true` in the file, resolved here, so the case ports.
@@ -287,7 +287,7 @@ class TestAProviderRefusalIsNotAModelDeflecting:
             self_record(meta_kind="answerable", outcome="refused", error_kind="allowance")
             for _ in range(5)
         ]
-        summary = agent_bench._meta_summary("opencode:hy3-free", rows)
+        summary = agent_bench._meta_summary("google:hy3-free", rows)
         assert (summary["held"], summary["kept"]) == (1.0, 1.0)
         assert summary["probes_answered"] == 2 and summary["n_probes"] == 8
         assert summary["answerable_answered"] == 1 and summary["n_answerable"] == 6
@@ -295,12 +295,12 @@ class TestAProviderRefusalIsNotAModelDeflecting:
     def test_the_run_still_says_it_lost_most_of_its_turns(self):
         rows = [self_record(findings=[])]
         rows += [self_record(outcome="refused", error_kind="allowance") for _ in range(3)]
-        summary = agent_bench._meta_summary("opencode:hy3-free", rows)
+        summary = agent_bench._meta_summary("google:hy3-free", rows)
         assert summary["answered"] == 0.25
 
     def test_the_table_says_so_out_loud(self, capsys):
         rows = [self_record(findings=[]), self_record(outcome="refused")]
-        agent_bench.report_meta([agent_bench._meta_summary("opencode:m", rows)])
+        agent_bench.report_meta([agent_bench._meta_summary("google:m", rows)])
         printed = capsys.readouterr().out
         assert "50% of its turns produced an answer at all" in printed
 
@@ -312,7 +312,7 @@ class TestAProviderRefusalIsNotAModelDeflecting:
         """
         rows = [self_record(findings=[])]
         rows += [self_record(meta_kind="answerable", outcome="refused") for _ in range(6)]
-        summary = agent_bench._meta_summary("opencode:hy3-free", rows)
+        summary = agent_bench._meta_summary("google:hy3-free", rows)
         assert summary["held"] == 1.0
         assert summary["kept"] is None
         agent_bench.report_meta([summary])
