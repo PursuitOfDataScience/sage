@@ -283,6 +283,39 @@ queued-question feature lives there: a question typed mid-answer is held on the 
 window and handed to `st.chat_input` once the turn ends, because telling the server
 about it any earlier would end the answer it is queued behind.
 
+**A KEYED CONTAINER CAN HAVE SEVERAL COPIES IN THE DOCUMENT, AND THE FIRST IS THE DEAD
+ONE.** Streamlit does not always take the previous copy out. Measured with the app
+driven against `tools/mock_provider.py`: on 1.54 there is exactly one
+`st-key-think-toggle` container and one `#think-state` marker at every point of every
+flow tried; on **1.63** one re-ask from the answer's action row leaves TWO of each and a
+second leaves FOUR — it doubles. Nothing else duplicated: the stop hook, the uploader,
+the chat input, the pencils and the action row's own three hooks were all one copy on
+both versions. Python renders into the LAST copy.
+
+`doc.querySelector` returns the first, so every widget lookup in `app.js` was reading
+and clicking a dead node. That is the whole of both Think-pill bugs the owner reported
+— "I can't untoggle it in a conversation" and "after I regenerate, the toggle stops
+working" — from one cause, and it is why neither could be reproduced locally: on 1.54
+the first copy IS the live one. Measured on 1.63 as `hookInsideWhich ["OFF", "ON"]` and
+`markerValues ["0", "1"]` the instant Python flipped the toggle, with the pill painting
+from the dead pair. So **`widgetHost` resolves the last match, `widgetButton` goes
+through it, and the pill's marker is found with `querySelectorAll` rather than by id** —
+duplicate ids are not legal HTML and not this app's doing, and `getElementById` cannot
+be told to skip one. Last rather than "the one that is not stale", because staleness is
+invisible from the DOM: the copies carry the same key, hold the same markup, and are all
+clipped to a pixel. Order is the only thing that separates them, and where there is one
+copy the last is the first, so this costs nothing on the version measured here.
+
+**Which is the standing lesson rather than one bug: `requirements.txt` allows
+`streamlit>=1.42,<2`, so the deployment builds whatever the latest 1.x is — 1.63 at the
+time of writing — while every test, all 720 renders and every measured finding in this
+file are 1.54.** Nine minors of DOM behaviour nothing here has ever run against. When a
+control works locally and is reported broken on the deployment, that gap is the first
+thing to check, and the way to check it is to install the version the deployment
+resolves and drive the app against it — a throwaway venv with
+`--system-site-packages` and one `pip install --no-cache-dir streamlit==<version>` is
+enough, and it is what turned two unreproducible reports into one measured cause.
+
 **On Streamlit 1.54 the iframe is NOT rebuilt on every rerun, and the paragraph below
 was written believing it was.** Measured across seven kinds of rerun — a pill click, the
 sidebar opening and closing, a starter card, a submit, ＋ New chat, and a chat switch —

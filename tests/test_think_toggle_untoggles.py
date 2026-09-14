@@ -144,6 +144,78 @@ class TestTheFlagGoesBothWays:
         )
 
 
+class TestAStaleCopyOfAKeyedContainerIsNotTheLiveOne:
+    """Streamlit does not always remove the previous copy, and the first is the dead one.
+
+    This is the root cause of both Think-pill bugs the owner reported, and of why
+    neither could be reproduced locally. Measured with the app driven against
+    `tools/mock_provider.py`:
+
+    * on Streamlit **1.54** — what this repo's tests and all 720 renders are measured
+      on — there is exactly one `st-key-think-toggle` container and one `#think-state`
+      marker, at every point of every flow tried;
+    * on Streamlit **1.63** — what `requirements.txt` (`streamlit>=1.42,<2`) resolves
+      for the deployment — one re-ask from the answer's action row leaves TWO of each,
+      and a second re-ask leaves FOUR. It doubles. Nothing else duplicates: the stop
+      hook, the uploader, the chat input, the pencils and the action row's own three
+      hooks were all measured at one copy on both versions.
+
+    Python renders into the LAST copy; `querySelector` returns the first. So the pill
+    read its state from a container Python had stopped writing to and painted from a
+    marker that still said `0` — measured on 1.63 as `hookInsideWhich ["OFF", "ON"]`
+    and `markerValues ["0", "1"]` with the pill showing `data-on` absent — and the
+    click went through a widget that was no longer wired. That is "I can't untoggle it"
+    and "after I regenerate, the toggle stops working", from one cause.
+
+    Last, and not "the one that is not stale", because staleness cannot be seen from
+    the DOM: the copies carry the same key, hold the same markup, and are all clipped
+    to a pixel by app.css. The order is the only thing that distinguishes them, and on
+    a version that leaves one copy the last IS the first, so this costs nothing there.
+    """
+
+    @pytest.fixture(scope="class")
+    def source(self):
+        with open(os.path.join(ROOT, "static", "app.js"), encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_widget_hosts_are_resolved_to_the_last_match(self, source):
+        assert "function widgetHost(" in source, (
+            "`widgetHost` is gone. Every lookup of a Streamlit widget by key has to "
+            "resolve the LAST matching container, because a stale earlier copy is "
+            "what the first match returns"
+        )
+        body = source[source.index("function widgetHost("):]
+        body = body[: body.index(chr(10) + "    }")]
+        assert "querySelectorAll" in body and "length - 1" in body, (
+            "`widgetHost` no longer takes the last match, so it is back to returning "
+            "whichever copy comes first in the document"
+        )
+
+    def test_the_widget_button_lookup_goes_through_it(self, source):
+        body = source[source.index("function widgetButton("):]
+        body = body[: body.index(chr(10) + "    }")]
+        assert "widgetHost(" in body, (
+            "`widgetButton` resolves its own host again, so the stop square, the "
+            "paperclip, the pencils and the action row's re-asks would each click "
+            "whichever copy is first rather than the live one"
+        )
+        assert "doc.querySelector(selector)" not in body
+
+    def test_the_pill_does_not_read_its_marker_by_id(self, source):
+        """`getElementById` returns the first match and cannot be told otherwise.
+
+        Duplicate ids are not legal HTML and are not this app's doing — Streamlit left
+        the old copy in the document — so the marker has to be found by a lookup that
+        can take the last one.
+        """
+        start = source.index("function addThinkButton()")
+        body = source[start : source.index(chr(10) + "    function ", start + 1)]
+        assert "getElementById('think-state')" not in body
+        assert "querySelectorAll('#think-state')" in body, (
+            "the pill reads its marker in a way that cannot skip a stale copy"
+        )
+
+
 class TestTheScriptReadsTheStateOffItsOwnControl:
     """The JS invariant, on the source, because a browser is not in this suite."""
 

@@ -906,6 +906,89 @@ class TestAnErrorCardBelongsToItsConversation:
         assert stub.session_state.error is None
 
 
+class TestTheThinkToggleBelongsToItsConversation:
+    """Reasoning is asked for in a chat, not in a session.
+
+    Reported: "this chat has the think toggle on but doesn't mean the other chat
+    should have that on as well. they should be independent." It was a plain session
+    default, so turning it on anywhere turned it on everywhere, and it stayed on
+    through every later chat — including brand-new ones, where nobody had asked for it.
+
+    That costs money rather than only being untidy: reasoning tokens are billed as
+    output tokens, which is the reason the default is off in the first place
+    (`SESSION_DEFAULTS`), so an inherited flag spends a free allowance on every turn of
+    every chat the reader opens afterwards.
+
+    Same pair of paths as the error card above — `_stash` on the way out,
+    `_restore_thinking` on the way in — because it is the same kind of fact: something
+    true of one conversation that session state is the wrong place to keep.
+    """
+
+    @staticmethod
+    def _two_chats(monkeypatch):
+        stub, _ = run_app(
+            monkeypatch,
+            openrouter=True,
+            session={
+                "chats": [{"id": 0, "messages": [{"role": "user", "text": "older"}]},
+                          {"id": 1, "messages": []}],
+                "chat_id": 1,
+                "next_chat_id": 2,
+                "messages": [{"role": "user", "text": "the question",
+                              "attachments": []}],
+                "thinking": True,
+            },
+        )
+        return stub, _state()
+
+    def test_it_does_not_follow_the_reader_into_another_chat(self, monkeypatch):
+        stub, state = self._two_chats(monkeypatch)
+        with pytest.raises(stub_streamlit.Rerun):
+            state.open_chat(0)
+        assert stub.session_state.thinking is False, (
+            "the toggle followed the reader into a chat they never turned it on in"
+        )
+
+    def test_it_is_there_again_when_its_own_chat_is_reopened(self, monkeypatch):
+        stub, state = self._two_chats(monkeypatch)
+        with pytest.raises(stub_streamlit.Rerun):
+            state.open_chat(0)
+        with pytest.raises(stub_streamlit.Rerun):
+            state.open_chat(1)
+        assert stub.session_state.thinking is True, (
+            "independent has to mean kept, not merely cleared — a reader who turned "
+            "it on to work through one problem finds it off on coming back"
+        )
+
+    def test_a_new_chat_starts_with_it_off(self, monkeypatch):
+        """The default doing its job, rather than inheriting an answer to a question
+        nobody asked in the new chat."""
+        stub, state = self._two_chats(monkeypatch)
+        with pytest.raises(stub_streamlit.Rerun):
+            state.new_chat()
+        assert stub.session_state.thinking is False
+
+    def test_a_chat_that_never_touched_it_reads_as_off(self, monkeypatch):
+        """A record written before this existed carries no `thinking` key, and the
+        safe direction to guess in is off — it is the billed one that has to be
+        asked for."""
+        stub, state = self._two_chats(monkeypatch)
+        record = next(r for r in stub.session_state.chats if r["id"] == 0)
+        record.pop("thinking", None)
+        with pytest.raises(stub_streamlit.Rerun):
+            state.open_chat(0)
+        assert stub.session_state.thinking is False
+
+    def test_the_flag_is_stashed_on_the_record_it_belongs_to(self, monkeypatch):
+        stub, state = self._two_chats(monkeypatch)
+        with pytest.raises(stub_streamlit.Rerun):
+            state.open_chat(0)
+        left = next(r for r in stub.session_state.chats if r["id"] == 1)
+        assert left.get("thinking") is True
+        stayed = next(r for r in stub.session_state.chats if r["id"] == 0)
+        assert not stayed.get("thinking")
+
+
 class TestTheStateMachineUnderARandomWalk:
     """Every order these operations can happen in, against the invariants that must hold.
 

@@ -72,9 +72,44 @@
     var INJECTED = 'data-sage-injected';
     var NOT_INJECTED = 'button:not([' + INJECTED + '])';
 
+    /* The keyed element container a widget lookup means — the LAST one that matches,
+     * not the first.
+     *
+     * Streamlit does not always take the previous copy of a keyed container out of the
+     * document, and `querySelector` returns the first match, which is the stale one.
+     * Measured on Streamlit 1.63 (which is what `requirements.txt` resolves for the
+     * deployment; 1.54 is what is measured locally, and it leaves exactly one): after
+     * one re-ask from the answer's action row there are TWO `st-key-think-toggle`
+     * containers and two `#think-state` markers, and after a second there are FOUR —
+     * it doubles each time. Python renders into the last of them. The first is dead.
+     *
+     * That is the whole of both Think-pill bugs the owner reported. Reading state off
+     * the first copy paints the pill from a container Python stopped writing to, so it
+     * arms and will not disarm; clicking through the first copy sends the click to a
+     * widget that is no longer wired, so after a re-ask the pill stops responding
+     * altogether. Both were unreproducible on 1.54 for exactly this reason — there is
+     * only ever one copy there, so first and last are the same node.
+     *
+     * Last rather than "the one that is not stale", because staleness is not visible
+     * from the DOM: the copies are identical, all carry the same key, and all are
+     * clipped to a pixel by app.css. What IS reliable is the order — Streamlit appends
+     * the new render — and it is what the measurement shows: `hookInsideWhich` reads
+     * ["OFF", "OFF", "ON"] the instant Python flips the toggle, with the live copy
+     * last. With one copy this is the same node `querySelector` returned, so nothing
+     * changes on the version measured here.
+     *
+     * Anything resolving a Streamlit widget by key goes through this, so the stop
+     * square, the paperclip, the pencils and the answer row's three re-asks are all
+     * covered. Only the pill's container duplicates today; the others were measured at
+     * one copy on both versions, and none of them should have to know that. */
+    function widgetHost(selector) {
+        var hosts = doc.querySelectorAll(selector);
+        return hosts.length ? hosts[hosts.length - 1] : null;
+    }
+
     // Streamlit's own button inside a keyed element container, or null.
     function widgetButton(selector) {
-        var host = doc.querySelector(selector);
+        var host = widgetHost(selector);
         return host ? host.querySelector(NOT_INJECTED) : null;
     }
 
@@ -1819,9 +1854,14 @@
 
     function addThinkButton() {
         var input = doc.querySelector('[data-testid="stChatInput"]');
-        var marker = doc.querySelector('#think-state');
+        // The LAST marker, for the reason `widgetHost` gives: with several copies in
+        // the document the first one is the dead render's, and `getElementById` would
+        // return it. Duplicate ids are not legal HTML and are not this app's doing —
+        // Streamlit left the old copy behind — so this cannot use an id lookup at all.
+        var markers = doc.querySelectorAll('#think-state');
+        var marker = markers.length ? markers[markers.length - 1] : null;
         var existing = doc.getElementById('think-btn');
-        var hookHost = doc.querySelector(THINK_HOOK);
+        var hookHost = widgetHost(THINK_HOOK);
         // No marker means the control was not drawn for this model — see
         // `View.can_think`. Anything already injected goes with it, or a failover onto
         // a provider without reasoning leaves a pill with no widget behind it.
@@ -1861,8 +1901,13 @@
         var keyed = hookHost && hookHost.closest
             ? hookHost.closest('.st-key-think-on, .st-key-think-off')
             : null;
-        var on = keyed ? keyed.classList.contains('st-key-think-on')
-                       : !!doc.querySelector('.st-key-think-on');
+        // The fallback is for a Streamlit that does not nest the hook inside the keyed
+        // container, and it takes the LAST match for the same reason the hook does: a
+        // stale `st-key-think-on` left in the document is exactly what pins the pill
+        // lit and cannot be put out.
+        var on = keyed
+            ? keyed.classList.contains('st-key-think-on')
+            : !!widgetHost('.st-key-think-on');
         var hint = marker.getAttribute('data-hint') || '';
         var label = marker.getAttribute('data-label') || 'Think';
 
@@ -2112,7 +2157,30 @@
                     host.appendChild(fresh);
                 }
                 var row = host.querySelector('.answer-acts');
-                if (row) rows.push(row);
+                if (row) {
+                    // LAST, re-asserted every pass rather than decided once by the
+                    // `appendChild` above.
+                    //
+                    // The row belongs under the Sources and Related strips, which are
+                    // siblings of the message inside this same container — and which
+                    // Streamlit commits on its own schedule. Appending once puts the
+                    // row after whatever happens to be here at that moment, and the
+                    // `sageActs` marker then makes that permanent: a strip committed
+                    // after the injection leaves the icons stranded above the
+                    // citations for the life of the message, with nothing to correct
+                    // it. Reported on the deployment, which builds a newer Streamlit
+                    // than the 1.54 measured here, where the order is stable across
+                    // every sample through the commit.
+                    //
+                    // So position is a thing this checks, not a thing it sets once.
+                    // Moving an in-document node is a childList mutation, so it
+                    // schedules one more `sync` pass; that pass finds the row already
+                    // last and does nothing, which is what makes it converge instead
+                    // of loop. Nothing here writes a CLASS to a node already on the
+                    // page, so the observer's `attributeFilter` invariant is untouched.
+                    if (host.lastElementChild !== row) host.appendChild(row);
+                    rows.push(row);
+                }
             });
 
         // The re-asks belong to the newest answer and to no other. The set changes as

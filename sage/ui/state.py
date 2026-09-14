@@ -28,6 +28,14 @@ SESSION_DEFAULTS: tuple[tuple[str, object], ...] = (
     # needed the thinking or not. Cleared by `composer.render_think_toggle` whenever
     # the model answering cannot take the parameter, which an automatic failover can
     # bring about without anyone touching the control.
+    #
+    # PER CONVERSATION, not per session, and the distinction was reported: "this chat
+    # has the think toggle on but doesn't mean the other chat should have that on as
+    # well". It lives here because one chat is live at a time — the same reason
+    # `messages` does — and `_stash` puts it on the record on the way out while
+    # `_restore_thinking` reads it back on the way in. A new chat starts off, which is
+    # this default doing its job rather than inheriting the last chat's answer to a
+    # question nobody asked in the new one.
     ("thinking", False),
     # A list, not one file. Holding one meant the guard in `uploads` dropped anything
     # offered while a file was already attached, and a second attachment looked from
@@ -114,7 +122,8 @@ SESSION_DEFAULTS: tuple[tuple[str, object], ...] = (
     # A record is {"id": int, "messages": list}, plus "pending" while a turn in it was
     # cut off before it answered — see `abandon_turn` and `resume_pending` — and
     # "error"/"error_detail", the card it was left with, which `_stash` writes and
-    # `_restore_error` reads. There is no stored title: the title is derived from the
+    # `_restore_error` reads, and "thinking", whether THIS chat was asking for
+    # reasoning, on the same pair of paths. There is no stored title: the title is derived from the
     # first question every time it is drawn, so a chat cannot end up labelled with a
     # question the reader has since edited away.
     ("chats", []),
@@ -255,6 +264,9 @@ def _stash() -> None:
             record["error"] = st.session_state.error
             record["error_detail"] = st.session_state.error_detail
             record["error_kind"] = st.session_state.error_kind
+            # Whether THIS chat was asking for reasoning. Recorded rather than left
+            # in session state, because session state is what the next chat reads.
+            record["thinking"] = bool(st.session_state.thinking)
         else:
             st.session_state.chats.pop(index)
         return
@@ -290,6 +302,29 @@ def _restore_error() -> None:
     st.session_state.error_kind = record.get("error_kind") or ""
 
 
+def _restore_thinking() -> None:
+    """Put back the Think toggle the conversation being opened was left with.
+
+    The flag belongs to a conversation and not to the session: a reader who turns
+    reasoning on to work through one problem has said nothing about the next chat, and
+    reasoning tokens are billed as output tokens, so inheriting it spends an allowance
+    on questions nobody asked it of. Reported as "they should be independent".
+
+    Absent from the record — a chat left before this existed, or one that never touched
+    the control — reads as off, which is `SESSION_DEFAULTS`' own default and the safe
+    direction to guess in.
+
+    Called where `_restore_error` is, after `_leave_conversation` has reset the flag,
+    for the same reason: the switch has already happened, so this is about the chat now
+    open. `new_chat` deliberately does NOT call it — a chat with no record yet has
+    nothing to restore, and `_leave_conversation` has already left the flag off.
+    """
+    record = _record(st.session_state.chat_id)
+    if record is None:
+        return
+    st.session_state.thinking = bool(record.get("thinking", False))
+
+
 def _leave_conversation() -> None:
     """Reset everything that belongs to the conversation being left.
 
@@ -302,6 +337,10 @@ def _leave_conversation() -> None:
     st.session_state.processing = False
     st.session_state.partial = []
     st.session_state.stop_requested = False
+    # The Think toggle is the leaving chat's, and `_stash` has just written it to that
+    # chat's record. Left set, it would follow the reader into the next conversation and
+    # bill reasoning on a question they never asked it of.
+    st.session_state.thinking = False
     st.session_state.editing = None
     st.session_state.edit_session += 1
     st.session_state.attachments = []
@@ -383,6 +422,7 @@ def delete_chat(chat_id: int) -> None:
         st.session_state.messages = target["messages"]
         _leave_conversation()
         _restore_error()
+        _restore_thinking()
     # Two ways this delete leaves a question owed an answer. The ✕ of a row the reader
     # is NOT in kills the answer arriving in the one they are — nothing about that click
     # says "stop generating" — and the ✕ of the row they are in opens a neighbour, which
@@ -556,6 +596,7 @@ def open_chat(chat_id: int) -> None:
     # — the card this conversation was left with is put back, and then dropped again if
     # a turn in it is actually being picked up.
     _restore_error()
+    _restore_thinking()
     resume_pending()
     st.rerun()
 
