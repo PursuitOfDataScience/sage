@@ -358,6 +358,26 @@ models = [
 ]
 # Vertex's OpenAI surface serves no `/models`, so discovery fails and the adapter falls
 # back to the list above. Documented behaviour, not a workaround.
+#
+# `reasoning` is what draws the Think pill — `ui.view.thinks` reads it off the entry of
+# the provider answering NOW, so a lineup where only OpenRouter declares it means the
+# pill is simply absent on a deployment defaulting to anything else. Reported exactly
+# that way: present on Streamlit, missing on Cloud Run, because the two default to
+# different providers.
+#
+# Measured against the live endpoint before declaring it, since a parameter this
+# endpoint rejected would turn every thinking turn into a 400:
+#   baseline                            OK  308 tokens, 210 of them reasoning
+#   reasoning={enabled,exclude}         OK  309 tokens, 286 of them reasoning
+#   reasoning_effort="low"              OK  249 tokens, 0 reasoning
+# So the parameter the adapter already sends is accepted here.
+#
+# What it does NOT mean: that the toggle turns thinking on. Gemini 3.x reasons by
+# default — the baseline row above spent 210 tokens doing it with nothing asked for —
+# so the pill asks for more of something already happening rather than switching it on.
+# That is the same caveat `openai_compat.stream` records for every provider ("the
+# toggle is a request, not a switch"), and it is truer here than anywhere.
+reasoning = true
 
 [[providers]]
 name = "google"

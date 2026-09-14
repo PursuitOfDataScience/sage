@@ -596,19 +596,22 @@ class TestTheThinkToggle:
         """Drive the app with ONE provider configured, from the shipped profile.
 
         The profile is what declares `reasoning`, so this reads it rather than
-        inventing a provider table: `openrouter` carries the flag there and
-        `opencode` does not, and a test that built its own entries would go on
-        passing on the day the profile stopped saying so.
+        inventing a provider table: a test that built its own entries would go on
+        passing on the day the profile stopped saying so. Which provider plays which
+        role is therefore not arbitrary and does move — `opencode` was the one without
+        the flag until the profile dropped it, and `vertex` became one WITH it, so the
+        pair below is `openrouter`/`vertex` against `google`.
         """
         provider = ScriptedProvider([], name=name, models=(model,))
         monkeypatch.setattr(config, "DEFAULT_MODEL", f"{name}:{model}")
-        # `run_app` always sets a Mistral key, so that provider is configured whatever
-        # this test wants. Served empty rather than unset: an unbuildable provider logs
-        # "could not list models" and falls through to the profile's own list, which put
-        # a Mistral model first in the lineup and made it the one answering.
+        # A second provider, served EMPTY, so whichever key `run_app` sets cannot make
+        # some other entry the one answering. Empty rather than absent: an unbuildable
+        # provider logs "could not list models" and falls through to the profile's own
+        # list, which then supplies the model that answers.
+        filler = "openrouter" if name != "openrouter" else "google"
         return run_app(
             monkeypatch, client=provider, session=session,
-            extra={"google": ScriptedProvider([], name="google", models=())},
+            extra={filler: ScriptedProvider([], name=filler, models=())},
             **kwargs)
 
     def openrouter(self, monkeypatch, session, **kwargs):
@@ -616,10 +619,14 @@ class TestTheThinkToggle:
         return self._run(monkeypatch, session, "openrouter", "openrouter/free",
                          openrouter=True, **kwargs)
 
-    def zen(self, monkeypatch, session, **kwargs):
-        """And one that does not. Same wire format, no `reasoning` field."""
-        return self._run(monkeypatch, session, "opencode", "big-pickle",
-                         second=True, **kwargs)
+    def plain(self, monkeypatch, session, **kwargs):
+        """And one that does not. Same wire format, no `reasoning` field.
+
+        `google` — the Gemini Developer API entry — is the profile's only provider
+        without the flag now that `opencode` is gone and `vertex` has it.
+        """
+        return self._run(monkeypatch, session, "google",
+                         "models/gemini-3.8-flash", **kwargs)
 
     def test_the_pill_is_drawn_where_the_provider_takes_the_parameter(self, monkeypatch):
         stub, _m = self.openrouter(monkeypatch, self.session())
@@ -630,7 +637,7 @@ class TestTheThinkToggle:
         adapter — only the profile knows. A pill drawn here would be a control that
         does nothing, which this app has a standing rule against, and it would send a
         field the endpoint is entitled to reject."""
-        stub, _m = self.zen(monkeypatch, self.session())
+        stub, _m = self.plain(monkeypatch, self.session())
         assert "think-toggle" not in stub.button_labels
 
     def test_the_flag_is_cleared_when_the_pill_goes(self, monkeypatch):
@@ -638,7 +645,7 @@ class TestTheThinkToggle:
         without anyone touching the control. Leaving the flag set there would have the
         next turn quietly ask for a field that provider will refuse — so the flag goes
         when the control does, on the run that stops drawing it."""
-        stub, _m = self.zen(monkeypatch, self.session(thinking=True))
+        stub, _m = self.plain(monkeypatch, self.session(thinking=True))
         assert stub.session_state["thinking"] is False
 
     def test_the_flag_survives_on_a_provider_that_takes_it(self, monkeypatch):
