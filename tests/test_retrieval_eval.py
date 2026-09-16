@@ -14,7 +14,7 @@ precision@1 79%" for a configuration that scored 97/97/79 — the recall@3 figur
 never true of the committed code, and a hand-written number nobody re-derives is worse
 than none. Print them with `tools/metrics.py` rather than trusting this paragraph:
 
-    recall@5 100%, recall@3 100%, precision@1 85% over the 33 cases below.
+    recall@5 100%, recall@3 100%, precision@1 88.9% over the 36 cases below.
 
 The ratchets are one case below each of those, so a single regression fails and the
 slack is stated rather than hidden.
@@ -46,9 +46,27 @@ CASES: list[tuple[str, tuple[str, ...]]] = [
     # --- Connecting ---
     ("how do I connect to midway with ssh", ("connection/ssh/main.md",)),
     ("set up a remote desktop session", ("connection/thinlinc/main.md",)),
+    # A troubleshooting page has to be reachable from what a user writes about the
+    # failure, which is never the word "troubleshooting". Every one of these was a
+    # miss: the reported ThinLinc problem got an answer saying the documentation did
+    # not cover it, with `connection/thinlinc/troubleshooting.md` sitting in the corpus
+    # holding the cause. Either page is accepted because both now hold part of the
+    # answer — the public one the remedy, the kb one the symptom it belongs to.
     (
-        "thinlinc will not connect",
-        ("connection/thinlinc/troubleshooting.md", "connection/thinlinc/main.md"),
+        "I get an error after entering my password and approving Duo in ThinLinc",
+        ("connection/thinlinc/troubleshooting.md", "thinlinc-login-problems.md"),
+    ),
+    (
+        "thinlinc login fails",
+        ("connection/thinlinc/troubleshooting.md", "thinlinc-login-problems.md"),
+    ),
+    (
+        "thinlinc cannot connect",
+        ("connection/thinlinc/troubleshooting.md", "thinlinc-login-problems.md"),
+    ),
+    (
+        "thinlinc problem after duo",
+        ("connection/thinlinc/troubleshooting.md", "thinlinc-login-problems.md"),
     ),
     # --- Data transfer and sharing ---
     ("transfer files with globus", ("data_transfer/globus/transfer-files.md",)),
@@ -86,16 +104,40 @@ CASES: list[tuple[str, tuple[str, ...]]] = [
 # per page stopped slurm/sbatch.md taking the whole result set. Kept here rather than
 # promoted: at exactly rank 5 it is one ranking wobble from failing, and a case that
 # flaps in CI teaches nothing.
+# "thinlinc will not connect" was a passing case above, and it passed by accepting
+# `connection/thinlinc/main.md` — the page about how to connect, for a question about
+# connecting having failed, with the page that holds the cause absent from the whole
+# result set. Tightened to the troubleshooting pages it should reach, it is rank 2 (so
+# this xfails-not-strictly and reports an xpass). Kept here rather than promoted
+# because rank 1 is not reachable and asking for it would be asking the scorer to read
+# intent it cannot see: `not`, `no`, `will` and `without` are all in `bm25.STOPWORDS`,
+# so this query tokenises to exactly {thinlinc, connect} — the same query as "how do I
+# connect to thinlinc", which the connecting page should win. Dropping the negations
+# from the stopword list was measured and moved nothing, because a documentation corpus
+# writes "do not" on every page and their IDF is therefore ~0. The four cases above
+# are the same failure phrased with a word the corpus can see.
 KNOWN_GAPS: list[tuple[str, tuple[str, ...]]] = [
     ("which queue should I submit to", ("slurm/partitions.md", "slurm/main.md")),
+    (
+        "thinlinc will not connect",
+        ("connection/thinlinc/troubleshooting.md", "thinlinc-login-problems.md"),
+    ),
 ]
 
 RECALL_AT = 5
 # Ratchet. Raise it when retrieval improves; never lower it to make CI pass.
 MINIMUM_RECALL_AT_5 = 0.96      # measured 1.00; one of 33 cases is 3.0pp
 MINIMUM_RECALL_AT_3 = 0.96      # measured 1.00
-MINIMUM_PRECISION_AT_1 = 0.87   # measured 0.91 (was 0.85, before the title field
-                                # was length-normalised)
+MINIMUM_PRECISION_AT_1 = 0.87   # measured 0.89 (was 0.91 over 33 cases, and 0.85
+                                # before the title field was length-normalised). Not
+                                # raised, and the fall is not a regression: the four
+                                # symptom cases added above are harder than the set's
+                                # average by construction, and one of them is rank 2
+                                # behind the page about how to connect. No case that
+                                # was rank 1 before is rank 1 no longer — the three
+                                # misses in the old set are still exactly the same
+                                # three. Left at 0.87 because there is no headroom
+                                # story to tell yet, not because it is comfortable.
 
 
 def pages(index, question, limit):

@@ -308,7 +308,22 @@ class TestRealCorpus:
             assert expected in paths
 
     def test_every_chunk_has_an_absolute_citation_url(self, real_corpus):
-        assert all(c.url.startswith("https://") for c in real_corpus.chunks)
+        """Every chunk from a source that promises a URL, which is not all of them.
+
+        `links = "none"` declares a tree published nowhere, and the honest citation for
+        one of its chunks is no link at all — `links.fix_links` renders it as the
+        section's title in plain text. The RCC deployment has one (`kb`). Asserting over
+        the whole corpus made adding such a tree fail here rather than where the
+        decision is, so the exemption is by declared scheme and the guarantee is
+        unchanged for every source that does claim to be citable.
+        """
+        silent = {s.name for s in real_corpus.sources if s.links == "none"}
+        citable = [c for c in real_corpus.chunks if c.source not in silent]
+        assert citable
+        assert all(c.url.startswith("https://") for c in citable)
+        assert all(
+            not c.url for c in real_corpus.chunks if c.source in silent
+        ), "a source declaring links = none produced a URL anyway"
 
     def test_no_citation_label_advertises_a_window_number(self, real_corpus):
         """40 of the 83 scraped chunks were named after the cut that made them."""

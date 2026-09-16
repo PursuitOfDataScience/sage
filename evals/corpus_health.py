@@ -318,6 +318,13 @@ def unresolvable_ids(corpus) -> list[str]:
 
 
 def chunks_without_url(corpus) -> list[str]:
+    """Every chunk with no citation URL, including the ones where that is correct.
+
+    A report and not a verdict, which is why the `links = "none"` filtering lives in
+    the test that asserts on this and not here: a deployment whose whole corpus is
+    private wants to see that number on the card, and the card prints what was
+    measured rather than what passes.
+    """
     return [chunk.id for chunk in corpus.chunks if not chunk.url]
 
 

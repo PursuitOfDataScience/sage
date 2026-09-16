@@ -124,6 +124,39 @@ exclude_hosts = [
 ]
 exclude_hosts_env = "SAGE_EXCLUDE_HOSTS"
 
+[[sources]]
+# RCC's own help-desk notes, which are not published anywhere. They exist because the
+# published guide files a remedy under its mechanism ("check your account quota") while
+# a user reports the symptom they saw ("it logs me straight back out"), and a lexical
+# index can only match words a document contains: the ThinLinc troubleshooting page was
+# in the corpus, held the cause of the reported failure, and was retrieved by nothing a
+# user would type. So this tree is symptom vocabulary with the cause attached, and its
+# pages say where the remedy is written down rather than restating it.
+#
+# `links = "none"` is load-bearing, not a default left alone: these notes have no public
+# URL, and inventing one would be the confident wrong citation `corpus/urls.py` exists
+# to prevent. An answer grounded here cites the page by name and links nothing.
+#
+# Weight EQUAL to `docs`, which was 0.9 first and is worth saying why it moved. The
+# argument for a lower prior was authority — the maintained public guide is what a
+# reader should be sent to, and a hit here cites nothing clickable. But the prior is not
+# what was keeping the guide on top: `connection/thinlinc/main.md` wins a failure report
+# because it says "thinlinc", "connect", "login", "password" and "Duo" many times over,
+# which is a genuinely strong lexical match and the wrong answer. A short page that maps
+# the symptom cannot out-score it on terms, so at 0.9 it arrived at rank 5 for "thinlinc
+# cannot connect" and rank 2 for "thinlinc login fails" — indexed, and not read. At 1.15
+# those are rank 2 and rank 1, and p@1 over the golden set goes 86.1% -> 88.9% with
+# recall@3 back to 100%. Equal and not higher is the point: with the same prior the
+# better lexical match still wins, which is why two of the four cases are still rank 2.
+name = "kb"
+path = "./kb"
+path_env = "RCC_KB_PATH"
+extensions = [".md"]
+reader = "markdown"
+links = "none"
+weight = 1.15
+exclude_files_env = "SAGE_EXCLUDE_FILES"
+
 # --- retrieval -------------------------------------------------------------
 
 [retrieval]
@@ -155,6 +188,25 @@ synonyms = [
     ["partition", "queue", "qos"],
     ["scavenge", "preemptible", "preempt"],
     ["oom", "memory", "killed", "timeout"],
+    # The same symptom-to-mechanism gap as the OOM group, but for the word a whole
+    # *page* is filed under rather than a cause: a user writes "I get an error", "it
+    # will not work", "I am having trouble", and the page that holds the answer is
+    # headed "Troubleshooting" and never uses any of those words. Measured on the
+    # reported ThinLinc failure: `connection/thinlinc/troubleshooting.md` was in the
+    # corpus, held the cause, and appeared nowhere in the top five for any phrasing of
+    # the question — the app answered that the documentation did not cover it while
+    # citing the page next to the one that did. With this group it is rank 1-3.
+    #
+    # `fail` earns its place and "broken"/"wrong" do not: the first is what a user
+    # writes about a login ("thinlinc login fails" goes from nothing to rank 2), and
+    # the other two only appear in this corpus in prose about incorrect results.
+    # Negation is NOT here and cannot be: `not`, `no`, `will` and `without` are all
+    # stopwords, so "thinlinc will not connect" tokenises to exactly {thinlinc,
+    # connect} — indistinguishable from "how do I connect to thinlinc", and a gap no
+    # synonym reaches. Taking those four out of the stopword list was measured and
+    # changed nothing, because a documentation corpus says "do not" on every page and
+    # the IDF is therefore ~0. See `KNOWN_GAPS` in tests/test_retrieval_eval.py.
+    ["troubleshooting", "error", "problem", "issue", "fail"],
     ["quota", "limit", "usage", "space"],
     ["allocation", "su", "balance", "accounts"],
     ["module", "software", "lmod", "package"],

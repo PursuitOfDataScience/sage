@@ -45,8 +45,24 @@ class TestIntegrity:
         broken = measured["unresolvable_ids"]
         assert not broken, f"{len(broken)} ids do not resolve: {broken[:5]}"
 
-    def test_every_chunk_has_a_url(self, measured):
-        urlless = measured["chunks_without_url"]
+    def test_every_chunk_has_a_url(self, measured, real_corpus):
+        """Every chunk whose source promised one, which is not every chunk.
+
+        `chunks_without_url` reports all of them on purpose — the card prints what was
+        measured — so the scheme a source *declared* is the thing to assert against.
+        `links = "none"` says the tree is published nowhere and the honest citation is
+        no link at all; the RCC deployment has one (`kb`, the help-desk notes), and over
+        the raw list this failed for the app working exactly as designed. The failure it
+        was written for is unchanged: a `docs` or `web` chunk with no URL, because the
+        path did not match the scheme or `base_url` was never set.
+        """
+        silent = {s.name for s in real_corpus.sources if s.links == "none"}
+        by_id = {chunk.id: chunk for chunk in real_corpus.chunks}
+        urlless = [
+            chunk_id
+            for chunk_id in measured["chunks_without_url"]
+            if by_id[chunk_id].source not in silent
+        ]
         assert not urlless, f"{len(urlless)} chunks cannot be cited: {urlless[:5]}"
 
     def test_every_url_is_a_usable_web_address(self, measured):
