@@ -340,9 +340,36 @@ hint = "Vertex needs no API key: set SAGE_VERTEX=1 and grant the runtime service
 #
 # Measured on the `global` endpoint, which is not optional: `us-central1` answers for
 # gemini-2.5-flash and returns `Publisher model ... not found` for 3.5, 3.6 and 3.8.
-#   google/gemini-3.8-flash   OK
+#   google/gemini-3.8-flash   OK   <- was first here, and is now last. See below
 #   google/gemini-3.6-flash   OK
 #   google/gemini-3.5-flash   OK   <- shed as "high demand" 0/4 on the free tier
+#
+# 3.8 IS LAST BECAUSE IT IS THE NEWEST, which is the opposite of how this list was
+# first ordered. "OK" above means it answers, and says nothing about how long the
+# answer takes to start: the id every deployment reaches for first is the id with the
+# least capacity per request, and Vertex does not shed a paid request the way the free
+# tier sheds an unpaid one — it QUEUES it. Reported as the deployment being slow, and
+# measured in the app's own progress block: the same question that takes 11.3s on
+# Streamlit (on `openrouter/free`) took 42.6s here, as 19.4s waiting for the search
+# call and 23.3s waiting for the read and the answer. Three model calls, ~14s each.
+#
+# What that latency is NOT, because both were measured before this was reordered
+# (2026-09-15, the AI Studio key against `generativelanguage`, the app's own system
+# prompt and tool schema):
+#   * not decode -- the tool call is 18 output tokens
+#   * not thinking -- 35-48 thought tokens for this decision, under a second of work.
+#     (`total_tokens` minus prompt minus completion is where they show up; the
+#     OpenAI-compatible surface reports no `reasoning_tokens` for them.)
+#   * not the app -- the corpus indexes in 0.23s, `search_docs` runs in 5ms and
+#     `read_doc` in under 1ms.
+# It is waiting for a slot, and it has two regimes on one endpoint: refused in 0.1-0.5s
+# (3.8-flash, 8 attempts out of 8, five 503 "high demand" then three 429), or admitted
+# and made to wait -- 31.6s and 17.6s on 3.5-flash for the identical 18-token reply it
+# served in 0.9s twenty minutes later. A median served request is ~1.0s.
+#
+# So this order is by measured availability and not by version. Revisit it when 3.8 has
+# been out long enough to have capacity; the way to check is 8 requests of the app's
+# own shape, not one.
 #
 # WHAT TO KNOW BEFORE LEAVING THIS FIRST. Vertex has no free tier; every token bills,
 # and on a pay-as-you-go account a spent credit produces NO error — it produces an
@@ -352,9 +379,9 @@ hint = "Vertex needs no API key: set SAGE_VERTEX=1 and grant the runtime service
 # If that mail arrives and the answer is "stop paying", delete this block; the free
 # `google` entry below is already the next in line.
 models = [
-    "google/gemini-3.8-flash",
     "google/gemini-3.6-flash",
     "google/gemini-3.5-flash",
+    "google/gemini-3.8-flash",
 ]
 # Vertex's OpenAI surface serves no `/models`, so discovery fails and the adapter falls
 # back to the list above. Documented behaviour, not a workaround.
@@ -420,10 +447,23 @@ base_url_env = "GEMINI_BASE_URL"
 # it once on the first try and then went 4/4. That is the honest cost of the free tier,
 # and the reason a paid key is a real option rather than a waste: Tier 1 is not the
 # traffic that gets turned away.
+#
+# AND THE ORDER WENT WITH IT. Re-measured 2026-09-15, same key, same question and tool
+# schema, eight attempts each rather than four:
+#   gemini-3.8-flash        0/8         five 503 "high demand", then three 429
+#   gemini-3.6-flash        3/8  1.1s   median of the three that served
+#   gemini-3.5-flash        7/8  1.0s
+# "4/4 ~1s, newest and it works" was true on the day it was written and is the trap
+# this block now records: what changes between those two runs is not the model, it is
+# how many people are on it. A lineup ordered newest-first puts the most contended id
+# in front of every turn, and a failover that lands on it spends a whole round trip on
+# a certain 503 before walking on. The Vertex entry above is reordered for the same
+# finding and the paid form of the same cause — there the wait is a queue rather than a
+# refusal, which is worse, because nothing in the app can see it.
 models = [
-    "models/gemini-3.8-flash",
     "models/gemini-3.6-flash",
     "models/gemini-3.5-flash-lite",
+    "models/gemini-3.8-flash",
 ]
 # 56 -> 3, and no `deny` needed: each of these three marks is unique as a substring
 # across everything the API serves. `gemini-2.5-flash` was not — it also caught the
