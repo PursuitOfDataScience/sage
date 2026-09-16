@@ -153,7 +153,16 @@ gcloud run deploy "$SERVICE" \
   `# was first in the lineup and still would not have answered a single turn, because` \
   `# the default resolved to openrouter/free and openrouter/free works. Failover order` \
   `# and the default are two separate decisions; this is the second one.` \
-  --set-env-vars="SAGE_PROFILE=profiles/rcc.toml,SAGE_CALL_BUDGET=500,SAGE_VERTEX=1,SAGE_DEFAULT_MODEL=vertex:google/gemini-3.8-flash"
+  `#` \
+  `# 3.6 AND NOT 3.8, which is the whole of the fix for "the deployment is slower than` \
+  `# Streamlit": same question, 42.6s here against 11.3s there, and none of the` \
+  `# difference was Cloud Run. The newest flash id is the most contended one, and a` \
+  `# paid Vertex request is queued rather than shed -- so the wait arrives as latency` \
+  `# with nothing in the log or on the page to name it. profiles/rcc.toml carries the` \
+  `# measurements and has 3.8 last in the Vertex lineup for the same reason, so this` \
+  `# variable and that list now agree; changing one without the other is how a fresh` \
+  `# session ends up back on the slow id.` \
+  --set-env-vars="SAGE_PROFILE=profiles/rcc.toml,SAGE_CALL_BUDGET=500,SAGE_VERTEX=1,SAGE_DEFAULT_MODEL=vertex:google/gemini-3.6-flash"
 
 URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
 echo
