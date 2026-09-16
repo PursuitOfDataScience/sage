@@ -76,7 +76,7 @@ class TestTheProfileIsTheDeployment:
     def test_the_shipped_profile_loads_from_its_file(self, profile):
         assert profile.origin.endswith("rcc.toml")
         assert profile.identity.name == "Sage"
-        assert [source.name for source in profile.sources] == ["docs", "web"]
+        assert [source.name for source in profile.sources] == ["docs", "web", "kb"]
         assert [entry.name for entry in profile.providers] == [
             "openrouter", "vertex", "google",
         ]

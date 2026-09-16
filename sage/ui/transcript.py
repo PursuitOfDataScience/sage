@@ -194,13 +194,22 @@ def citations(chunks: list) -> list[dict]:
 
     The first read of a destination keeps the slot: it is the one the answer was built
     from first, and its label is the page's own name rather than a later cut's.
+
+    A source with no published URL at all — `links = "none"`, which `corpus/urls.py`
+    provides for a private tree — has to fall back to the page, because the empty
+    string is not a destination that two of its pages share, it is the absence of one.
+    Deduplicating on it collapsed *the whole tree* into a single entry: four sections
+    of the `kb` tree, and any number of its pages, arrived as one chip carrying
+    whichever happened to be read first. One entry per page is what the URL key
+    already means everywhere else; this says it for a tree that cannot spell a URL.
     """
     out: list[dict] = []
     seen: set[str] = set()
     for chunk in chunks:
-        if chunk.url in seen:
+        destination = chunk.url or f"{chunk.source}/{chunk.path}"
+        if destination in seen:
             continue
-        seen.add(chunk.url)
+        seen.add(destination)
         out.append(
             {
                 "id": chunk.id,
