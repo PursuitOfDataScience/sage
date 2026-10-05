@@ -4,7 +4,7 @@ Registered under the kind `openai`, and it is the reason adding a provider is us
 a TOML entry rather than code: OpenCode Zen, Together, Groq, Fireworks, a vLLM server
 on a login node and Ollama on a laptop all answer this shape. What varies between
 them is a base URL, an environment variable holding a key, and a fallback list of
-model ids — which is exactly what a profile entry carries.
+model ids, which is exactly what a profile entry carries.
 """
 
 from __future__ import annotations
@@ -29,13 +29,13 @@ class OpenAICompatProvider:
         self._base = entry.base_url.rstrip("/")
         # Discovery returns the catalogue in arbitrary order. The profile's list is
         # the order we would choose, and it decides both the picker's default and what
-        # an automatic failover lands on — so it must not be alphabetical.
+        # an automatic failover lands on, so it must not be alphabetical.
         self._preferred = tuple(entry.models)
 
     def _headers(self) -> dict:
         # No key means no header, not an empty one. `Authorization: Bearer ` is an
         # illegal header value and httpx raises on it locally, so a keyless discovery
-        # call failed before it was sent and fell through to the configured list —
+        # call failed before it was sent and fell through to the configured list,
         # reported in the log as "could not list models", which reads as the provider
         # being unreachable. It is also not academic: this endpoint serves its free
         # models to a request with no header at all.
@@ -72,9 +72,9 @@ class OpenAICompatProvider:
             # An endpoint may serve this deployment's paid lineup alongside the free
             # one, and offering a model there is no balance for is offering a button
             # that returns a 402. Filtered here rather than in the picker so nothing
-            # downstream — failover included — can select one.
+            # downstream (failover included) can select one.
             # Denied names go first, and for the same reason the free filter is here
-            # rather than in the picker: nothing downstream — failover included — can
+            # rather than in the picker: nothing downstream (failover included) can
             # select a model that never reaches the list. A model the provider serves
             # and cannot run is not a cheaper option to fall back to, it is an error
             # card with an extra step, and `deepseek-v4-flash-free` was second in the
@@ -111,21 +111,21 @@ class OpenAICompatProvider:
         return [Model(self.name, model_id) for model_id in self._preferred]
 
     def _order(self, found: list[str]) -> list[str]:
-        """Preferred first, then the rest alphabetically — and families kept together.
+        """Preferred first, then the rest alphabetically, and families kept together.
 
         The ranking on its own scattered a family down the list. `nemotron-3-ultra`
         sat fifth because the preference list puts it there and
         `nemotron-3.5-lightning` sat last because nothing named it, so the picker
         offered two Nemotrons eight rows apart, with three unrelated models between
-        them. A reader choosing a model is comparing versions of the same thing —
-        which Nemotron, which Ling — and a list that splits them up makes the one
+        them. A reader choosing a model is comparing versions of the same thing
+        (which Nemotron, which Ling), and a list that splits them up makes the one
         comparison the picker exists for the hardest thing to do in it.
 
         Grouping is applied AFTER the ranking rather than instead of it, so the two
         jobs stay separate: the ranking still decides which model a fresh session
         starts on and which one an automatic failover lands on, and this only decides
         where a family's other members are drawn. A family takes the position of its
-        best-ranked member, and members keep their ranked order inside it — so the
+        best-ranked member, and members keep their ranked order inside it, so the
         first row of the picker is the same model it was before.
         """
         known = [model_id for model_id in self._preferred if model_id in found]
@@ -139,6 +139,8 @@ class OpenAICompatProvider:
                tool_choice="auto") -> Iterator[Chunk]:
         import httpx  # noqa: PLC0415
 
+        if self.entry.hoists_system:
+            messages = keep_late_system_in_place(messages)
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -152,15 +154,15 @@ class OpenAICompatProvider:
         # The Think toggle, and only where the provider has said it understands the
         # field. `kind = "openai"` covers OpenRouter and OpenCode Zen alike, and an
         # unknown key is a 400 from any endpoint entitled to be strict about its own
-        # wire format — so this is gated on the profile's declaration rather than on
+        # wire format, so this is gated on the profile's declaration rather than on
         # the shape of the URL.
         #
         # `exclude` as well as `enabled`, which is not a contradiction: `exclude`
         # suppresses the reasoning TEXT, not the reasoning. The model still thinks
         # before it answers; OpenRouter simply does not send the transcript back.
         # That is the right default here for two reasons. Nothing in this app can
-        # display it — `parse_sse` reads `delta.content` and `delta.tool_calls` and
-        # `Chunk` has no third field — so without this the deployment pays to
+        # display it: `parse_sse` reads `delta.content` and `delta.tool_calls` and
+        # `Chunk` has no third field, so without this the deployment pays to
         # transmit text it drops on the floor. And the one place reasoning has ever
         # reached a reader was a defect: one turn in 554 arrived as 34,645 characters
         # of a model quoting its own instructions back, which is what
@@ -174,7 +176,7 @@ class OpenAICompatProvider:
         # counts against `max_tokens`: four requests with it at MAX_TOKENS came back
         # `finish_reason: stop` with 504-1455 reasoning tokens AND a complete answer,
         # none empty. (At a 300-token cap the same models return no content at all with
-        # `finish_reason: length`, so the generous cap is load-bearing here — see
+        # `finish_reason: length`, so the generous cap is load-bearing here; see
         # `config.MAX_TOKENS`.) And **the models on this lineup reason whether or not
         # this field is sent**: the four control requests without it reported 168-1684
         # reasoning tokens each. So the toggle is a request, not a switch, and what it
@@ -199,6 +201,33 @@ class OpenAICompatProvider:
             yield from parse_sse(response.iter_lines())
 
 
+def keep_late_system_in_place(messages: list[dict]) -> list[dict]:
+    """Re-send a system message that arrives mid-conversation as a user message.
+
+    For an endpoint that hoists every system message into one instruction at the top
+    (`ProviderEntry.hoists_system`). Measured 2026-10-05 on Vertex gemini-3.5-flash,
+    seven conversations taken through four tool rounds and then given the forced last
+    request twice from the same state: with the last-round rule as a system message the
+    model answered 2 of 7 and called a tool in the other 5, despite `tool_choice:
+    "none"`; as a user message it answered 7 of 7, with citations. Each of those five is
+    a reader shown "I wasn't able to finish looking that up".
+
+    Leading system messages (the prompt, and the context `grounded()` puts at index 1)
+    are where a hoist puts them anyway, so they are left alone. A new list, because the
+    tool loop keeps appending to the one it passed in.
+    """
+    started = False
+    kept = []
+    for message in messages:
+        role = message.get("role")
+        if role == "system" and started:
+            kept.append({**message, "role": "user"})
+            continue
+        started = started or role != "system"
+        kept.append(message)
+    return kept
+
+
 def _with_body(response):
     """The HTTP error, carrying what the endpoint said in its body.
 
@@ -209,7 +238,7 @@ def _with_body(response):
         429 {"error": {"type": "FreeUsageLimitError", "message": "Rate limit
              exceeded. Please try again later."}}
 
-    which is not "you are going too fast" — waiting does not help, and the reader was
+    which is not "you are going too fast": waiting does not help, and the reader was
     told to wait a moment and retry while ten other models would have answered
     immediately. `llm.classify` can only tell the difference if the body reaches it.
 
@@ -244,15 +273,15 @@ def parse_sse(lines: Iterator[str]) -> Iterator[Chunk]:
             event = json.loads(body)
         except (json.JSONDecodeError, RecursionError):
             # `RecursionError`, because that is what `json.loads` raises on deep nesting
-            # instead of a decode error — and this is the third site of the same gap
+            # instead of a decode error, and this is the third site of the same gap
             # (`llm._parse` and `files.process` are the others). It matters most here for
             # the reason the comment below gives about `[DONE]`: a raise escapes this
             # generator, so `Turn.deltas` can only call it an unknown failure, and a
             # half-streamed answer already on the reader's screen is discarded.
             logger.warning("Skipping unparseable stream event: %r", body[:200])
             continue
-        # Parsed is not the same as shaped. `data: "[DONE]"` — quoted, which some
-        # OpenAI-compatible gateways send — is valid JSON and a string, and every
+        # Parsed is not the same as shaped. `data: "[DONE]"` (quoted, which some
+        # OpenAI-compatible gateways send) is valid JSON and a string, and every
         # `.get` below assumed a dict: the AttributeError left `Turn.deltas` to
         # classify it as an unknown failure, so a half-streamed answer was thrown
         # away and replaced with "something went wrong" at the very end of it. An
@@ -262,8 +291,8 @@ def parse_sse(lines: Iterator[str]) -> Iterator[Chunk]:
             continue
         # An error the provider streamed *after* a 200, which is how some gateways
         # report a rate limit hit mid-generation. Skipped like anything else this does
-        # not understand — the rationale above holds, and discarding a half-streamed
-        # answer to show "something went wrong" is worse than a short one — but not
+        # not understand (the rationale above holds, and discarding a half-streamed
+        # answer to show "something went wrong" is worse than a short one), but not
         # silently: without this line the log has nothing to say about an answer that
         # stopped mid-sentence, which is the one question an operator will have.
         if event.get("error"):
@@ -271,7 +300,7 @@ def parse_sse(lines: Iterator[str]) -> Iterator[Chunk]:
             continue
         # `isinstance` before the subscript, not after it. `{"choices": {"delta": {}}}`
         # is a dict, which is truthy, so `choices[0]` raised `KeyError: 0` before the
-        # shape check below could run — and a raise here escapes the generator, so
+        # shape check below could run, and a raise here escapes the generator, so
         # `Turn.deltas` classified it as an unknown failure and threw away a
         # half-streamed answer to show "something went wrong" at the end of it. The
         # same failure the quoted-`[DONE]` note above describes, one line lower down.

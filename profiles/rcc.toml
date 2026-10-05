@@ -7,7 +7,7 @@
 [assistant]
 name = "Sage"
 icon = "🌱"
-page_title = "Sage — RCC Assistant"
+page_title = "Sage: RCC Assistant"
 # The long form, for the sentence the system prompt introduces itself with.
 subject = "the University of Chicago's Research Computing Center (RCC)"
 # The short one, for mid-sentence use: "Ask any question about the RCC…", "No
@@ -22,7 +22,7 @@ path_example = "docs/slurm/sbatch.md#gpu-jobs"
 # documentation cannot answer, and it goes into the answer text.
 contact = "help@rcc.uchicago.edu"
 contact_label = "RCC Help Desk"
-# Who to tell when the deployment itself is broken — the one message addressed to
+# Who to tell when the deployment itself is broken: the one message addressed to
 # staff rather than to a reader.
 operator = "RCC staff"
 
@@ -31,7 +31,7 @@ welcome_title = "What can I help you with?"
 welcome_subtitle = "Answers from the official UChicago RCC documentation, with citations."
 placeholder = "Ask any question about the RCC…"
 followup_placeholder = "Ask a follow-up question…"
-login_heading = "Sage — RCC documentation assistant"
+login_heading = "Sage: RCC documentation assistant"
 login_prompt = "Sign in with your University account to continue."
 login_denied = "That account is outside the domains this deployment allows. Sign in with your University account."
 
@@ -138,13 +138,13 @@ exclude_hosts_env = "SAGE_EXCLUDE_HOSTS"
 # to prevent. An answer grounded here cites the page by name and links nothing.
 #
 # Weight EQUAL to `docs`, which was 0.9 first and is worth saying why it moved. The
-# argument for a lower prior was authority — the maintained public guide is what a
+# argument for a lower prior was authority: the maintained public guide is what a
 # reader should be sent to, and a hit here cites nothing clickable. But the prior is not
 # what was keeping the guide on top: `connection/thinlinc/main.md` wins a failure report
 # because it says "thinlinc", "connect", "login", "password" and "Duo" many times over,
 # which is a genuinely strong lexical match and the wrong answer. A short page that maps
 # the symptom cannot out-score it on terms, so at 0.9 it arrived at rank 5 for "thinlinc
-# cannot connect" and rank 2 for "thinlinc login fails" — indexed, and not read. At 1.15
+# cannot connect" and rank 2 for "thinlinc login fails": indexed, and not read. At 1.15
 # those are rank 2 and rank 1, and p@1 over the golden set goes 86.1% -> 88.9% with
 # recall@3 back to 100%. Equal and not higher is the point: with the same prior the
 # better lexical match still wins, which is why two of the four cases are still rank 2.
@@ -175,7 +175,7 @@ protected = [
 # reduced weight, so an exact match always outranks a synonym match.
 #
 # No "cancelled" in the OOM group. It was added for "my job was cancelled by the
-# scheduler", which is an OOM or a timeout — but now that verb inflections collapse,
+# scheduler", which is an OOM or a timeout. But now that verb inflections collapse,
 # it keys on `cancel`, and *the user cancelling their own job* is the opposite
 # question. It made "cancel a running job" retrieve the exceeded-memory FAQ ahead of
 # the page about scancel. The words that carry the meaning are the other four.
@@ -194,7 +194,7 @@ synonyms = [
     # headed "Troubleshooting" and never uses any of those words. Measured on the
     # reported ThinLinc failure: `connection/thinlinc/troubleshooting.md` was in the
     # corpus, held the cause, and appeared nowhere in the top five for any phrasing of
-    # the question — the app answered that the documentation did not cover it while
+    # the question; the app answered that the documentation did not cover it while
     # citing the page next to the one that did. With this group it is rank 1-3.
     #
     # `fail` earns its place and "broken"/"wrong" do not: the first is what a user
@@ -202,7 +202,7 @@ synonyms = [
     # the other two only appear in this corpus in prose about incorrect results.
     # Negation is NOT here and cannot be: `not`, `no`, `will` and `without` are all
     # stopwords, so "thinlinc will not connect" tokenises to exactly {thinlinc,
-    # connect} — indistinguishable from "how do I connect to thinlinc", and a gap no
+    # connect}, indistinguishable from "how do I connect to thinlinc", and a gap no
     # synonym reaches. Taking those four out of the stopword list was measured and
     # changed nothing, because a documentation corpus says "do not" on every page and
     # the IDF is therefore ~0. See `KNOWN_GAPS` in tests/test_retrieval_eval.py.
@@ -222,13 +222,13 @@ synonyms = [
     # the one page in the corpus that retrieved *nothing at all* for its own title: a
     # CamelCase compound is a single token, the page's prose never writes it that way,
     # and a term that appears in no document body scores zero even where it does appear
-    # in the title and the path — the scorer skips a term with no IDF before it reaches
+    # in the title and the path: the scorer skips a term with no IDF before it reaches
     # either boost. So the word has to be connected to words the pages do use.
     #
     # A group rather than splitting CamelCase in the tokenizer, which was the other
     # candidate and is a worse trade: `MidwayGeoSpatial` would split to `midway` +
     # `spatial`, which is "midway" (a term in 200-odd sections) plus the word that
-    # titles `r.md`'s "Spatial Packages" — one page rescued by making every score in
+    # titles `r.md`'s "Spatial Packages": one page rescued by making every score in
     # the index noisier. `gis` and `geospatial` are what this page and its siblings
     # actually say, and they are synonyms of each other whatever happens to this title.
     ["midwaygeospatial", "geospatial", "gis"],
@@ -245,14 +245,14 @@ name = "openrouter"
 kind = "openai"
 key_env = "OPENROUTER_API_KEY"
 hint = "OpenRouter keys start with `sk-or-v1-`; the free router needs no balance."
-# One model, and it is a router rather than a model — which is the whole point of
+# One model, and it is a router rather than a model, which is the whole point of
 # choosing it. `openrouter/free` ("Free Models Router") picks a free model per request
 # from whatever OpenRouter is serving, filtered to the ones that support the parameters
 # the request actually carries, so a tool-calling turn is never routed to a model that
 # cannot call a tool.
 #
-# That is the same job `.github/workflows/lineup.yml` does for Zen — find the free
-# models, notice which have stopped answering, keep the profile's list true — done on
+# That is the same job `.github/workflows/lineup.yml` does for Zen (find the free
+# models, notice which have stopped answering, keep the profile's list true), done on
 # the provider's side, for free, per request, with no ledger and no daily pull request.
 # The reason to hand it over is that the Zen half is genuinely hard to keep right: a
 # free tier rotates its lineup without notice, `hy3-free` left the catalogue and came
@@ -263,20 +263,20 @@ hint = "OpenRouter keys start with `sk-or-v1-`; the free router needs no balance
 # schema): six tool calls out of six, routed across `liquid/lfm-2.5-2.6b:free`,
 # `cohere/north-mini-code:free`, `inclusionai/ling-3.0-flash-fin:free`,
 # `minimax/minimax-m2.7:free` and `dots-studio/dots-3-note-preview:free`, median 1.4s.
-# One of those — `liquid/lfm-2.5-2.6b:free` — answered `429 … temporarily rate-limited
+# One of those, `liquid/lfm-2.5-2.6b:free`, answered `429 … temporarily rate-limited
 # upstream` when asked directly in the same minute, so the router is absorbing the
 # upstream failures rather than passing them on. That is the behaviour being bought.
 #
 # What it costs, and it is a real trade: the model changes from turn to turn, so answer
 # quality and speed vary in a way a pinned model's do not, and a reader cannot tell
 # which model wrote the answer they are looking at. Availability over consistency,
-# deliberately — a 2.6B model that answers beats a 550B one that returns an empty
+# deliberately: a 2.6B model that answers beats a 550B one that returns an empty
 # stream, which is what Zen's Nemotron models were doing when this was added.
 base_url = "https://openrouter.ai/api/v1"
 base_url_env = "OPENROUTER_BASE_URL"
-# Discovery still runs — it is how the app learns the router is being served at all —
+# Discovery still runs (it is how the app learns the router is being served at all),
 # and `free_marks` below narrows all 387 models to this one.
-# TEMPORARY, and the first entry is the one a fresh session starts on — see
+# TEMPORARY, and the first entry is the one a fresh session starts on; see
 # `openai_compat._order`, which puts this list ahead of everything discovered.
 #
 # `~deepseek/deepseek-v4-flash-latest` is PAID, which is why it needed a line of its own in
@@ -289,7 +289,7 @@ base_url_env = "OPENROUTER_BASE_URL"
 # failover machinery can rescue.
 #
 # What it costs: $0.03 per million input tokens and $0.07 per million output, the
-# cheapest thing OpenRouter serves that is not free — a question of this app's shape
+# cheapest thing OpenRouter serves that is not free: a question of this app's shape
 # costs a small fraction of a cent. It takes tools, which this app requires, and its
 # context is 1.31M tokens.
 #
@@ -307,11 +307,11 @@ models_env = "SAGE_OPENROUTER_MODELS"
 # The mark is the router's own id, so the rule reads "offer exactly this". Unusual, and
 # deliberate: OpenRouter fronts 387 models of which 18 are free and this key holds
 # $1.80, so a wider rule is a picker full of buttons that return 402. Widening it to
-# `:free` would offer all 18 — every zero-priced model there carries that suffix, and
-# every model carrying it is zero-priced — and that is the lineup this entry chose not
+# `:free` would offer all 18 (every zero-priced model there carries that suffix, and
+# every model carrying it is zero-priced), and that is the lineup this entry chose not
 # to have, because nine of the eighteen were rate-limited or dead on the same sweep the
 # router sailed through.
-# The second mark is a literal id and it is NOT free — the same shape as `big-pickle`
+# The second mark is a literal id and it is NOT free, the same shape as `big-pickle`
 # in the Zen entry below, and for a different reason: that one is free and unmarked,
 # this one is paid and deliberate. `free_only` filters what is offered down to whatever
 # matches this list, so without the literal a paid id could not be offered, selected or
@@ -323,11 +323,11 @@ free_marks_env = "SAGE_OPENROUTER_FREE_MARKS"
 # This provider takes OpenRouter's `reasoning` request parameter, which is what the
 # Think toggle in the corner of the input box sends. Declared here rather than assumed
 # from `kind`, because `kind = "openai"` also covers OpenCode Zen, which has never
-# heard of the field — and it is what decides whether the toggle is drawn at all.
+# heard of the field. It is also what decides whether the toggle is drawn at all.
 #
 # Checked against `GET /models` rather than taken on trust: `supported_parameters` for
 # `openrouter/free` lists `reasoning`, and so does every one of the 19 `:free` models
-# it routes to. `reasoning_effort` — the low/medium/high dial — is on only 6 of those
+# it routes to. `reasoning_effort` (the low/medium/high dial) is on only 6 of those
 # 19, which is why the control is a switch: the router serves a different model every
 # turn, so an effort setting would be honoured on about a third of them with nothing
 # on screen able to say which.
@@ -335,7 +335,7 @@ reasoning = true
 # `openrouter/free` is a ROUTER, not a model, and this is where the app is told so.
 #
 # It matters because it changes what "try again" means. Everywhere else in the lineup a
-# repeat is pointless — the model that just returned nothing will return nothing again —
+# repeat is pointless (the model that just returned nothing will return nothing again),
 # so `View.alternative` skips anything already `tried` and walks on to the next name.
 # Here the same id resolves to a different model on the next request: measured over 33
 # rolls on 2026-09-11 it served 14 distinct models, and two consecutive rolls repeated a
@@ -347,11 +347,11 @@ reasoning = true
 # `User Safety: safe`. It was reached on 2 of 33 tool-less rolls.
 # `normalize.is_moderation_verdict` is what stops that being shipped as an answer; this
 # is what gets the reader a real one instead of an error card. Neither OpenRouter's
-# `plugins.excluded_models` nor `provider.ignore` can keep the router off it — both were
-# tried — so recovery after the fact is the only lever there is.
+# `plugins.excluded_models` nor `provider.ignore` can keep the router off it (both were
+# tried), so recovery after the fact is the only lever there is.
 routers = ["openrouter/free"]
 routers_env = "SAGE_OPENROUTER_ROUTERS"
-# What the picker calls it, because the served id is not a name — it is the billing
+# What the picker calls it, because the served id is not a name: it is the billing
 # arrangement, and a reader choosing a row is not choosing a billing arrangement. The id
 # is untouched everywhere it counts: it is what goes upstream, what the feedback log and
 # `tools/agent_bench.py` record, and what the error card's technical-details panel
@@ -371,8 +371,8 @@ free_only_env = "SAGE_OPENROUTER_FREE_ONLY"
 name = "vertex"
 kind = "vertex"
 # `SAGE_VERTEX` is a SWITCH, not a secret: set it to anything and this provider is in
-# the lineup. Vertex needs no credential — the instance mints its own token from the
-# metadata server — but `ui.access.configured_providers` decides a provider is usable
+# the lineup. Vertex needs no credential (the instance mints its own token from the
+# metadata server), but `ui.access.configured_providers` decides a provider is usable
 # by whether `key_env` names a variable that is set, so a provider declaring no
 # key_env at all is silently never offered. Found by test, not in production.
 #
@@ -387,20 +387,40 @@ hint = "Vertex needs no API key: set SAGE_VERTEX=1 and grant the runtime service
 #
 # FIRST, because it is the only route that spends Google Cloud credit. The Gemini
 # Developer API below bills an AI Studio prepayment balance that Cloud Billing credit
-# does not reach — measured as `Your prepayment credits are depleted` from a key minted
+# does not reach, measured as `Your prepayment credits are depleted` from a key minted
 # in a project with billing on and $300 unspent.
 #
 # Measured on the `global` endpoint, which is not optional: `us-central1` answers for
 # gemini-2.5-flash and returns `Publisher model ... not found` for 3.5, 3.6 and 3.8.
-#   google/gemini-3.8-flash   OK   <- was first here, and is now last. See below
-#   google/gemini-3.6-flash   OK
-#   google/gemini-3.5-flash   OK   <- shed as "high demand" 0/4 on the free tier
+#   google/gemini-3.5-flash   OK   <- first since 3.6 got a retirement date. See below
+#   google/gemini-3.8-flash   OK   <- was first here once, and is last
+#
+# 3.6 LED THIS LIST UNTIL GOOGLE DATED ITS RETIREMENT. Vertex stops serving it on
+# 2026-11-19, and every request after that is a 404; gemini-3.7-flash, never listed
+# here, follows on 2027-01-28. The notice (received 2026-10-05) names 3.8 and 3.5 as
+# the targets, and Vertex's lifecycle table is what tells them apart: 3.5-flash is in
+# the class kept for at least 12 months after release (to 2027-05-19 or later), while
+# 3.6, 3.7 and 3.8 are short-term models, retired on as little as 45 days of notice
+# once a successor ships. A short-term id at the top of this list is a default Google
+# moves on its own schedule, so read the table before putting one there:
+# https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+#
+# 3.5 IS ALSO THE FASTER OF THE TWO. Measured 2026-10-05 against this project with the
+# app's own system prompt and tool schema: the first model call of a turn, 40 pairs
+# after 2 discarded, interleaved so each model went first in half of them.
+#                             served   median     p90   over 10s
+#   google/gemini-3.5-flash   39/40     1.17s    3.36s     1     (the 40th: a 429, 19.6s)
+#   google/gemini-3.8-flash   40/40     2.22s   31.13s    15
+# 3.8 took longer in 36 of the 39 complete pairs: median ratio 1.91, 95% CI [1.34,
+# 4.35], Wilcoxon signed-rank p = 2.6e-7. Its worst pair was 62x (73.5s against 1.2s)
+# and its best 0.38x, so it does win the odd one. That 429 is why 3.8 stays listed at
+# all: Vertex's shared quota can refuse 3.5 too, and failover walks on to the next id.
 #
 # 3.8 IS LAST BECAUSE IT IS THE NEWEST, which is the opposite of how this list was
 # first ordered. "OK" above means it answers, and says nothing about how long the
-# answer takes to start: the id every deployment reaches for first is the id with the
+# answer takes to start. The id every deployment reaches for first is the id with the
 # least capacity per request, and Vertex does not shed a paid request the way the free
-# tier sheds an unpaid one — it QUEUES it. Reported as the deployment being slow, and
+# tier sheds an unpaid one: it QUEUES it. Reported as the deployment being slow, and
 # measured in the app's own progress block: the same question that takes 11.3s on
 # Streamlit (on `openrouter/free`) took 42.6s here, as 19.4s waiting for the search
 # call and 23.3s waiting for the read and the answer. Three model calls, ~14s each.
@@ -408,37 +428,38 @@ hint = "Vertex needs no API key: set SAGE_VERTEX=1 and grant the runtime service
 # What that latency is NOT, because both were measured before this was reordered
 # (2026-09-15, the AI Studio key against `generativelanguage`, the app's own system
 # prompt and tool schema):
-#   * not decode -- the tool call is 18 output tokens
-#   * not thinking -- 35-48 thought tokens for this decision, under a second of work.
+#   * not decode: the tool call is 18 output tokens
+#   * not thinking: 35-48 thought tokens for this decision, under a second of work.
 #     (`total_tokens` minus prompt minus completion is where they show up; the
 #     OpenAI-compatible surface reports no `reasoning_tokens` for them.)
-#   * not the app -- the corpus indexes in 0.23s, `search_docs` runs in 5ms and
+#   * not the app: the corpus indexes in 0.23s, `search_docs` runs in 5ms and
 #     `read_doc` in under 1ms.
 # It is waiting for a slot, and it has two regimes on one endpoint: refused in 0.1-0.5s
 # (3.8-flash, 8 attempts out of 8, five 503 "high demand" then three 429), or admitted
-# and made to wait -- 31.6s and 17.6s on 3.5-flash for the identical 18-token reply it
-# served in 0.9s twenty minutes later. A median served request is ~1.0s.
+# and made to wait (31.6s and 17.6s on 3.5-flash for the identical 18-token reply it
+# served in 0.9s twenty minutes later). A median served request is ~1.0s.
 #
-# So this order is by measured availability and not by version. Revisit it when 3.8 has
-# been out long enough to have capacity; the way to check is 8 requests of the app's
-# own shape, not one.
+# So this order is by lifecycle and measured latency, not by version. Revisit it when
+# Google dates 3.8's retirement or a newer flash id joins the 12-month class, and
+# measure the way the 2026-10-05 table was: paired, interleaved, dozens of pairs, never
+# one request. deploy/cloudrun.sh starts sessions on the first id here, and
+# tests/test_profile.py fails if the two disagree.
 #
 # WHAT TO KNOW BEFORE LEAVING THIS FIRST. Vertex has no free tier; every token bills,
-# and on a pay-as-you-go account a spent credit produces NO error — it produces an
+# and on a pay-as-you-go account a spent credit produces NO error: it produces an
 # invoice. So nothing here fails over on its own when the money runs out. What catches
 # it is the budget alert on the project, which measures NET spend and is therefore
 # silent for as long as credit covers the usage and mails the moment it does not.
 # If that mail arrives and the answer is "stop paying", delete this block; the free
 # `google` entry below is already the next in line.
 models = [
-    "google/gemini-3.6-flash",
     "google/gemini-3.5-flash",
     "google/gemini-3.8-flash",
 ]
 # Vertex's OpenAI surface serves no `/models`, so discovery fails and the adapter falls
 # back to the list above. Documented behaviour, not a workaround.
 #
-# `reasoning` is what draws the Think pill — `ui.view.thinks` reads it off the entry of
+# `reasoning` is what draws the Think pill: `ui.view.thinks` reads it off the entry of
 # the provider answering NOW, so a lineup where only OpenRouter declares it means the
 # pill is simply absent on a deployment defaulting to anything else. Reported exactly
 # that way: present on Streamlit, missing on Cloud Run, because the two default to
@@ -452,17 +473,23 @@ models = [
 # So the parameter the adapter already sends is accepted here.
 #
 # What it does NOT mean: that the toggle turns thinking on. Gemini 3.x reasons by
-# default — the baseline row above spent 210 tokens doing it with nothing asked for —
+# default (the baseline row above spent 210 tokens doing it with nothing asked for),
 # so the pill asks for more of something already happening rather than switching it on.
 # That is the same caveat `openai_compat.stream` records for every provider ("the
 # toggle is a request, not a switch"), and it is truer here than anywhere.
 reasoning = true
+# Gemini's OpenAI layer folds every system message into the instruction at the top,
+# so the rule the app appends for a turn's forced last request lost its place: from
+# the same seven four-round conversations, gemini-3.5-flash answered 2 of 7 with it as
+# a system message (calling a tool in the other 5, `tool_choice: "none"` or not) and
+# 7 of 7 with it as a user message. Measured 2026-10-05; see `ProviderEntry`.
+hoists_system = true
 
 [[providers]]
 name = "google"
 kind = "openai"
 key_env = "GEMINI_API_KEY"
-hint = "Gemini keys start with `AIza`. Make it in AI Studio on a project with NO billing account — that, and not the key, is what puts it on the free tier."
+hint = "Gemini keys start with `AIza`. Make it in AI Studio on a project with NO billing account: that, and not the key, is what puts it on the free tier."
 # Gemini speaks OpenAI over `/v1beta/openai`, so this is a profile entry and not an
 # adapter. Measured: discovery returns 56 ids, tool calls come back well formed,
 # streaming emits `data:` chunks and `[DONE]`, and the `models/`-prefixed ids the
@@ -471,7 +498,7 @@ hint = "Gemini keys start with `AIza`. Make it in AI Studio on a project with NO
 # WHY THE KEY COMES FROM AN UNBILLED PROJECT, which is the opposite of the tidy move.
 # Gemini's tier is decided by whether an active billing account is linked to the KEY'S
 # PROJECT, not by anything about the key. A key minted in the project this app deploys
-# to would be Tier 1 — paid — while one from a project with no billing is free tier and
+# to would be Tier 1 (paid), while one from a project with no billing is free tier and
 # stays free. Moving it somewhere tidier would silently start a bill.
 base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
 base_url_env = "GEMINI_BASE_URL"
@@ -495,7 +522,7 @@ base_url_env = "GEMINI_BASE_URL"
 #   gemini-3.5-flash        0/4         "currently experiencing high demand"
 #   gemini-3.1-pro-preview   -          "exceeded your current quota" (pro is not free)
 #
-# The two that fail are the free tier being shed first when capacity is tight — 3.8 did
+# The two that fail are the free tier being shed first when capacity is tight; 3.8 did
 # it once on the first try and then went 4/4. That is the honest cost of the free tier,
 # and the reason a paid key is a real option rather than a waste: Tier 1 is not the
 # traffic that gets turned away.
@@ -510,18 +537,31 @@ base_url_env = "GEMINI_BASE_URL"
 # how many people are on it. A lineup ordered newest-first puts the most contended id
 # in front of every turn, and a failover that lands on it spends a whole round trip on
 # a certain 503 before walking on. The Vertex entry above is reordered for the same
-# finding and the paid form of the same cause — there the wait is a queue rather than a
+# finding and the paid form of the same cause: there the wait is a queue rather than a
 # refusal, which is worse, because nothing in the app can see it.
+#
+# 3.6 STAYS HERE although the Vertex entry dropped it. Google's notice retiring it on
+# 2026-11-19 covers Vertex only, and this API's deprecations page lists
+# gemini-3.6-flash with no shutdown date (checked 2026-10-05 at
+# https://ai.google.dev/gemini-api/docs/deprecations). The two surfaces retire models
+# on separate schedules, so check that page rather than inferring from the other one.
 models = [
     "models/gemini-3.6-flash",
     "models/gemini-3.5-flash-lite",
     "models/gemini-3.8-flash",
 ]
 # 56 -> 3, and no `deny` needed: each of these three marks is unique as a substring
-# across everything the API serves. `gemini-2.5-flash` was not — it also caught the
+# across everything the API serves. `gemini-2.5-flash` was not: it also caught the
 # tts, image, lite and native-audio variants built on it, which is what the deny list
 # that used to be here existed to undo.
 free_only = true
 free_marks = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]
 free_marks_env = "SAGE_GOOGLE_FREE_MARKS"
+# Declared by inference, NOT measured here: the hoist was measured on Vertex (see the
+# note on `hoists_system` there), and this free tier's quota was spent when the same
+# check was run against it on 2026-10-05. Same models behind the same OpenAI layer,
+# and both endpoints demand the same thought signature, which was measured on both.
+# A user message is valid on any OpenAI-compatible endpoint, so the declaration costs
+# nothing if this one turns out not to hoist.
+hoists_system = true
 

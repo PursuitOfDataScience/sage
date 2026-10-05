@@ -1,7 +1,7 @@
 """Turn assembly, streaming, and error classification.
 
-There used to be two near-identical stream readers — one that yielded deltas for
-the UI and one that collected silently — and the tool loop used the silent one for
+There used to be two near-identical stream readers (one that yielded deltas for
+the UI and one that collected silently), and the tool loop used the silent one for
 its final round. The result was that the *most common* interaction (search → read →
 answer) never streamed: users watched a shimmer, then the whole answer appeared at
 once. One reader now serves both, so every answer streams.
@@ -37,20 +37,20 @@ _MESSAGES = {
     # not cosmetic. A spent *key* kills every model behind it, so the way out is a
     # different provider. A spent *free allowance* is metered per model: the other
     # models on the same key answer immediately, and sending the reader to a second
-    # provider — whose key may itself be out of credit — walks them into another
+    # provider (whose key may itself be out of credit) walks them into another
     # dead end.
     # No "try one from the model button": the picker is gone and there is no such
     # control. The sibling `empty` message below was reworded when it went and this one
-    # was missed — it is the last user-facing string in the app that names it. A reader
+    # was missed: it is the last user-facing string in the app that names it. A reader
     # cannot switch model by hand any more, so what is useful is that another attempt
     # may land somewhere else, which the Try again button on the error card does.
     "allowance": "This model has used up its free allowance for now. "
-                 "Try again — another model may answer it.",
+                 "Try again. Another model may answer it.",
     "context": "This conversation got too long for the model. "
                "Clear the chat and ask again.",
     # Not a transport failure: the request succeeded and the stream carried no text.
-    # Free models do it — a content filter, a stop token on the first byte, a hiccup
-    # that ends the stream cleanly — and the answer has to say so, because the
+    # Free models do it (a content filter, a stop token on the first byte, a hiccup
+    # that ends the stream cleanly), and the answer has to say so, because the
     # alternative shipped: an empty bubble under the question, or on a stream with no
     # deltas at all, nothing whatsoever. No error, no answer, nothing to click.
     # No "with the button under the input box": a deployment with one model has no
@@ -111,12 +111,12 @@ def classify(exc: BaseException) -> AssistantError:
         # already covered half of it and the 400 arm covered none.
         #
         # It landed in `unknown`, which is in `turn.FAILOVER_KINDS` and in
-        # `View.PER_MODEL` — so the turn walked all eight of that provider's free
+        # `View.PER_MODEL`, so the turn walked all eight of that provider's free
         # models, one certain 400 each, and finished on "Something went wrong reaching
         # the assistant". `auth` is the right kind and not a euphemism: it is the same
         # refusal for every model on the key, it cannot be retried, and it is
         # key-level, so `View.alternative` jumps to another PROVIDER instead of
-        # walking this one. The reader is told to tell the operator, which is true —
+        # walking this one. The reader is told to tell the operator, which is true:
         # only an operator can take a dead provider out of the lineup.
         or "missingsessionid" in text
         or "can only be used in" in text
@@ -130,7 +130,7 @@ def classify(exc: BaseException) -> AssistantError:
                        # free-models-per-day-high-balance`, with prose reading
                        # "purchase credits to raise your free-model daily limit". The
                        # word `credit` in that sentence sent it to the `quota` branch
-                       # below — which matches `credit` and is checked before 429 — so
+                       # below (which matches `credit` and is checked before 429), so
                        # the reader was told "This model is out of credit or its quota
                        # is used up. Switch to another model", and every clause was
                        # wrong: the key held $4.44, the limit is a request count that
@@ -142,13 +142,13 @@ def classify(exc: BaseException) -> AssistantError:
                        # name is the one part of that body that means what it says.
                        # `allowance` is the right kind for it: the remedy is not
                        # waiting a moment and not buying credit, it is another
-                       # provider — which is exactly what this kind fails over to.
+                       # provider, which is exactly what this kind fails over to.
                        "free-models-per-day", "free_models_per_day",
                        "free-model daily limit")
     ):
         # A free tier's allowance, spent. It arrives as a 429 whose body names
         # `FreeUsageLimitError` and whose *message* reads "Rate limit exceeded. Please
-        # try again later." — so both the status and the prose say "wait", and waiting
+        # try again later.", so both the status and the prose say "wait", and waiting
         # is the one thing that does not work: the allowance resets on the provider's
         # schedule, not in a moment. Told to wait, a reader sat on a dead model while
         # other free models on the same key answered in under a second.
@@ -164,7 +164,7 @@ def classify(exc: BaseException) -> AssistantError:
                        "check your subscription", "payment")
     ):
         # Out of credit does not recover by waiting, so it is deliberately not
-        # retryable — switching provider is the only useful action.
+        # retryable: switching provider is the only useful action.
         kind = "quota"
     elif status == 429 or "rate limit" in text or "too many requests" in text:
         kind = "rate_limit"
@@ -174,7 +174,7 @@ def classify(exc: BaseException) -> AssistantError:
         or status == 413
         # Only OpenAI says "context length". The three other shapes below are the
         # same failure worded by providers this deployment actually talks to, and
-        # every one of them landed in `unknown` — which is in `turn.FAILOVER_KINDS`,
+        # every one of them landed in `unknown`, which is in `turn.FAILOVER_KINDS`,
         # so an oversized conversation walked the WHOLE lineup, one certain refusal
         # per model, and ended on "Something went wrong reaching the assistant"
         # instead of the one sentence that helps: clear the chat. Measured against
@@ -193,8 +193,8 @@ def classify(exc: BaseException) -> AssistantError:
         # the shape is not. `max_tokens` is excluded by name: that field is this
         # app's own request ceiling (`config.MAX_TOKENS`), so a gateway rejecting
         # it is a misconfiguration for an operator to read in the details panel,
-        # not a conversation for the reader to clear. And "string too long" — which
-        # is OpenAI refusing one oversized FIELD — carries no prompt-side word, so
+        # not a conversation for the reader to clear. And "string too long" (which
+        # is OpenAI refusing one oversized FIELD) carries no prompt-side word, so
         # it stays out.
         or (
             ("token" in text or "prompt" in text)
@@ -209,7 +209,7 @@ def classify(exc: BaseException) -> AssistantError:
         needle in text
         for needle in ("timeout", "timed out", "connection", "network", "dns", "ssl",
                        # `httpx.RemoteProtocolError("Server disconnected without
-                       # sending a response.")` — a gateway closing a pooled socket,
+                       # sending a response.")`: a gateway closing a pooled socket,
                        # which is the ordinary way a long stream dies. "connection"
                        # is not a substring of "disconnected", so it read as
                        # `unknown`: the reader was told nothing went wrong in
@@ -247,7 +247,7 @@ class Turn:
 
     def deltas(self) -> Iterator[str]:
         # Fragments are assembled by `index`, which is how an OpenAI-style stream
-        # says which call a later chunk of arguments belongs to — but the index is
+        # says which call a later chunk of arguments belongs to, but the index is
         # not always distinct. mistralai 2.x declares `ToolCall.index` defaulting to
         # 0, so two calls issued in ONE delta both arrive as index 0: the second
         # overwrote the first's id and name, their JSON was concatenated into
@@ -284,14 +284,21 @@ class Turn:
                         slot["name"] = fragment["name"]
                     if fragment.get("arguments"):
                         slot["args"] += fragment["arguments"]
+                    # Whichever fragment carries it; see `tool_fragments`.
+                    if fragment.get("extra_content"):
+                        slot["extra_content"] = fragment["extra_content"]
         except Exception as exc:
             raise classify(exc) from exc
 
-        self.tool_calls = [
-            {"id": slot["id"], "name": slot["name"], "input": _parse(slot["args"])}
-            for slot in pending
-            if slot["name"]
-        ]
+        self.tool_calls = []
+        for slot in pending:
+            if not slot["name"]:
+                continue
+            assembled = {"id": slot["id"], "name": slot["name"],
+                         "input": _parse(slot["args"])}
+            if slot.get("extra_content"):
+                assembled["extra_content"] = slot["extra_content"]
+            self.tool_calls.append(assembled)
         self.finished = True
 
     def consume(self) -> Turn:
@@ -300,22 +307,28 @@ class Turn:
         return self
 
     def as_message(self) -> dict:
-        """The assistant message to append before tool results."""
+        """The assistant message to append before tool results.
+
+        Only ever sent back to the model that issued these calls: a failover starts
+        the turn again from `history.build`, which carries text and not tool calls, so
+        one provider's `extra_content` never reaches another's endpoint.
+        """
         return {
             "role": "assistant",
             "content": self.text,
-            "tool_calls": [
-                {
-                    "id": call["id"],
-                    "type": "function",
-                    "function": {
-                        "name": call["name"],
-                        "arguments": json.dumps(call["input"]),
-                    },
-                }
-                for call in self.tool_calls
-            ],
+            "tool_calls": [_as_wire_call(call) for call in self.tool_calls],
         }
+
+
+def _as_wire_call(call: dict) -> dict:
+    wire = {
+        "id": call["id"],
+        "type": "function",
+        "function": {"name": call["name"], "arguments": json.dumps(call["input"])},
+    }
+    if call.get("extra_content"):
+        wire["extra_content"] = call["extra_content"]
+    return wire
 
 
 def _parse(arguments: str) -> dict:

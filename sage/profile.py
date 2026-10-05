@@ -1,4 +1,4 @@
-"""What this deployment is *about* — as data, not as code.
+"""What this deployment is *about*: as data, not as code.
 
 Everything that says "this assistant answers questions about the University of
 Chicago's RCC" used to be spread across nine modules: the system prompt, the tool
@@ -14,7 +14,7 @@ consumes them takes a profile rather than reaching for a constant. Pointing
     SAGE_PROFILE=profiles/my-docs.toml streamlit run app.py
 
 The dataclass defaults are deliberately unbranded. A missing or unreadable profile
-leaves a working assistant with generic copy — which is the honest failure, and it is
+leaves a working assistant with generic copy, which is the honest failure, and it is
 also the proof that nothing outside this module knows the subject. `profiles/rcc.toml`
 is what makes this deployment the RCC one.
 
@@ -63,7 +63,7 @@ class Identity:
     `subject` is the long form the system prompt introduces itself with; `topic` is
     the short one that appears mid-sentence ("Ask any question about the RCC…", "No
     matching RCC documentation was found"). `operator` is who a reader should tell
-    when the deployment itself is misconfigured — the one message in the app that is
+    when the deployment itself is misconfigured: the one message in the app that is
     addressed to staff rather than to a reader.
     """
 
@@ -71,7 +71,7 @@ class Identity:
     icon: str = "📘"
     page_title: str = "Documentation assistant"
     subject: str = "this documentation"
-    #: Used as an adjective — "an RCC question", "the RCC documentation" — so it is a
+    #: Used as an adjective ("an RCC question", "the RCC documentation"), so it is a
     #: bare noun and empty is a valid value, giving "a question" and "the
     #: documentation". Always go through `qualifier` rather than interpolating it, or
     #: an unset topic leaves a double space in the middle of a sentence.
@@ -81,7 +81,7 @@ class Identity:
     contact_label: str = "the maintainers"
     operator: str = "whoever runs this deployment"
     #: What the corpus covers, as the search tool describes it to the model: "accounts,
-    #: connecting, Slurm, storage, software, GPUs or policy". Empty is fine — the tool
+    #: connecting, Slurm, storage, software, GPUs or policy". Empty is fine: the tool
     #: then says only which subject it searches.
     topics: str = ""
     #: A real `path` from this corpus, quoted in the read tool's description and in
@@ -95,7 +95,7 @@ class Identity:
 
     @property
     def qualifier(self) -> str:
-        """`"RCC "` — the topic as an adjective, trailing space included, or `""`.
+        """`"RCC "`: the topic as an adjective, trailing space included, or `""`.
 
         The space belongs to the qualifier because the alternative is five call sites
         each deciding whether to add one, and the one that forgets produces "an
@@ -106,7 +106,7 @@ class Identity:
 
     @property
     def documentation(self) -> str:
-        """"the RCC documentation" — the phrase, built once.
+        """"the RCC documentation": the phrase, built once.
 
         Three places say it: the retrieval caveat handed to the model, the
         no-results tool reply, and the single-pass instruction a tool-less model
@@ -122,8 +122,8 @@ class Copy:
 
     Held together rather than beside the widgets that draw them, so a deployment can
     read its own voice in one place and change it without touching layout code. What
-    is NOT here is anything whose wording is tied to a mechanism — an upload refusal
-    names the limit that refused it, a failover names the model that failed — because
+    is NOT here is anything whose wording is tied to a mechanism (an upload refusal
+    names the limit that refused it, a failover names the model that failed), because
     those are assembled from values and would become templates with five holes.
     """
 
@@ -140,13 +140,13 @@ class Copy:
     #: The sidebar of conversations.
     #:
     #: `chats_heading` says what the list IS, and the one thing worth saying about it is
-    #: that it lasts as long as the tab does — nothing else in the app mentions that.
+    #: that it lasts as long as the tab does; nothing else in the app mentions that.
     #: It was "Chats", set in small caps above a list of chats, which is a label that
     #: decorates rather than informs.
     #:
     #: `new_chat` and `untitled_chat` were one string. They cannot be: the first is an
     #: action and the second is a state, and sharing a word put a button reading
-    #: "New chat" directly above a row reading "New chat" — the same two words for two
+    #: "New chat" directly above a row reading "New chat": the same two words for two
     #: different things, in a panel four rows tall.
     chats_heading: str = "This session"
     new_chat: str = "New chat"
@@ -162,21 +162,21 @@ class Copy:
     #: `status_answering` is that same opening wait when the Think toggle is OFF, and it
     #: exists because "Thinking" was shown either way. With the toggle off no
     #: `reasoning` parameter is sent at all (see `ProviderEntry.reasoning`), so the row
-    #: was claiming a thing the request had not asked for — on a provider that cannot
+    #: was claiming a thing the request had not asked for; on a provider that cannot
     #: reason, `View.can_think` forces the flag false and the claim was never once true.
     #: A gerund like the other two, because all three describe a wait in progress, and
     #: it names nothing inside the machine: not the tools, not the model, not the
-    #: instructions. Deliberately not another word for `status_working` — that one is
+    #: instructions. Deliberately not another word for `status_working`: that one is
     #: taken, by a *step*, and `new_chat`/`untitled_chat` below is what one word doing
     #: two jobs looks like.
     #:
     #: NOT the third and fourth coming back. `status_searching` and `status_reading`
     #: named the STAGE a turn was in and are gone for good (see below); this is one more
-    #: word for one more moment — the first wait of a turn, which is the only place
+    #: word for one more moment, the first wait of a turn, which is the only place
     #: `turn.wait_phrase` is read.
     #:
-    #: There used to be two more — "Searching the documentation" and "Reading the
-    #: relevant sections" — and a rule that nothing from inside the machine could
+    #: There used to be two more ("Searching the documentation" and "Reading the
+    #: relevant sections"), and a rule that nothing from inside the machine could
     #: reach this row: not the query, not the path, not the section's own title. The
     #: owner asked for the opposite ("the user needs to see the detailed status
     #: updates and which sections to read etc, this is more precise"), so a tool call
@@ -185,13 +185,13 @@ class Copy:
     #: recorded rather than quietly applied: the phrases were deliberate, and the
     #: reasoning for them is in this file's history if a deployment wants it back.
     #: `status_searching` and `status_reading` were here, naming the STAGE a turn was in
-    #: — "Searching the documentation", "Reading the relevant sections" — and they are
+    #: ("Searching the documentation", "Reading the relevant sections"), and they are
     #: gone for the third and last time. The row drew a step per call and KEPT them,
     #: which by the third round was six rows of history over an empty answer ("it's
     #: everything showing, which looks bad"); it became one line carrying one of those
     #: phrases, and that was too little ("it stills shows searching the relevant doc and
     #: things like that rather than very specific cot shown in the status message"). One
-    #: line, naming the running step, is what both complaints leave standing — so the
+    #: line, naming the running step, is what both complaints leave standing, so the
     #: phrases had nothing left to describe. `status_working` survives because
     #: `turn.call_step` still needs a word for a tool that declares no name.
     status_thinking: str = "Thinking"
@@ -199,7 +199,7 @@ class Copy:
     status_working: str = "Working"
     #: The toggle in the corner of the input box, where the model picker used to be.
     #:
-    #: One word, and the SAME word in both states — not "Think" against "Thinking".
+    #: One word, and the SAME word in both states, not "Think" against "Thinking".
     #: The pill's width follows its label, it is the leftmost member of a
     #: right-anchored cluster, and a label that grows on click moves the control out
     #: from under the cursor that just pressed it. State is carried by the fill.
@@ -208,17 +208,17 @@ class Copy:
     #: already paid for elsewhere in this app: `help` draws a black panel beside the
     #: cursor (on the 240px chat rows it covered the row above, which is why the ✕ and
     #: New chat have none), and it wraps the control so the wrapper carries a second,
-    #: zero-sized copy of the button — which the composer's geometry bounds would then
+    #: zero-sized copy of the button, which the composer's geometry bounds would then
     #: be measuring. It says what the reader gets and what it costs, because on a free
     #: lineup the cost is the allowance the next few turns are paid out of.
     think_label: str = "Think"
     think_hint: str = "Work through it before answering. Slower."
-    #: The row of icons under an answer — copy it, ask again, ask shorter, ask longer.
+    #: The row of icons under an answer: copy it, ask again, ask shorter, ask longer.
     #:
     #: ONE string each, and it is doing two jobs: `app.js` sets it as both the native
     #: `title` a reader sees on hover and the `aria-label` a screen reader is given.
     #: The buttons carry no text of their own, so this is the only place their meaning
-    #: is written down — which is the trade the owner asked for ("when users hover
+    #: is written down, which is the trade the owner asked for ("when users hover
     #: them, they can be shown for the text to explain what they are"), and why these
     #: say what the reader GETS rather than naming the control.
     #:
@@ -228,7 +228,7 @@ class Copy:
     #:
     #: Not `help=` on a Streamlit button, for the two reasons `think_hint` gives right
     #: above: the black panel beside the cursor, and the wrapper that carries a second
-    #: zero-sized copy of the button — which is exactly what `tools/render_check.py`
+    #: zero-sized copy of the button, which is exactly what `tools/render_check.py`
     #: would then be measuring, and these four now have geometry bounds of their own.
     copy_hint: str = "Copy this answer"
     again_hint: str = "Ask again for a fresh answer"
@@ -237,7 +237,7 @@ class Copy:
 
     @property
     def status_phrases(self) -> tuple[str, ...]:
-        """Every fixed phrase the block can hold — what the layout check has to fit.
+        """Every fixed phrase the block can hold: what the layout check has to fit.
 
         Only the fixed ones. A tool's line is its name plus an argument the model
         chose, which has no longest form to measure; `tools/render_check.py` holds
@@ -256,7 +256,7 @@ class Source:
 
     `reader` and `links` are names looked up in the registries in `sage.corpus`, so a
     corpus in a format this repository has never seen is a new reader plus a line in a
-    TOML file — not an edit to `corpus.build`, which used to branch on the literal
+    TOML file, not an edit to `corpus.build`, which used to branch on the literal
     strings "docs" and "web" in six places.
 
     `weight` is the prior applied to every score from this tree. The RCC deployment
@@ -306,7 +306,7 @@ class ProviderEntry:
     `deny` is the other half of that, and it is a different question: not "can this
     deployment pay for the model" but "does the model work at all". A free tier will
     serve a name from `GET /models` long after the thing behind it has stopped
-    answering — `muse-spark-1.2-contributor-free` returned `500 Internal server error`
+    answering: `muse-spark-1.2-contributor-free` returned `500 Internal server error`
     to every request for a day while the catalogue went on listing it, and the reader
     met it as an error card. Nothing in `free_marks` can express that, because the name
     is genuinely free and genuinely served; it is just dead.
@@ -314,7 +314,7 @@ class ProviderEntry:
     Maintained by `tools/lineup_check.py` rather than by hand, and *self-clearing*: a
     model goes on when it has failed every probe for the retirement threshold and comes
     off the moment it answers again. That property is the whole licence for having a
-    denylist at all — `hy3-free` was down for two days and came back, and a blocklist
+    denylist at all: `hy3-free` was down for two days and came back, and a blocklist
     that quietly outlives the outage it was written for is worse than no blocklist.
     """
 
@@ -330,11 +330,11 @@ class ProviderEntry:
     deny: tuple[str, ...] = ()
     #: Ids that are a ROUTER rather than a model: one name that resolves to a
     #: different model per request. Asking one of these again is not asking the same
-    #: thing again, which makes it the cheapest recovery there is — and the app cannot
+    #: thing again, which makes it the cheapest recovery there is, and the app cannot
     #: work that out for itself, because on the wire a router is an id like any other.
     #: See `ui.view.View.reroutes` and `ui.turn`'s `REROLL_KINDS`.
     routers: tuple[str, ...] = ()
-    #: Whether this provider takes OpenRouter's `reasoning` request parameter — the
+    #: Whether this provider takes OpenRouter's `reasoning` request parameter, the
     #: thing the Think toggle sends. Declared per provider rather than assumed from
     #: `kind`, because `kind = "openai"` covers both OpenRouter and OpenCode Zen and
     #: only one of them has ever heard of it; a `reasoning` key sent to the other is
@@ -343,20 +343,28 @@ class ProviderEntry:
     #: It is also what decides whether the toggle is DRAWN. A control that is present
     #: and does nothing is the failure this app has a rule against, and with the model
     #: picker gone the reader cannot move themselves to a provider where it would
-    #: work — an automatic failover can, which is why `View.can_think` reads this off
+    #: work; an automatic failover can, which is why `View.can_think` reads this off
     #: the model answering now rather than off the default.
     #:
     #: Verified against the provider, not assumed: `GET /models` on OpenRouter lists
     #: `reasoning` in `supported_parameters` for `openrouter/free` and for all 19 of
-    #: its `:free` models. `reasoning_effort` — the discrete low/medium/high knob — is
+    #: its `:free` models. `reasoning_effort` (the discrete low/medium/high knob) is
     #: on only 6 of those 19, which is why this is a switch and not a dial: the router
     #: sends a different model every turn, so an effort setting would be honoured on
     #: roughly a third of turns with nothing on screen able to say which.
     reasoning: bool = False
+    #: Whether this endpoint folds every system message into one instruction at the
+    #: top, as Gemini's OpenAI-compatible layer does on Vertex and on the Gemini API.
+    #: The app puts two rules at the END of the list on purpose (the last-round
+    #: instruction, and a Shorter/Longer request) because the last thing a model reads
+    #: is what it obeys, and hoisted they lose exactly that. Declared, the adapter
+    #: re-sends a system message that follows the conversation's first non-system
+    #: message as a user message; see `openai_compat.keep_late_system_in_place`.
+    hoists_system: bool = False
     #: `(served id, what the reader is shown)` pairs. The id is untouched everywhere it
-    #: matters — it is what goes upstream, what `Model.key` is built from, what the
+    #: matters: it is what goes upstream, what `Model.key` is built from, what the
     #: feedback log and `tools/agent_bench.py` record, and what the error card's
-    #: technical-details panel prints — so nothing that measures a model is measuring a
+    #: technical-details panel prints, so nothing that measures a model is measuring a
     #: nickname.
     #:
     #: It exists because a served id is sometimes an implementation detail wearing a
@@ -368,7 +376,7 @@ class ProviderEntry:
     #: Pairs rather than a dict because every other field on this frozen dataclass is a
     #: tuple, and `label_for` is the only reader.
     labels: tuple[tuple[str, str], ...] = ()
-    #: One sentence shown when no key is set anywhere — where to get one, what it
+    #: One sentence shown when no key is set anywhere: where to get one, what it
     #: looks like. The only screen a reader sees before the app stops.
     hint: str = ""
     #: The `User-Agent` to send. Empty means the HTTP client's own, which is honest
@@ -434,7 +442,7 @@ CITATIONS
 - Link every page you relied on as [Section title](path), using the exact `path`
   string from the search result.
 - Cite inline, where the claim is. Do not restate your citations at the end in any
-  form — the app prints the sections you retrieved underneath your answer.
+  form: the app prints the sections you retrieved underneath your answer.
 - Quote commands, flags and filesystem paths exactly as the documentation gives them.
 
 WHEN THE DOCS DO NOT COVER IT
@@ -530,7 +538,7 @@ def _provider(raw: dict) -> ProviderEntry:
     # No `labels_env`, unlike every field above it. The others are lists of ids or a
     # flag, which an environment variable can carry; a mapping cannot be spelled in one
     # without inventing a syntax to get it wrong in. A deployment that wants different
-    # names has a profile of its own — that is what a profile is.
+    # names has a profile of its own; that is what a profile is.
     shown = raw.get("labels")
     labels = tuple(
         (str(served), str(text).strip())
@@ -548,6 +556,7 @@ def _provider(raw: dict) -> ProviderEntry:
         deny=deny,
         routers=routers,
         reasoning=bool(raw.get("reasoning", False)),
+        hoists_system=bool(raw.get("hoists_system", False)),
         labels=labels,
         hint=str(raw.get("hint", "")),
         user_agent=str(raw.get("user_agent", "")),
@@ -557,8 +566,8 @@ def _provider(raw: dict) -> ProviderEntry:
 def _prompt(raw: dict, origin: str) -> str:
     """The system prompt: inline in the profile, or a file beside it.
 
-    A separate file is the better home for a page of prose — it diffs as prose and it
-    is what a deployment will actually edit — so the path is resolved relative to the
+    A separate file is the better home for a page of prose (it diffs as prose and it
+    is what a deployment will actually edit), so the path is resolved relative to the
     profile rather than to the working directory, which means a profile directory can
     be copied somewhere else whole.
     """
@@ -665,8 +674,8 @@ def active() -> Profile:
     """The loaded profile, read once per process.
 
     Cached because `load()` touches the filesystem and half the app asks for a string
-    from it; `use()` is how a test — or a deployment serving two subjects from one
-    process — puts a different one in place.
+    from it; `use()` is how a test (or a deployment serving two subjects from one
+    process) puts a different one in place.
     """
     global _active
     if _active is None:

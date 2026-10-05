@@ -81,7 +81,7 @@ class TestTurn:
         mistralai 2.x declares `ToolCall.index: Optional[int] = 0`, so a model issuing
         a search and a read in one delta hands over two fragments that claim the same
         slot. Keyed on index alone, the second overwrote the first's name and id and
-        their JSON was concatenated into `{"query":"x"}{"path":"y"}` — unparseable, so
+        their JSON was concatenated into `{"query":"x"}{"path":"y"}`, unparseable, so
         the turn ran one tool with no arguments at all: the search never happened and
         the answer shipped with an empty Sources strip.
         """
@@ -157,6 +157,37 @@ class TestTurn:
         assert message["tool_calls"][0]["type"] == "function"
         assert message["tool_calls"][0]["function"]["name"] == "read_doc"
         assert '"path"' in message["tool_calls"][0]["function"]["arguments"]
+
+    def test_a_thought_signature_goes_back_with_its_call(self):
+        """Gemini 3 (Vertex and the Gemini API alike) answers the round after a tool
+        call with a 400 unless the call comes back carrying the `extra_content` it was
+        issued with. Measured 2026-10-05 on 3.5, 3.6 and 3.8 flash: 400 without it,
+        200 with it, on every one."""
+        signed = dict(call(0, "call_1", "search_docs", '{"query":"gpu"}'),
+                      extra_content={"google": {"thought_signature": "c2ln"}})
+        events = [event(tool_calls=[signed])]
+        message = llm.Turn(stream=iter(events)).consume().as_message()
+        assert message["tool_calls"][0]["extra_content"] == {
+            "google": {"thought_signature": "c2ln"}
+        }
+
+    def test_the_signature_rides_on_whichever_fragment_carries_it(self):
+        events = [
+            event(tool_calls=[call(0, "a", "search_docs", '{"que')]),
+            event(tool_calls=[dict(call(0, None, None, 'ry":"gpu"}'),
+                                   extra_content={"google": {"thought_signature": "s"}})]),
+        ]
+        turn = llm.Turn(stream=iter(events)).consume()
+        assert turn.tool_calls == [{
+            "id": "a", "name": "search_docs", "input": {"query": "gpu"},
+            "extra_content": {"google": {"thought_signature": "s"}},
+        }]
+
+    def test_a_call_issued_without_one_goes_back_without_one(self):
+        """Every other provider's wire shape is untouched: no empty field appears."""
+        events = [event(tool_calls=[call(0, "a", "search_docs", '{"query":"x"}')])]
+        message = llm.Turn(stream=iter(events)).consume().as_message()
+        assert "extra_content" not in message["tool_calls"][0]
 
 
 class TestStart:
@@ -247,7 +278,7 @@ class TestAProviderThatRefusesTheClientIsNeverUnknown:
     arm caught none.
 
     It landed in `unknown`, which is both in `turn.FAILOVER_KINDS` and in
-    `View.PER_MODEL` — so a turn walked all eight of that provider's free models, one
+    `View.PER_MODEL`, so a turn walked all eight of that provider's free models, one
     certain 400 each, and finished on "Something went wrong reaching the assistant".
     `auth` is key-level, so `View.alternative` leaves the provider on the first
     refusal, and it is the honest word: only an operator can take a dead provider out
@@ -284,7 +315,7 @@ class TestASpentFreeAllowanceIsNeverQuota:
     """Two providers cap a free tier, and both bodies read like something else.
 
     Zen's says "Rate limit exceeded. Please try again later." over a
-    `FreeUsageLimitError` — so status and prose both say wait, and waiting is the one
+    `FreeUsageLimitError`, so status and prose both say wait, and waiting is the one
     thing that does not work. OpenRouter's says "purchase credits to raise your
     free-model daily limit", and the word `credit` sent it to `quota`, whose branch
     matches that word and is checked before 429. Measured when a bench run hit the cap:
@@ -332,7 +363,7 @@ class TestAnOversizedConversationIsNeverUnknown:
     a missed classification costs the most.
 
     `turn.FAILOVER_KINDS` is `llm.KINDS - {"context"}`, which means anything that
-    lands in `unknown` is asked of every model in turn — and an oversized request is
+    lands in `unknown` is asked of every model in turn, and an oversized request is
     the same size for all of them. Driven through the running app against the mock
     provider: a 400 the old branch did not recognise made three requests, one per
     model, and finished on "Something went wrong reaching the assistant"; the same
@@ -368,7 +399,7 @@ class TestAnOversizedConversationIsNeverUnknown:
             '{"error":{"message":"string too long"}}',
             # `max_tokens` is this app's own ceiling (`config.MAX_TOKENS`), so a
             # gateway rejecting it is a misconfiguration for an operator to read in
-            # the details panel — not a chat for the reader to clear.
+            # the details panel, not a chat for the reader to clear.
             '{"error":{"message":"max_tokens exceeds the model limit of 8192"}}',
         ],
     )
@@ -429,7 +460,7 @@ class TestToolArgumentsAreWhateverTheModelEmitted:
     """`_parse` is the boundary between a model's free text and a dict the loop assumes.
 
     A model that has started repeating itself emits exactly `[[[[[…`, and `json.loads`
-    answers deep nesting with `RecursionError` rather than a decode error — so it left
+    answers deep nesting with `RecursionError` rather than a decode error, so it left
     `_parse`, which nothing above it expects to raise, and took the turn down as an
     unknown failure. Arguments this cannot read are already an empty dict, which each tool
     answers with its own message to the model.

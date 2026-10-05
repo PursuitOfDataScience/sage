@@ -21,8 +21,8 @@ from sage.providers.openai_compat import OpenAICompatProvider
 # A synthetic OpenAI-compatible entry, not one read out of the shipped profile.
 #
 # It WAS `profile.active().provider("opencode")`, and that coupled tests about a
-# GENERIC rule — the free/paid filtering `openai_compat` applies to any endpoint that
-# serves both — to this deployment happening to declare that particular provider. The
+# GENERIC rule (the free/paid filtering `openai_compat` applies to any endpoint that
+# serves both) to this deployment happening to declare that particular provider. The
 # day the profile dropped it, three of these failed on `replace(None, ...)`: a test of
 # machinery broken by a change of subject, which the layering in CLAUDE.md exists to
 # prevent. The rule is the package's; its tests bring their own subject.
@@ -143,7 +143,7 @@ class TestParseSSE:
 
         Every `.get` here assumed a dict. A valid-JSON string or array reached them
         and raised AttributeError, which `Turn.deltas` then classified as an unknown
-        provider failure — so an answer that had been streaming for twenty seconds was
+        provider failure, so an answer that had been streaming for twenty seconds was
         thrown away and replaced with "something went wrong reaching the assistant" at
         the very end of it.
         """
@@ -153,7 +153,7 @@ class TestParseSSE:
     def test_an_error_streamed_after_a_200_keeps_the_answer_and_says_so(self, caplog):
         """Some gateways report a rate limit hit *during* generation, in the stream.
 
-        Skipped like every other event this parser does not understand — the rule above
+        Skipped like every other event this parser does not understand: the rule above
         is deliberate, and discarding a half-streamed answer to show "something went
         wrong" is worse than a short one. But it is the one shape that says the answer
         stopped rather than finished, so it goes in the log: without it, an operator
@@ -191,6 +191,28 @@ class TestNormalisation:
     def test_missing_index_falls_back_to_position(self):
         calls = [{"function": {"name": "a"}}, {"function": {"name": "b"}}]
         assert [f["index"] for f in providers.tool_fragments(calls)] == [0, 1]
+
+    def test_a_calls_thought_signature_survives_the_parse(self):
+        """The exact event Vertex streamed for gemini-3.5-flash on 2026-10-05, with the
+        signature shortened. Gemini 3 on both Google surfaces rejects the NEXT round with
+        `400 Function call is missing a thought_signature` unless this comes back, so a
+        parser that keeps only id, name and arguments breaks every tool turn there."""
+        line = (
+            'data: {"choices":[{"delta":{"role":"assistant","tool_calls":[{'
+            '"extra_content":{"google":{"thought_signature":"c2ln"}},'
+            '"function":{"arguments":"{\\"query\\":\\"Frontera\\"}","name":"search_docs"},'
+            '"id":"call_18177","index":0,"type":"function"}]},"index":0}]}'
+        )
+        [chunk] = list(providers.parse_sse(iter([line])))
+        assert chunk.tool_calls == [{
+            "index": 0, "id": "call_18177", "name": "search_docs",
+            "arguments": '{"query":"Frontera"}',
+            "extra_content": {"google": {"thought_signature": "c2ln"}},
+        }]
+
+    def test_a_call_with_nothing_extra_keeps_its_old_shape(self):
+        call = {"index": 0, "id": "y", "function": {"name": "search_docs"}}
+        assert "extra_content" not in providers.tool_fragments([call])[0]
 
     @pytest.mark.parametrize(
         ("content", "expected"),
@@ -254,7 +276,7 @@ class TestMistralAdapter:
         `Turn.deltas` can only classify it as an unknown failure, and the half-streamed
         answer already on screen is discarded and replaced with "something went wrong" at
         the very end of it. Both adapters normalise onto the same `Chunk`, and only one had
-        been taught to distrust its input — this SDK's shapes have moved between 0.x, 1.x
+        been taught to distrust its input; this SDK's shapes have moved between 0.x, 1.x
         and 2.x before.
         """
         stream = iter([SimpleNamespace(data=SimpleNamespace(choices={"delta": 1}))])
@@ -389,7 +411,7 @@ def _shipped_max_tokens() -> int:
     """`config.MAX_TOKENS` with any environment override taken away.
 
     The module reads the environment at import, so the number the app ships with is
-    only visible with `SAGE_MAX_TOKENS` unset — otherwise this asserts on whatever
+    only visible with `SAGE_MAX_TOKENS` unset; otherwise this asserts on whatever
     the machine running the tests happens to export. The second reload puts the
     process back the way it was found.
     """
@@ -405,7 +427,7 @@ def _shipped_max_tokens() -> int:
 class TestTokenBudgetReachesTheRequest:
     """The cap is only a fix where the request is built.
 
-    `SAGE_MAX_TOKENS` was 1600 and answers came back severed mid-sentence — "Per the
+    `SAGE_MAX_TOKENS` was 1600 and answers came back severed mid-sentence: "Per the
     RCC docs," and then nothing. Two things have to hold, and neither implies the
     other: the shipped default has to be generous, and it has to be the number each
     provider actually asks for. The SDK client and the HTTP client are stood in for
@@ -479,10 +501,99 @@ class TestTokenBudgetReachesTheRequest:
         assert sent.get("max_tokens") == config.MAX_TOKENS
 
 
+class TestAnEndpointThatHoistsSystemMessages:
+    """Gemini's OpenAI layer folds every system message into the one at the top.
+
+    So the rule `ui.turn` appends for a turn's forced last request arrived nowhere near
+    the end, and from the same seven four-round conversations gemini-3.5-flash on
+    Vertex answered 2 of 7 (calling a tool in the other five against `tool_choice:
+    "none"`) where the identical rule as a user message got 7 of 7. A profile entry
+    declares `hoists_system`, and the adapter moves only the messages a hoist would
+    misplace.
+    """
+
+    TURN = [
+        {"role": "system", "content": "the prompt"},
+        {"role": "system", "content": "grounded context"},
+        {"role": "user", "content": "why is my job not starting"},
+        {"role": "assistant", "content": "", "tool_calls": []},
+        {"role": "tool", "tool_call_id": "a", "content": "a section"},
+        {"role": "system", "content": "the last-round rule"},
+    ]
+
+    def sent(self, monkeypatch, **overrides):
+        """The messages the adapter actually put on the wire."""
+        sent = {}
+
+        class Response:
+            status_code = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def iter_lines(self):
+                return iter(['data: {"choices":[{"delta":{"content":"ok"}}]}'])
+
+        class Client:
+            def __init__(self, **_kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def stream(self, _method, _url, json=None, **_kwargs):
+                sent.update(json or {})
+                return Response()
+
+        fake = ModuleType("httpx")
+        fake.Client = Client
+        fake.Timeout = lambda *_a, **_k: None
+        monkeypatch.setitem(sys.modules, "httpx", fake)
+        provider = OpenAICompatProvider(zen(base_url="https://x.test/v1", **overrides), "k")
+        assert "".join(c.text for c in provider.stream("m", self.TURN, None)) == "ok"
+        return sent["messages"]
+
+    def test_a_rule_sent_after_the_conversation_goes_as_a_user_message(self, monkeypatch):
+        sent = self.sent(monkeypatch, hoists_system=True)
+        assert sent[-1] == {"role": "user", "content": "the last-round rule"}
+
+    def test_the_prompt_and_the_grounded_context_stay_system_messages(self, monkeypatch):
+        """A hoist puts these where they already are, so they are not touched."""
+        sent = self.sent(monkeypatch, hoists_system=True)
+        assert [m["role"] for m in sent[:2]] == ["system", "system"]
+
+    def test_an_endpoint_that_does_not_declare_it_gets_the_list_unchanged(
+        self, monkeypatch
+    ):
+        assert self.sent(monkeypatch) == self.TURN
+
+    def test_the_callers_list_is_left_alone(self, monkeypatch):
+        """The tool loop goes on appending to the list it passed in."""
+        before = [dict(message) for message in self.TURN]
+        self.sent(monkeypatch, hoists_system=True)
+        assert before == self.TURN
+
+    def test_a_profile_declares_it_per_provider(self):
+        from sage.profile import from_mapping
+
+        profile = from_mapping({"providers": [
+            {"name": "g", "kind": "openai", "hoists_system": True},
+            {"name": "o", "kind": "openai"},
+        ]})
+        assert profile.provider("g").hoists_system is True
+        assert profile.provider("o").hoists_system is False
+
+
 class TestFreeZenModels:
     """Zen serves its paid lineup from the same endpoint as its free one.
 
-    Discovery returned all of it — the whole Claude and GPT range — and the picker
+    Discovery returned all of it (the whole Claude and GPT range), and the picker
     offered every one as if this deployment had a balance for it. Each of those is a
     button that returns a 402.
     """
@@ -507,7 +618,7 @@ class TestFreeZenModels:
         monkeypatch.setitem(sys.modules, "httpx", fake)
         # `deny=()` unless a test asks otherwise. These tests are about the free/paid
         # rule, and inheriting the shipped profile's deny list would make them fail the
-        # day a model on it is used here as a sample — which is exactly what happened.
+        # day a model on it is used here as a sample, which is exactly what happened.
         settings = {"models": ("deepseek-v4-flash-free",), "deny": ()}
         settings.update(overrides)
         return OpenAICompatProvider(zen(**settings), "sk-zen-test")
@@ -523,7 +634,7 @@ class TestFreeZenModels:
     def test_a_denied_model_is_not_offered_however_it_is_served(self, monkeypatch):
         """The gap the reader met as an error card.
 
-        A model can be free by the rule, listed by `GET /models`, and dead — the
+        A model can be free by the rule, listed by `GET /models`, and dead: the
         catalogue goes on advertising a name whose endpoint returns 500. Taking it out
         of the profile's `models` does not help, because membership in the picker comes
         from discovery and the provider is still serving it. `deny` is the only thing
@@ -641,7 +752,7 @@ class TestAStreamThatIsNotShapedLikeAStream:
         """`json.loads` raises `RecursionError` on deep nesting, not a decode error.
 
         So the `except json.JSONDecodeError` above it did not catch it, and the raise
-        escaped the generator — the failure this whole class is about. The event after it
+        escaped the generator: the failure this whole class is about. The event after it
         must still arrive, because that is what a discarded stream costs the reader.
         """
         deep = "[" * 60_000 + "]" * 60_000

@@ -2,8 +2,8 @@
 
 Two things are worth holding here, and neither is visible from any other test:
 
-* a second profile really does produce a second assistant — different prompt,
-  different tool descriptions, different copy — without touching code;
+* a second profile really does produce a second assistant (different prompt,
+  different tool descriptions, different copy) without touching code;
 * and nothing under `sage/` says "RCC", so there is nowhere for the subject to hide
   when someone swaps the profile and wonders why an answer still mentions Midway.
 """
@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import os
 import pathlib
+import re
 
 import pytest
 
@@ -27,7 +28,7 @@ OTHER = {
     "assistant": {
         "name": "Atlas",
         "icon": "🗺️",
-        "page_title": "Atlas — Maps Handbook",
+        "page_title": "Atlas: Maps Handbook",
         "subject": "the Cartography Department's handbook",
         "topic": "mapping",
         "corpus_name": "the Maps Handbook",
@@ -103,8 +104,8 @@ class TestTheProfileIsTheDeployment:
     def test_a_second_profile_changes_the_words_on_the_answer_row(self, atlas):
         """The four hover strings on the icons under an answer.
 
-        They are the only thing that says what those controls do — the buttons carry
-        no text — so they have to be the deployment's to write, and a key the `Copy`
+        They are the only thing that says what those controls do (the buttons carry
+        no text), so they have to be the deployment's to write, and a key the `Copy`
         dataclass does not declare is dropped in silence by the loader. An override
         and a default in one assertion, because the failure modes are opposite: a
         field missing from the dataclass loses the override, and a field missing from
@@ -138,8 +139,8 @@ class TestAProviderThatNeedsNoLineupMaintenance:
 
     Zen needs `.github/workflows/lineup.yml`: its free lineup rotates without notice,
     the fallback list goes stale, and a model that stops answering has to be noticed by
-    something. OpenRouter's entry is one id — `openrouter/free`, a router that picks a
-    working free model per request — so all three of those jobs happen on the provider's
+    something. OpenRouter's entry is one id (`openrouter/free`, a router that picks a
+    working free model per request), so all three of those jobs happen on the provider's
     side and there is no list here to keep true.
 
     That only holds while the entry cannot admit anything it does not NAME. These tests
@@ -148,7 +149,7 @@ class TestAProviderThatNeedsNoLineupMaintenance:
     state the workflow exists to prevent for the other provider.
 
     The entry held exactly one id until 2026-09-12, and these tests said so. It holds
-    two now — the router plus one pinned PAID model, added because the whole free
+    two now: the router plus one pinned PAID model, added because the whole free
     lineup stopped answering on the same afternoon (see the note on `models` in the
     profile). That is a widening of the list and not of the RULE: both ids are written
     out, `free_marks` still matches the list exactly, and discovery is still a no-op. So
@@ -173,7 +174,7 @@ class TestAProviderThatNeedsNoLineupMaintenance:
         )
 
     def test_every_id_it_offers_is_one_the_profile_writes_out(self, profile):
-        """Not "exactly one" any more — "exactly these". A mark that is a substring
+        """Not "exactly one" any more, but "exactly these". A mark that is a substring
         rather than a whole id is what lets discovery add a model nothing checked."""
         entry = self.router(profile)
         assert entry.models, "the router entry offers nothing at all"
@@ -185,17 +186,17 @@ class TestAProviderThatNeedsNoLineupMaintenance:
 
     def test_its_rule_cannot_admit_anything_the_list_does_not_name(self, profile):
         """`free_only` plus a mark that *is* the id is what makes discovery a
-        no-op — the adapter filters 387 served models down to this one."""
+        no-op: the adapter filters 387 served models down to this one."""
         entry = self.router(profile)
         assert entry.free_only is True
-        # Sets, not tuples: `models` is ordered — its first entry is the model a fresh
-        # session starts on — and `free_marks` is a filter, which has no order to it.
+        # Sets, not tuples: `models` is ordered (its first entry is the model a fresh
+        # session starts on), and `free_marks` is a filter, which has no order to it.
         assert set(entry.free_marks) == set(entry.models)
 
     def test_it_has_no_denylist_because_it_has_nothing_to_deny(self, profile):
         """A denylist is for a name the provider serves and cannot run. With one id,
         and that id being the thing that routes around a broken model, there is no
-        such name — and a stale entry here would empty the provider instead."""
+        such name, and a stale entry here would empty the provider instead."""
         assert self.router(profile).deny == ()
 
     def test_the_router_is_shown_under_a_name_the_profile_chose(self, profile):
@@ -208,7 +209,7 @@ class TestAProviderThatNeedsNoLineupMaintenance:
         from sage.providers import Model
 
         entry = self.router(profile)
-        # The ROUTER's id, named rather than taken as `models[0]` — that was a shortcut
+        # The ROUTER's id, named rather than taken as `models[0]`: that was a shortcut
         # from when the entry held one id, and the first entry is now whichever model
         # the deployment starts on.
         served = self.ROUTER
@@ -224,7 +225,7 @@ class TestAProviderThatNeedsNoLineupMaintenance:
     def test_renaming_it_changes_nothing_that_is_measured(self, profile):
         """The label is the only thing that moves. Everything that identifies a model
         to the provider, to the feedback log, to `tools/agent_bench.py` or to the
-        error card's technical-details panel is built from the id — so a nickname
+        error card's technical-details panel is built from the id, so a nickname
         cannot end up standing in for a model in a measurement."""
         from sage.providers import Model
 
@@ -247,7 +248,7 @@ class TestAProviderThatNeedsNoLineupMaintenance:
 
     def test_the_name_lives_in_the_profile_and_not_in_the_package(self, profile):
         """The standing rule for this repository, applied to one more word. A label is
-        copy, and `sage/` holds no copy — so the check is that the shown name appears
+        copy, and `sage/` holds no copy, so the check is that the shown name appears
         nowhere under the package, which is what would happen if a lookup table were
         added to `sage/providers/base.py` instead of to the profile."""
         from sage.providers import Model
@@ -274,13 +275,46 @@ class TestAProviderThatNeedsNoLineupMaintenance:
             f"through to whatever discovery happens to return first"
         )
 
+    def test_the_deployed_default_leads_its_providers_lineup(self):
+        """The same check for the default the DEPLOYMENT starts on, which lives in a
+        third file: `deploy/cloudrun.sh` sets `SAGE_DEFAULT_MODEL`, and the profile it
+        names orders the lineup.
+
+        Present, because `app.current_model` honours a default only if it is among the
+        models on offer, and otherwise takes the first one. A deploy default naming an
+        id the profile dropped does not fail; it quietly moves every fresh session off
+        Vertex and onto `openrouter/free`. Dropping an id is routine, too: Google
+        retires a short-term Vertex model on as little as 45 days' notice, which is how
+        gemini-3.6-flash left the lineup (retired 2026-11-19, announced 2026-10-05).
+
+        First, because the profile's order is where failover goes and the default is
+        where a session starts. A default sitting behind another id in its own list is
+        two decisions that disagree about which model this deployment prefers.
+        """
+        root = pathlib.Path(SAGE).parent
+        script = (root / "deploy" / "cloudrun.sh").read_text(encoding="utf-8")
+        found = re.search(r'--set-env-vars="([^"]*)"', script)
+        assert found, "deploy/cloudrun.sh no longer passes --set-env-vars"
+        env = dict(pair.split("=", 1) for pair in found.group(1).split(","))
+        provider, _, model_id = env["SAGE_DEFAULT_MODEL"].partition(":")
+        entry = profile_mod.load(str(root / env["SAGE_PROFILE"])).provider(provider)
+        assert entry is not None, f"the deployed profile has no `{provider}` provider"
+        assert model_id in entry.models, (
+            f"deploy/cloudrun.sh starts sessions on `{model_id}`, which {provider}'s "
+            f"lineup no longer lists"
+        )
+        assert entry.models[0] == model_id, (
+            f"deploy/cloudrun.sh starts on `{model_id}` but {provider}'s lineup leads "
+            f"with `{entry.models[0]}`: move them together"
+        )
+
 
 class TestEveryDeploymentIsToldNotToNameItsMachinery:
     """`prompts.SELF_DISCLOSURE` is appended to whatever prompt a profile supplies.
 
     Which is the whole reason it lives in the package rather than in
-    `profiles/rcc.prompt.md`. A deployment writes its own prompt — Atlas here does, and it
-    is three sentences long — and the rule that the tools, the model and the instructions
+    `profiles/rcc.prompt.md`. A deployment writes its own prompt (Atlas here does, and it
+    is three sentences long), and the rule that the tools, the model and the instructions
     are nobody's business is exactly the one nobody would think to copy across. Without
     these two assertions the clause could be deleted from `system_prompt` and the only
     thing that would notice is `tools/agent_bench.py --meta`, which is never a gate.
@@ -299,7 +333,7 @@ class TestEveryDeploymentIsToldNotToNameItsMachinery:
         """Half the clause, and the half a leak-only fix leaves out.
 
         Told only to keep quiet, a model answers "I'm not able to discuss my
-        configuration" — which confirms there is something hidden and leaves the reader's
+        configuration", which confirms there is something hidden and leaves the reader's
         actual doubt where it was. `evals/checks.stonewalled` measures it.
         """
         # Whitespace collapsed, because the clause is wrapped prose and where the lines
@@ -380,14 +414,14 @@ class TestNothingUnderSageNamesTheSubject:
 
         `BRANDED` catches a string that *looks* like this deployment. It cannot catch one
         that is deployment-specific only because the profile says so: `links.resolve`
-        carried `for source in ("docs", "web")` — two ordinary English words that mean the
+        carried `for source in ("docs", "web")`: two ordinary English words that mean the
         RCC's user guide and the RCC's scraped site, and nothing anywhere else. A second
         deployment naming its trees anything else silently lost every bare-path citation.
 
         Registry keys are excluded rather than exempted by name: `reader = "markdown"`,
         `links = "mkdocs"`, `kind = "mistral"` are all profile values that *must* appear in
         `sage/`, because that is where the implementation registers itself. What must not
-        appear is a name the deployment chose freely — a tree's name, a provider's name.
+        appear is a name the deployment chose freely: a tree's name, a provider's name.
         (`mistral` is both here, which is why the exclusion is a set difference and not a
         list of pardons.)
         """
@@ -426,7 +460,7 @@ def test_the_default_profile_is_a_working_assistant():
     """No file at all: unbranded copy, no documents, and no sentence with a hole in it.
 
     The topic is an adjective, so leaving it unset has to read as English rather than
-    as a template that was never filled — "any question", not "any  question", and no
+    as a template that was never filled: "any question", not "any  question", and no
     dangling "point the user at the maintainers ()".
     """
     empty = Profile()

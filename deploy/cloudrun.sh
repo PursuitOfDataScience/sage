@@ -154,15 +154,15 @@ gcloud run deploy "$SERVICE" \
   `# the default resolved to openrouter/free and openrouter/free works. Failover order` \
   `# and the default are two separate decisions; this is the second one.` \
   `#` \
-  `# 3.6 AND NOT 3.8, which is the whole of the fix for "the deployment is slower than` \
-  `# Streamlit": same question, 42.6s here against 11.3s there, and none of the` \
-  `# difference was Cloud Run. The newest flash id is the most contended one, and a` \
-  `# paid Vertex request is queued rather than shed -- so the wait arrives as latency` \
-  `# with nothing in the log or on the page to name it. profiles/rcc.toml carries the` \
-  `# measurements and has 3.8 last in the Vertex lineup for the same reason, so this` \
-  `# variable and that list now agree; changing one without the other is how a fresh` \
-  `# session ends up back on the slow id.` \
-  --set-env-vars="SAGE_PROFILE=profiles/rcc.toml,SAGE_CALL_BUDGET=500,SAGE_VERTEX=1,SAGE_DEFAULT_MODEL=vertex:google/gemini-3.6-flash"
+  `# 3.5 AND NOT 3.8. This was 3.6 until Google scheduled it for retirement on Vertex` \
+  `# (2026-11-19, every request a 404 after that). 3.8 is the replacement Google names,` \
+  `# and it is also the newest flash id and so the most contended: a paid Vertex request` \
+  `# is queued rather than shed, and the wait arrives as latency with nothing in the log` \
+  `# or on the page to name it. 3.5 is the flash id Google keeps for at least 12 months;` \
+  `# 3.6, 3.7 and 3.8 are short-term models that can go on 45 days of notice. The` \
+  `# measurements are in profiles/rcc.toml, whose Vertex lineup leads with this same id,` \
+  `# and tests/test_profile.py fails if this variable and that list stop agreeing.` \
+  --set-env-vars="SAGE_PROFILE=profiles/rcc.toml,SAGE_CALL_BUDGET=500,SAGE_VERTEX=1,SAGE_DEFAULT_MODEL=vertex:google/gemini-3.5-flash"
 
 URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
 echo
