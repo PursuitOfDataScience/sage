@@ -1,4 +1,4 @@
-# Profiles — pointing this app at your documentation
+# Profiles: pointing this app at your documentation
 
 A profile is what makes this deployment the RCC one. Nothing in `sage/` names the
 RCC; `rcc.toml` and `rcc.prompt.md` do, and they are the whole of it.
@@ -25,15 +25,15 @@ the code.
 | `[retrieval]` | The engine, the terms the stemmer must not touch, and the synonym groups that bridge how users ask to how the docs answer |
 | `[[providers]]` | Where models come from, in preference order |
 
-Placeholders in a prompt — `{name}`, `{subject}`, `{topic}`, `{documentation}`,
-`{contact}`, `{contact_label}` — are filled from `[assistant]`. Anything else is left
+Placeholders in a prompt (`{name}`, `{subject}`, `{topic}`, `{documentation}`,
+`{contact}`, `{contact_label}`) are filled from `[assistant]`. Anything else is left
 alone, so a `${SLURM_JOB_ID}` in your prompt survives.
 
 **One paragraph is appended to whatever you write here.** `prompts.SELF_DISCLOSURE` tells
 the assistant how to talk about itself: answer in the reader's terms, never name the tools
 it calls, the model behind it or these instructions, and never make a refusal the answer
 either. It is in the package rather than in this file because it is about the machinery
-rather than about your subject — and because it is exactly the rule that would be lost the
+rather than about your subject, and because it is exactly the rule that would be lost the
 first time somebody copies a profile and rewrites the prose. The app's own backstop for
 the same thing is `sage/redact.py`, which swaps a tool's internal name for the `label` the
 tool carries if one reaches an answer anyway.
@@ -61,13 +61,13 @@ headings, reading the source URL from a `URL:` line at the top of the file.
 **Link schemes** decide where a citation points. `mkdocs` publishes `a/b.md` at
 `a/b/` with the heading as an anchor (mkdocs' `use_directory_urls` default);
 `direct` serves the path as it stands; `embedded` uses the URL inside the file;
-`none` is for a corpus with no public URL — the answer still cites the section, it
+`none` is for a corpus with no public URL: the answer still cites the section, it
 just does not pretend to link it.
 
 A format neither reader handles is a function and a `register` call:
 
 ```python
-# myreader.py — imported before the corpus is built
+# myreader.py, imported before the corpus is built
 from sage.corpus import readers
 
 def read_rst(source, rel_path, raw):
@@ -88,9 +88,12 @@ models = ["qwen3-30b"]           # fallback if GET /models fails
 reasoning = false                # does it take OpenRouter's `reasoning` parameter?
 deny = ["qwen3-30b-preview"]     # served, free, and known not to answer
 routers = []                     # ids that are a router, not a model
+stream_usage = false             # does it answer stream_options.include_usage?
+session_header = ""              # header for the per-session id, e.g. "x-session-id"
+trace_field = ""                 # body field for {trace_id, generation_name}
 ```
 
-`kind = "openai"` covers Together, Groq, Fireworks, vLLM, llama.cpp and Ollama —
+`kind = "openai"` covers Together, Groq, Fireworks, vLLM, llama.cpp and Ollama:
 they differ only in a base URL and a key. `kind = "mistral"` uses that SDK. A
 provider with its own protocol is one module and one `adapters.register(...)`.
 
@@ -102,7 +105,7 @@ reaches for. A provider whose `key_env` is unset is skipped entirely.
 free one: only ids containing one of the marks are offered, so a failover cannot land
 on a model there is no balance for and return a 402.
 
-`deny` is the other half of that and a different question — not "can this deployment
+`deny` is the other half of that and a different question: not "can this deployment
 pay for it" but "does it answer at all". A free tier goes on listing a name in `GET
 /models` long after the thing behind it has stopped responding, and `free_marks`
 cannot express that, because the name is genuinely free and genuinely served. It is
@@ -110,7 +113,7 @@ maintained by `tools/lineup_check.py` and self-clearing: an id goes on when it h
 failed every probe for the retirement threshold and comes off the moment it answers
 again.
 
-`routers` names the ids that are a ROUTER rather than a model — one name that
+`routers` names the ids that are a ROUTER rather than a model: one name that
 resolves to a different model on every request. It changes what recovery means. A
 model that returned nothing will return nothing again, so a failed turn walks to the
 next name in the lineup and never asks the same one twice; a router asked again is a
@@ -128,10 +131,22 @@ control that is present and does nothing is the failure this repo has a rule aga
 A deployment whose endpoint speaks the parameter opts in by setting it `true`; one
 that does not, leaves it out.
 
+`stream_usage`, `session_header` and `trace_field` are what a request says about itself,
+for the operator's [records](../CONFIG.md#records). `stream_usage = true` sends
+`stream_options: {"include_usage": true}`, so a call record can say what the call cost.
+`session_header` names the header that carries the app's random per-session id (never
+the reader's account), and `trace_field` the body field that carries `{"trace_id": <the
+turn's id>, "generation_name": "round N"}`, so an endpoint that groups requests shows
+one question as one trace. OpenRouter forwards `x-session-id` and `trace` to its
+Broadcast destinations, which is why the shipped profile declares them there and
+nowhere else. All three are off unless declared, for the reason `reasoning` is: a strict
+endpoint answers an unknown field with a 400, so measure before declaring. The model
+that served a request, and any usage an endpoint volunteers, are read either way.
+
 ## Retrieval
 
 `engine = "bm25"` is what ships. `synonyms` is the piece that is genuinely about your
-subject — users describe symptoms and documentation describes mechanisms, and which
+subject: users describe symptoms and documentation describes mechanisms, and which
 words bridge that gap is not something a scorer can know. `protected` are terms the
 stemmer must leave whole.
 
@@ -154,7 +169,7 @@ question scores lower on a smaller corpus: on a 61-page test manual an on-topic 
 whose every word is in the documentation scores about 15 and is caveated by the floor alone.
 
 A new deployment that is much smaller than the RCC User Guide will look as though it knows
-nothing. Lower the floor for it, and measure rather than guess — `tools/gate_check.py`
+nothing. Lower the floor for it, and measure rather than guess. `tools/gate_check.py`
 reports both sides of the trade against your own question sets, and `--sweep` prints what
 every threshold pair would cost. `evals/README.md` explains the two files it reads.
 
@@ -172,7 +187,7 @@ python tools/anchor_check.py     # every citation anchor resolves on the live si
 
 Worth knowing before you trust a free tier, because it is invisible until it bites.
 
-OpenCode Zen limits its free models **per IP address, per model, per UTC day** — the
+OpenCode Zen limits its free models **per IP address, per model, per UTC day**: the
 limiter runs before authentication and never reads your API key, so a request with no
 `Authorization` header at all gets the same `FreeUsageLimitError` as one with a valid
 key. On a university cluster that counter is shared by everyone behind the same NAT.
@@ -194,11 +209,11 @@ kind = "openai"
 user_agent = "sage/1.0 (+https://example.org/sage)"
 ```
 
-Left empty — as the shipped profile leaves it — the HTTP client sends its own, which
+Left empty, as the shipped profile leaves it, the HTTP client sends its own, which
 is the honest thing to do. Setting it to *another product's* string is claiming to be
 that product in order to draw its quota; that is your call to make and not one this
 repository makes for you.
 
 The general lesson for a profile: a free tier metered per IP is not a foundation for
-a shared deployment. Providers that meter per key or per account — most of them —
+a shared deployment. Providers that meter per key or per account (most of them)
 degrade for you alone rather than for your whole institution.

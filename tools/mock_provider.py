@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
-"""A local stand-in for OpenCode Zen, so the real app can be run without a key.
+"""A local stand-in for an OpenAI-compatible provider, so the real app runs without a key.
 
 `tools/render_check.py` renders settled states against a replica of Streamlit's DOM.
 It cannot see anything that is about time: the moment a turn lands and the page grows
 underneath the reader, an empty completion, a refused upload, a rate-limited click.
 Those need the actual app, and the actual app needs a provider.
 
-The OpenCode adapter in `sage/providers/` is a plain OpenAI-compatible HTTP client,
-so pointing it at this is enough — no key, no network, no code in the app that exists
-only for tests:
+The `openai` adapter in `sage/providers/` is a plain OpenAI-compatible HTTP client, so
+pointing any profile entry of that kind at this is enough: no key, no network, no code
+in the app that exists only for tests. With the shipped profile that is the OpenRouter
+entry, whose base URL has an environment override (it was OpenCode Zen's until the
+profile dropped that provider):
 
     python tools/mock_provider.py 8799 &
-    OPENCODE_API_KEY=sk-zen-test OPENCODE_BASE_URL=http://127.0.0.1:8799/v1 \\
-    SAGE_DEFAULT_MODEL=opencode:mock-fast-free \\
+    OPENROUTER_API_KEY=sk-or-test OPENROUTER_BASE_URL=http://127.0.0.1:8799/v1 \\
+    SAGE_OPENROUTER_FREE_MARKS=mock- SAGE_DEFAULT_MODEL=openrouter:mock-fast-free \\
     streamlit run app.py --server.port 8502 --server.headless true
+
+Every event names the model that served it, as a real one does, and a request carrying
+`stream_options: {"include_usage": true}` gets a final event with `usage` in it, so the
+app's call records have something to read. `{"served": "some/model"}` in the control
+file makes the served name differ from the one asked for, which is what a router does.
 
 What the next turn does is read from a control file on every request, so a driver
 script can switch scenarios between turns without restarting anything:
@@ -28,8 +35,9 @@ script can switch scenarios between turns without restarting anything:
     echo '{"mode": "quiet"}'            > /tmp/mock_provider.json   # 40 empty deltas, then text
 
 Every request is appended to the log file, which is how you check what the app
-actually sent upstream — the message roles, whether tools were offered, and whether
-the question survived the history budget.
+actually sent upstream: the message roles, whether tools were offered, whether the
+question survived the history budget, and the `x-` headers, `stream_options` and
+`trace` field a profile entry may declare.
 
 Model ids end in `-free` on purpose: `config.is_free_zen_model` is what the picker
 filters on, and a lineup with nothing free in it is a different screen.
@@ -90,6 +98,28 @@ def delta(text: str = "", tool_calls=None, finish=None) -> dict:
     }
 
 
+def usage(served: str, messages: list, text: str) -> dict:
+    """The event an OpenAI-style stream ends with when asked to report usage.
+
+    Counted at four characters a token, which is wrong in the way every estimate is and
+    right enough to tell a long answer from a short one. `choices` is empty because that
+    is the shape the real thing has, and the parser has to cope with it.
+    """
+    prompt = max(1, sum(len(str(item.get("content") or "")) for item in messages) // 4)
+    completion = len(text) // 4
+    return {
+        "id": "chatcmpl-mock",
+        "object": "chat.completion.chunk",
+        "model": served,
+        "choices": [],
+        "usage": {
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "total_tokens": prompt + completion,
+        },
+    }
+
+
 def call(index: int, identifier: str, name: str, arguments: str) -> dict:
     return {
         "index": index, "id": identifier, "type": "function",
@@ -135,6 +165,14 @@ class Handler(BaseHTTPRequestHandler):
             "tools": bool(request.get("tools")),
             "roles": [message.get("role") for message in messages],
             "last": str(messages[-1].get("content") if messages else "")[:400],
+            # What a profile entry may declare, so a driver can see that it was sent
+            # exactly where it was declared and nowhere else.
+            "stream_options": request.get("stream_options"),
+            "trace": request.get("trace"),
+            "headers": {
+                name: value for name, value in self.headers.items()
+                if name.lower().startswith("x-")
+            },
         })
 
         settings = control()
@@ -150,8 +188,20 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Connection", "close")
         self.end_headers()
         pace = float(settings.get("pace", 0.0) or 0.0)
+        served = str(settings.get("served") or request.get("model") or "")
+        wants_usage = bool((request.get("stream_options") or {}).get("include_usage"))
+        streamed: list[str] = []
         try:
             for chunk in self._events(settings, request, messages):
+                if chunk.startswith(b"data: {"):
+                    # Named after the model that served it, as every real event is.
+                    event = json.loads(chunk[len(b"data: "):])
+                    event.setdefault("model", served)
+                    for choice in event.get("choices") or []:
+                        streamed.append(str((choice.get("delta") or {}).get("content") or ""))
+                    chunk = sse(event)
+                elif chunk.startswith(b"data: [DONE]") and wants_usage:
+                    self.wfile.write(sse(usage(served, messages, "".join(streamed))))
                 self.wfile.write(chunk)
                 self.wfile.flush()
                 if pace:
@@ -177,7 +227,7 @@ class Handler(BaseHTTPRequestHandler):
                 call(0, "c2", "read_doc", '{"path": "docs/slurm/sbatch.md"}')]))
             yield sse(delta(finish="tool_calls"))
         elif mode == "parallel" and tools and rounds == 0:
-            # Both calls in ONE delta, both claiming index 0 — the mistralai 2.x
+            # Both calls in ONE delta, both claiming index 0: the mistralai 2.x
             # shape that used to collapse into a single call with no arguments.
             yield sse(delta(tool_calls=[
                 call(0, "c1", "search_docs", '{"query": "sbatch"}'),
@@ -204,7 +254,7 @@ class Handler(BaseHTTPRequestHandler):
             # What a real stream actually looks like. Measured against
             # `nemotron-3.5-lightning-free` on a tool round: 46 chunks, of which 44 carried
             # neither text nor a tool call. This mock sent one, so nothing offline ever
-            # exercised the shape the live path gets on every turn — and two things depend
+            # exercised the shape the live path gets on every turn, and two things depend
             # on it: `llm.start` pulls the first chunk to surface auth failures early, and
             # `collapsing` folds the status block at the first chunk with *text* in it.
             for _ in range(int(settings.get("quiet_deltas", 40))):
@@ -217,7 +267,7 @@ class Handler(BaseHTTPRequestHandler):
             if mode == "long":
                 text = "\n\n".join(f"Paragraph {n}. {ANSWER}" for n in range(6))
             if mode == "empty":
-                # Every model says nothing, unless it is named in `empty_except` —
+                # Every model says nothing, unless it is named in `empty_except`,
                 # which is how a lineup where the *fourth* model works is expressible,
                 # and that is the shape the app's failover walk has to be driven
                 # through. One flat mode could only show the walk ending in the error
@@ -228,7 +278,7 @@ class Handler(BaseHTTPRequestHandler):
                 # `empty_first: N` is the other axis, and the app needs both because it
                 # now has two recoveries. `empty_except` varies by MODEL, which drives
                 # the lineup walk; this varies by REQUEST NUMBER, which is the only way
-                # to be a router — one id that says nothing this time and answers the
+                # to be a router: one id that says nothing this time and answers the
                 # next, with nothing in the lineup having changed. Counted per process,
                 # so rewriting the control file resets nothing and a fresh server is how
                 # a second scenario starts.

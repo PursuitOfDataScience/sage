@@ -116,9 +116,16 @@ else
 fi
 
 # ---------------------------------------------------------------------- deploy
+# The commit being deployed, stamped on every record the app writes (SAGE_GIT_SHA), so
+# a change in the numbers can be lined up against the deploy that caused it. Read here
+# because the image has no .git (.gcloudignore drops it), and the Deploy workflow runs
+# this from a checkout of the exact SHA CI tested. "unknown" rather than failing the
+# deploy when there is no repository to ask.
+GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
 # --source builds with Cloud Build and pushes to Artifact Registry, so no local
 # Docker daemon is needed -- which is the whole reason this works from a login node.
-echo "==> Building and deploying"
+echo "==> Building and deploying ${GIT_SHA}"
 gcloud run deploy "$SERVICE" \
   --source=. \
   --region="$REGION" \
@@ -162,7 +169,12 @@ gcloud run deploy "$SERVICE" \
   `# 3.6, 3.7 and 3.8 are short-term models that can go on 45 days of notice. The` \
   `# measurements are in profiles/rcc.toml, whose Vertex lineup leads with this same id,` \
   `# and tests/test_profile.py fails if this variable and that list stop agreeing.` \
-  --set-env-vars="SAGE_PROFILE=profiles/rcc.toml,SAGE_CALL_BUDGET=500,SAGE_VERTEX=1,SAGE_DEFAULT_MODEL=vertex:google/gemini-3.5-flash"
+  `#` \
+  `# SAGE_TELEMETRY=stdout writes one JSON line per turn, model call, miss and rating,` \
+  `# which Cloud Run ships to Cloud Logging as structured entries. deploy/observability.sh` \
+  `# routes them on to BigQuery and counts them. NOT SAGE_FEEDBACK_LOG, which would also` \
+  `# draw a rating row under every answer: nobody asked for that on this deployment.` \
+  --set-env-vars="SAGE_PROFILE=profiles/rcc.toml,SAGE_CALL_BUDGET=500,SAGE_VERTEX=1,SAGE_DEFAULT_MODEL=vertex:google/gemini-3.5-flash,SAGE_TELEMETRY=stdout,SAGE_DEPLOYMENT=cloudrun,SAGE_GIT_SHA=${GIT_SHA}"
 
 URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
 echo

@@ -16,7 +16,15 @@ from typing import Any
 
 from .. import config
 from ..profile import ProviderEntry
-from .base import Chunk, Model, family_of, flatten, tool_fragments
+from .base import (
+    Chunk,
+    Model,
+    current_tag,
+    family_of,
+    flatten,
+    tool_fragments,
+    usage_counts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +192,25 @@ class OpenAICompatProvider:
         # model deliberates.
         if thinking and self.entry.reasoning:
             payload["reasoning"] = {"enabled": True, "exclude": True}
+        # What the call cost, asked for only where the profile says the endpoint
+        # understands the question: the same rule as `reasoning` above, for the same
+        # reason. Without it most endpoints stream no usage at all, and the call record
+        # can say how long a call took but not what it was charged.
+        if self.entry.stream_usage:
+            payload["stream_options"] = {"include_usage": True}
+        headers = self._headers()
+        # Where this request came from, for an endpoint that groups requests, and in
+        # the header and field the profile names. Nothing here knows which endpoint
+        # that is: an entry that names neither sends neither. See `CallTag`.
+        tag = current_tag()
+        if tag is not None:
+            if self.entry.session_header and tag.session:
+                headers[self.entry.session_header] = tag.session
+            if self.entry.trace_field and tag.turn_id:
+                payload[self.entry.trace_field] = {
+                    "trace_id": tag.turn_id,
+                    "generation_name": f"round {tag.round}",
+                }
 
         with (
             httpx.Client(timeout=httpx.Timeout(120.0, connect=15.0)) as client,
@@ -191,7 +218,7 @@ class OpenAICompatProvider:
                 "POST",
                 f"{self._base}/chat/completions",
                 json=payload,
-                headers=self._headers(),
+                headers=headers,
             ) as response,
         ):
             if response.status_code >= 400:
@@ -298,6 +325,15 @@ def parse_sse(lines: Iterator[str]) -> Iterator[Chunk]:
         if event.get("error"):
             logger.warning("Provider reported an error mid-stream: %r", str(event["error"])[:200])
             continue
+        # What served the request, which every event of a router's stream names, and
+        # what it cost, which arrives once. Read before the shape checks below, because
+        # the usage event of an OpenAI-style stream is exactly the one they skip: it
+        # carries `"choices": []`. Neither is guaranteed to be there, and a missing one
+        # stays missing (see `usage_counts`).
+        served = event.get("model")
+        served = served if isinstance(served, str) else ""
+        tokens_in, tokens_out = usage_counts(event.get("usage"))
+        reported = tokens_in is not None or tokens_out is not None
         # `isinstance` before the subscript, not after it. `{"choices": {"delta": {}}}`
         # is a dict, which is truthy, so `choices[0]` raised `KeyError: 0` before the
         # shape check below could run, and a raise here escapes the generator, so
@@ -305,14 +341,23 @@ def parse_sse(lines: Iterator[str]) -> Iterator[Chunk]:
         # half-streamed answer to show "something went wrong" at the end of it. The
         # same failure the quoted-`[DONE]` note above describes, one line lower down.
         choices = event.get("choices")
-        if not isinstance(choices, list) or not choices:
-            continue
-        if not isinstance(choices[0], dict):
+        if (
+            not isinstance(choices, list)
+            or not choices
+            or not isinstance(choices[0], dict)
+        ):
+            if reported:
+                yield Chunk(model=served, tokens_in=tokens_in, tokens_out=tokens_out)
             continue
         delta = choices[0].get("delta")
         if not isinstance(delta, dict):
             delta = {}
+        finish = choices[0].get("finish_reason")
         yield Chunk(
             text=flatten(delta.get("content")),
             tool_calls=tool_fragments(delta.get("tool_calls")),
+            model=served,
+            finish_reason=finish if isinstance(finish, str) else "",
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
         )

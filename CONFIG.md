@@ -36,11 +36,58 @@ has to change and none of them are settings.
 | `SAGE_MAX_ATTACHED_BYTES` | `20971520` | Upload size limit, across one turn |
 | `SAGE_IMAGE_MAX_EDGE` | `1568` | Longest edge an image is downscaled to before it is sent |
 | `SAGE_MAX_IMAGE_REQUEST_BYTES` | `4194304` *(4 MiB)* | Ceiling on the assembled base64 image bytes in one request. Base64 inflates by a third, so a legal `SAGE_MAX_ATTACHED_BYTES` of uploads can become a 26 MB request no model accepts, and a data URL is deliberately uncounted against the character budget, so nothing else bounded it. What fits is sent; the rest are named in the text, and the first image always goes |
-| `SAGE_FEEDBACK_LOG` | *(unset)* | JSONL sink for 👍/👎, zero-result queries, and one mechanics line per turn (outcome, rounds, searches, caveats, names redacted, seconds). Unset = nothing recorded |
-| `LOG_LEVEL` | `WARNING` | Python log level |
+| `SAGE_FEEDBACK_LOG` | *(unset)* | A JSONL file that gets every [record](#records), and the switch that draws the 👍/👎 row under an answer. Unset = no rating row and no file |
+| `SAGE_TELEMETRY` | *(unset)* | Where an operator's copy of every [record](#records) goes: `stdout` (one JSON line each, for Cloud Run's log collector) or a file path. Never draws the rating row. Unset = nowhere |
+| `SAGE_DEPLOYMENT` | `local` | Stamped on every record as `deploy`. `deploy/cloudrun.sh` sets `cloudrun` |
+| `SAGE_GIT_SHA` | *(empty)* | Stamped on every record as `git_sha`. `deploy/cloudrun.sh` sets it from `git rev-parse --short HEAD` |
+| `LOG_LEVEL` | `WARNING` | Python log level. Records do not go through `logging`, so this cannot hide them |
 
 The full set, with the measurements behind each default, is in
 [`sage/config.py`](sage/config.py), which is written to be read.
+
+## Records
+
+One JSON object per line, written to every sink that is set (`SAGE_FEEDBACK_LOG`,
+`SAGE_TELEMETRY`) and to nothing when neither is. Built in
+[`sage/feedback.py`](sage/feedback.py) and written by
+[`sage/telemetry.py`](sage/telemetry.py), which never raises into a turn, warns once per
+process if a sink fails, and never touches the network. A `stdout` line also carries
+`severity` (`WARNING` for a failed turn or call, `INFO` otherwise) and a short `message`,
+which Cloud Logging lifts out of the payload.
+
+Every record starts with the same fields:
+
+| Field | Meaning |
+| --- | --- |
+| `v` | Schema version, `1`. Bumped when a field changes meaning, not when one is added |
+| `kind` | `turn`, `call`, `miss` or `rating` |
+| `at` | UTC, ISO 8601, to the millisecond |
+| `deploy`, `git_sha` | `SAGE_DEPLOYMENT` and `SAGE_GIT_SHA` |
+| `session` | A random id per browser session. Never the signed-in account, never the rate limiter's key |
+| `turn_id` | One id per question, failovers included. Joins a turn to its calls, its miss and its rating |
+
+| Kind | Its own fields |
+| --- | --- |
+| `turn` | `question` (first 1000 characters), `outcome` (`answered` or `failed`), `model`, `error_kind`, `rounds`, `searches`, `sections`, `caveats`, `sources`, `redacted`, `seconds`, `corpus` (the docs' upstream commit), `prompt` (12 hex characters of the system prompt's SHA-256), `served_model`, `tried`, `think`, `steer` (`""`, `shorter` or `longer`), `calls`, `tokens_in`, `tokens_out`, `ttft_s`, `attachments` (`{count, kinds}`) |
+| `call` | `n` (counts across the whole turn), `round`, `provider`, `model` (the id asked for), `served_model` (the one that answered), `ok`, `error_kind`, `status`, `finish_reason`, `ttft_s`, `seconds`, `tokens_in`, `tokens_out`, `tool_calls` (names only), `toolless` |
+| `miss` | `queries`, `question` |
+| `rating` | `verdict`, `question`, `answer` (first 4000 characters), `sources` |
+
+What the less obvious ones mean:
+
+- **`tried`** lists `{model, error_kind}` for every attempt that failed before the answer,
+  or every attempt on a failed turn. A router asked again after an empty answer appears
+  once per attempt.
+- **`seconds`** and **`ttft_s`** run from the turn's start, so a turn rescued by a failover
+  is charged for both models. `ttft_s` ends at the first text of the answer that was kept.
+- **`tokens_in`/`tokens_out`** are summed over every call, and `null` when no call
+  reported usage. Output counts thinking, which Gemini reports outside `completion_tokens`.
+- **`ok`** is `false` for a call the turn could not use, including a stream the app refused
+  to ship (`empty`), and `null` with `error_kind: interrupted` for one the reader cut off.
+
+Never in a record: answer text (only `rating` quotes what was rated), attachment names or
+contents, tool arguments, the signed-in identity. A stopped or abandoned turn leaves its
+`call` records and no `turn` record.
 
 ## Variables the shipped profile declares
 
@@ -314,7 +361,9 @@ keyed on IP address: campus NAT and a VPN put hundreds of people behind one, so 
 per-IP cap either does nothing or locks out a whole building.
 
 One consequence worth deciding on deliberately: with a login, the feedback log becomes
-attributable to named people, and readers paste job scripts into this app.
+attributable to named people, and readers paste job scripts into this app. The records
+themselves never carry the account (their `session` is a random id), but the questions
+in them are still the readers' own words.
 
 ## Keeping the bundled corpus fresh
 

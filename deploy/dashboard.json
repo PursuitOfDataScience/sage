@@ -1,5 +1,5 @@
 {
-  "displayName": "Sage — Cloud Run",
+  "displayName": "Sage: Cloud Run",
   "mosaicLayout": {
     "columns": 12,
     "tiles": [
@@ -23,7 +23,7 @@
           "aggregation": {"alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_MEAN", "crossSeriesReducer": "REDUCE_SUM", "groupByFields": ["metric.label.\"state\""]}}}}]}}},
 
       {"width": 6, "height": 4, "xPos": 6, "yPos": 4, "widget": {
-        "title": "Egress — the binding free-tier limit (1 GB/month)",
+        "title": "Egress: the binding free-tier limit (1 GB/month)",
         "xyChart": {"dataSets": [{"timeSeriesQuery": {"timeSeriesFilter": {
           "filter": "metric.type=\"run.googleapis.com/container/network/sent_bytes_count\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"",
           "aggregation": {"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM"}}}}]}}},
@@ -38,7 +38,31 @@
         "title": "Container startup latency (the cold start a reader feels)",
         "xyChart": {"dataSets": [{"timeSeriesQuery": {"timeSeriesFilter": {
           "filter": "metric.type=\"run.googleapis.com/container/startup_latencies\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"",
-          "aggregation": {"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_PERCENTILE_95"}}}}]}}}
+          "aggregation": {"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_PERCENTILE_95"}}}}]}}},
+
+      {"width": 6, "height": 4, "xPos": 0, "yPos": 12, "widget": {
+        "title": "Turns per hour, by outcome (deploy/observability.sh)",
+        "xyChart": {"dataSets": [{"timeSeriesQuery": {"timeSeriesFilter": {
+          "filter": "metric.type=\"logging.googleapis.com/user/sage_turns\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"",
+          "aggregation": {"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_DELTA", "crossSeriesReducer": "REDUCE_SUM", "groupByFields": ["metric.label.\"outcome\""]}}}}]}}},
+
+      {"width": 6, "height": 4, "xPos": 6, "yPos": 12, "widget": {
+        "title": "Failed model calls per hour, by provider and kind",
+        "xyChart": {"dataSets": [{"timeSeriesQuery": {"timeSeriesFilter": {
+          "filter": "metric.type=\"logging.googleapis.com/user/sage_failed_calls\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"",
+          "aggregation": {"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_DELTA", "crossSeriesReducer": "REDUCE_SUM", "groupByFields": ["metric.label.\"provider\"", "metric.label.\"error_kind\""]}}}}]}}},
+
+      {"width": 6, "height": 4, "xPos": 0, "yPos": 16, "widget": {
+        "title": "Turn time, failovers included (p50 / p95)",
+        "xyChart": {"dataSets": [
+          {"timeSeriesQuery": {"timeSeriesFilter": {"filter": "metric.type=\"logging.googleapis.com/user/sage_turn_seconds\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"", "aggregation": {"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_PERCENTILE_50"}}}},
+          {"timeSeriesQuery": {"timeSeriesFilter": {"filter": "metric.type=\"logging.googleapis.com/user/sage_turn_seconds\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"", "aggregation": {"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_PERCENTILE_95"}}}}]}}},
+
+      {"width": 6, "height": 4, "xPos": 6, "yPos": 16, "widget": {
+        "title": "Tokens per model call, mean in and out, by provider",
+        "xyChart": {"dataSets": [
+          {"timeSeriesQuery": {"timeSeriesFilter": {"filter": "metric.type=\"logging.googleapis.com/user/sage_tokens_in\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"", "aggregation": {"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_MEAN", "crossSeriesReducer": "REDUCE_MEAN", "groupByFields": ["metric.label.\"provider\""]}}}},
+          {"timeSeriesQuery": {"timeSeriesFilter": {"filter": "metric.type=\"logging.googleapis.com/user/sage_tokens_out\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"sage\"", "aggregation": {"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_MEAN", "crossSeriesReducer": "REDUCE_MEAN", "groupByFields": ["metric.label.\"provider\""]}}}}]}}}
     ]
   }
 }

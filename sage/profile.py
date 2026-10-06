@@ -361,6 +361,21 @@ class ProviderEntry:
     #: re-sends a system message that follows the conversation's first non-system
     #: message as a user message; see `openai_compat.keep_late_system_in_place`.
     hoists_system: bool = False
+    #: Whether this endpoint takes `stream_options: {"include_usage": true}` and answers
+    #: it with a `usage` block on the last event of the stream. Declared, like
+    #: `reasoning`, because a strict endpoint answers an unknown field with a 400, and
+    #: off by default for the same reason. The served model and any usage an endpoint
+    #: volunteers are read whatever this says; it only decides what is ASKED for.
+    stream_usage: bool = False
+    #: The header this endpoint reads a session id from, or "" to send none. The value
+    #: is the random id the app mints per browser session (never the signed-in account),
+    #: so an endpoint that groups requests can group a reader's conversation without
+    #: learning who the reader is.
+    session_header: str = ""
+    #: The request-body field this endpoint reads a trace from, or "" to send none.
+    #: What goes in it is `{"trace_id": <the turn's id>, "generation_name": "round N"}`,
+    #: so every call one question costs, failovers included, lands in one trace.
+    trace_field: str = ""
     #: `(served id, what the reader is shown)` pairs. The id is untouched everywhere it
     #: matters: it is what goes upstream, what `Model.key` is built from, what the
     #: feedback log and `tools/agent_bench.py` record, and what the error card's
@@ -468,6 +483,11 @@ def _strings(raw, default: tuple[str, ...] = ()) -> tuple[str, ...]:
     return tuple(str(item) for item in raw)
 
 
+def _name(raw) -> str:
+    """A header or field name from the profile: a string, stripped, or nothing."""
+    return raw.strip() if isinstance(raw, str) else ""
+
+
 def _example(raw: dict) -> Example:
     return Example(
         icon=str(raw.get("icon", "")),
@@ -557,6 +577,12 @@ def _provider(raw: dict) -> ProviderEntry:
         routers=routers,
         reasoning=bool(raw.get("reasoning", False)),
         hoists_system=bool(raw.get("hoists_system", False)),
+        stream_usage=bool(raw.get("stream_usage", False)),
+        # Stripped, because a name with a stray space is a header no endpoint reads and
+        # a body field it may reject; and only ever a string, because `trace_field =
+        # true` is a mistake to turn into nothing rather than into a field called "True".
+        session_header=_name(raw.get("session_header")),
+        trace_field=_name(raw.get("trace_field")),
         labels=labels,
         hint=str(raw.get("hint", "")),
         user_agent=str(raw.get("user_agent", "")),

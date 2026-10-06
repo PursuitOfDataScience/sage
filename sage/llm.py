@@ -19,6 +19,7 @@ from typing import Any
 from . import config
 from .profile import active as _active
 from .providers import Chunk
+from .providers.base import CallTag, tagged
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +245,18 @@ class Turn:
     text: str = ""
     tool_calls: list[dict] = field(default_factory=list)
     finished: bool = False
+    #: What the endpoint said about the call rather than the answer: the model that
+    #: served it, why it stopped, and what it cost. The latest value of each wins,
+    #: because a usage report is cumulative and a router names one model per stream.
+    #: Read by the call record and by nothing that draws the answer.
+    served_model: str = ""
+    finish_reason: str = ""
+    tokens_in: int | None = None
+    tokens_out: int | None = None
+    #: `time.monotonic()` when the first text arrived, which is the moment the progress
+    #: block folds and the reader starts reading. None for a call that streamed none: a
+    #: tool round, or an empty answer.
+    first_text_at: float | None = None
 
     def deltas(self) -> Iterator[str]:
         # Fragments are assembled by `index`, which is how an OpenAI-style stream
@@ -265,7 +278,10 @@ class Turn:
             for chunk in self.stream:
                 if not isinstance(chunk, Chunk):
                     continue
+                self._note(chunk)
                 if chunk.text:
+                    if self.first_text_at is None:
+                        self.first_text_at = time.monotonic()
                     self.text += chunk.text
                     yield chunk.text
                 for fragment in chunk.tool_calls:
@@ -300,6 +316,17 @@ class Turn:
                 assembled["extra_content"] = slot["extra_content"]
             self.tool_calls.append(assembled)
         self.finished = True
+
+    def _note(self, chunk: Chunk) -> None:
+        """Keep what a chunk says about the call. Missing fields leave the last value."""
+        if chunk.model:
+            self.served_model = chunk.model
+        if chunk.finish_reason:
+            self.finish_reason = chunk.finish_reason
+        if chunk.tokens_in is not None:
+            self.tokens_in = chunk.tokens_in
+        if chunk.tokens_out is not None:
+            self.tokens_out = chunk.tokens_out
 
     def consume(self) -> Turn:
         for _ in self.deltas():
@@ -350,18 +377,24 @@ def _parse(arguments: str) -> dict:
 
 def start(provider, model: str, messages: list[dict],
           tools: list[dict] | None = None, thinking: bool = False,
-          tool_choice: str = "auto") -> Turn:
-    """Open a streaming turn, retrying transient failures before any output."""
+          tool_choice: str = "auto", tag: CallTag | None = None) -> Turn:
+    """Open a streaming turn, retrying transient failures before any output.
+
+    `tag` is where the request came from, for an adapter whose profile entry names a
+    header or a field to say it in (see `CallTag`). It is in force only while the stream
+    is opened, because that is when an adapter builds its request, retries included.
+    """
     attempts = max(config.REQUEST_RETRIES, 0) + 1
     last: AssistantError | None = None
 
     for attempt in range(attempts):
         try:
-            stream = provider.stream(model, messages, tools, thinking, tool_choice)
-            # `stream` is a generator, so the request has not been made yet. Pull
-            # the first chunk here so connection and auth failures surface where
-            # they can still be retried, rather than mid-render.
-            first = next(stream, None)
+            with tagged(tag):
+                stream = provider.stream(model, messages, tools, thinking, tool_choice)
+                # `stream` is a generator, so the request has not been made yet. Pull
+                # the first chunk here so connection and auth failures surface where
+                # they can still be retried, rather than mid-render.
+                first = next(stream, None)
             return Turn(stream=_replay(first, stream))
         except Exception as exc:
             error = classify(exc)

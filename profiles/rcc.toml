@@ -366,6 +366,21 @@ routers_env = "SAGE_OPENROUTER_ROUTERS"
 labels = { "openrouter/free" = "enigma", "~deepseek/deepseek-v4-flash-latest" = "deepseek v4 flash" }
 free_only = true
 free_only_env = "SAGE_OPENROUTER_FREE_ONLY"
+# What each request says about itself, for OpenRouter's Broadcast. Its docs name two
+# things that flow through to every observability destination an account configures:
+# the `x-session-id` header and the `trace` body field. So a browser session becomes a
+# session there, and one question, every failover and re-ask included, becomes one
+# trace whose generations are the tool rounds. The session value is a random id the app
+# mints per browser session, never the reader's account, and OpenRouter's `user` field,
+# which exists to carry an identity, is never sent.
+#
+# Measured before declaring any of it, since a strict endpoint answers an unknown field
+# with a 400: on 2026-10-06 one request to `openrouter/free` carried all three of these
+# lines at once and came back 200, served by `nvidia/nemotron-3.5-lightning:free`, with
+# `usage` on its last event (23 prompt, 93 completion, 116 total tokens).
+stream_usage = true
+session_header = "x-session-id"
+trace_field = "trace"
 
 [[providers]]
 name = "vertex"
@@ -484,6 +499,12 @@ reasoning = true
 # a system message (calling a tool in the other 5, `tool_choice: "none"` or not) and
 # 7 of 7 with it as a user message. Measured 2026-10-05; see `ProviderEntry`.
 hoists_system = true
+# `stream_options: {"include_usage": true}` is accepted here and answered. Measured
+# 2026-10-06 with two requests to gemini-3.5-flash on the global endpoint: both 200,
+# both with `usage` on the last event. This surface reports thinking OUTSIDE
+# `completion_tokens` (a one-word answer came back as 1 completion, 57 reasoning and
+# 65 total tokens), which is why the call record counts output as total minus prompt.
+stream_usage = true
 
 [[providers]]
 name = "google"
@@ -564,4 +585,9 @@ free_marks_env = "SAGE_GOOGLE_FREE_MARKS"
 # A user message is valid on any OpenAI-compatible endpoint, so the declaration costs
 # nothing if this one turns out not to hoist.
 hoists_system = true
+# `stream_options` is accepted and answered. Measured 2026-10-06 with one request to
+# gemini-3.5-flash-lite: 200, and `usage` on every event of the stream (8 prompt, 1
+# completion, 9 total; the lite model does not think). A second, to gemini-3.6-flash,
+# met this free tier's "high demand" 503 on all three attempts and measured nothing.
+stream_usage = true
 

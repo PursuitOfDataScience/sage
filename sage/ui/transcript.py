@@ -21,7 +21,7 @@ def escape(text: str) -> str:
 def render_user(message: dict, position: int | None = None) -> None:
     """One question in the transcript, and the way back into it.
 
-    `position` is its index in `messages`, and passing None means "not editable" —
+    `position` is its index in `messages`, and passing None means "not editable":
     the one caller that does is the turn block, which draws the question it is
     currently answering. A pencil on that one would offer to rewrite a question while
     the answer to it is arriving.
@@ -54,8 +54,8 @@ def render_edit_hook(position: int) -> None:
     The same arrangement as the paperclip and the stop square: the control the reader
     presses is drawn by app.js, in the gutter beside the bubble where there is already
     empty space, and this is the widget that carries the click back to Python. Only a
-    `st.button` can do that, and a `st.button` here — in the flow, under every
-    question — would be a row of furniture the transcript does not have today.
+    `st.button` can do that, and a `st.button` here (in the flow, under every
+    question) would be a row of furniture the transcript does not have today.
 
     So it is taken out of the flow instead, clipped to a pixel exactly as the file
     uploader is. app.js pairs the Nth `.user-message` with the Nth of these, which
@@ -65,7 +65,7 @@ def render_edit_hook(position: int) -> None:
     Bare, with no `st.container` around it. There was one, and the wrapper was the bug:
     Streamlit reuses a container's DOM node across reruns and relabels its class rather
     than rebuilding it, so after one open-and-cancel the node carrying
-    `st-key-edit-hook-0` was the node that had been an answer — still holding the copy
+    `st-key-edit-hook-0` was the node that had been an answer, still holding the copy
     button app.js had appended to it, because that button is not React's to remove.
     app.js looked inside for `button` and got the copy button. Every pencil on the page
     then copied an answer to the clipboard instead of opening the editor, silently, for
@@ -100,14 +100,14 @@ def render_user_editor(position: int, message: dict) -> None:
     ⌘+Enter to apply" inside every multi-line text box it draws, and there is no
     argument that turns it off. On a bare `st.text_area` that sentence is a lie of
     omission: the key commits the value to the widget and nothing else, so the reader
-    who believed it — and the reader who wrote this app did believe it, in the box
-    itself — pressed it, watched nothing happen, and had to go and find the button.
+    who believed it (and the reader who wrote this app did believe it, in the box
+    itself) pressed it, watched nothing happen, and had to go and find the button.
     Inside `st.form` the same key submits, so the instruction the box gives is the
     instruction that works.
 
     The keys carry `session`, a counter bumped every time the pencil is pressed, so
     no widget key is ever reused. Streamlit drops a widget's state when a run does
-    not re-create it, and these are created only while the editor is open — reusing
+    not re-create it, and these are created only while the editor is open, and reusing
     `edit-send-0` across two openings is exactly the shape that makes a stale button
     value arrive as a click nobody made. A question re-sent because the reader opened
     the editor is worse than any bug this file has had, because it costs a turn and
@@ -116,7 +116,7 @@ def render_user_editor(position: int, message: dict) -> None:
     attachments = message.get("attachments") or []
     session = st.session_state.edit_session
     # Questions asked after this one. Their answers replied to wording that is being
-    # withdrawn, so sending takes them with it — which is right, and was a shock:
+    # withdrawn, so sending takes them with it, which is right, and was a shock:
     # "i edited the first message in the chat history but everything got wiped off,
     # all the chat." It was one turn and the whole chat was that turn, so nothing
     # unexpected happened except that nothing had said it would. Said here, before
@@ -195,8 +195,8 @@ def citations(chunks: list) -> list[dict]:
     The first read of a destination keeps the slot: it is the one the answer was built
     from first, and its label is the page's own name rather than a later cut's.
 
-    A source with no published URL at all — `links = "none"`, which `corpus/urls.py`
-    provides for a private tree — has to fall back to the page, because the empty
+    A source with no published URL at all (`links = "none"`, which `corpus/urls.py`
+    provides for a private tree) has to fall back to the page, because the empty
     string is not a destination that two of its pages share, it is the absence of one.
     Deduplicating on it collapsed *the whole tree* into a single entry: four sections
     of the `kb` tree, and any number of its pages, arrived as one chip carrying
@@ -222,13 +222,13 @@ def citations(chunks: list) -> list[dict]:
 
 
 def related_sections(corpus, sources: list[dict], limit: int = 3) -> list[dict]:
-    """Sibling sections of the pages actually cited — discovery for free.
+    """Sibling sections of the pages actually cited: discovery for free.
 
     No extra model call: the chunks are already indexed, so neighbouring sections
     of a cited page are known and are always real documentation.
 
     A lead is somewhere the reader is not already being sent, so what has to be new is
-    the destination — the URL — and not the chunk id. Filtering on the id let one page
+    the destination (the URL) and not the chunk id. Filtering on the id let one page
     arrive three times: asking who directs the RCC cited "Our Team" and then offered
     "Our Team (part 2)", "(part 3)" and "(part 4)", which were three of that page's
     thirteen indexing windows, three identical links, and the link already listed
@@ -258,7 +258,7 @@ def render_sources(sources: list[dict], related: list[dict]) -> None:
 
     Two lists rather than two rows of identical chips. They used to share every class,
     which left the reader unable to tell what the answer was built from ("Sources")
-    from what it merely suggests next ("Related") — and as wrapping chip rows they were
+    from what it merely suggests next ("Related"), and as wrapping chip rows they were
     ragged: a flex row whose first item is the label indents its first line only, so
     every later line dropped back to the container edge, 66px to the left of the line
     above it, measured with six real citations at the 820px content width.
@@ -305,7 +305,7 @@ def render_rating(position: int, message: dict) -> None:
         return
     if message.get("rating"):
         st.markdown(
-            '<div class="rating-thanks">Thanks — noted.</div>', unsafe_allow_html=True
+            '<div class="rating-thanks">Thanks, noted.</div>', unsafe_allow_html=True
         )
         return
 
@@ -322,7 +322,7 @@ def render_rating(position: int, message: dict) -> None:
                     help=hint,
                     # Not while an answer is arriving. Any click reruns the script,
                     # and a rerun mid-turn abandons the half-written answer and runs
-                    # the whole turn again from the first provider call — so rating an
+                    # the whole turn again from the first provider call, so rating an
                     # earlier answer while the next one streams silently costs a
                     # second turn and loses the one on screen. `disabled` is what
                     # stops the click reaching the server at all; an inert callback
@@ -344,6 +344,11 @@ def render_rating(position: int, message: dict) -> None:
                         question,
                         message.get("text", ""),
                         message.get("sources", []),
+                        # The random session id and the answer's own turn, so the
+                        # verdict joins the records of the turn it is about. An answer
+                        # stored before turns had ids carries none, and says so.
+                        session=st.session_state.get("telemetry_session", ""),
+                        turn_id=message.get("turn_id", ""),
                     )
                     message["rating"] = verdict
                     st.rerun()
@@ -353,7 +358,7 @@ def _evidence(view: View, sources: list[dict]) -> dict[str, str]:
     """The text of each section the answer was built from, keyed by its chunk id.
 
     What `links.mark_sources` attributes an unlinked paragraph with when the turn read
-    exactly one section — the case where there is nothing to get wrong. It is read
+    exactly one section, the case where there is nothing to get wrong. It is read
     from the corpus rather than stored on the message because it is already there:
     the strip carries the ids, and the ids resolve.
     """
@@ -368,7 +373,7 @@ def _evidence(view: View, sources: list[dict]) -> dict[str, str]:
 def render_steps(steps: list[dict], seconds: float | None = None) -> None:
     """What the turn did, folded, above the answer it produced.
 
-    ABOVE the text, which is where the live row already sits — so the answer does not
+    ABOVE the text, which is where the live row already sits, so the answer does not
     move when the turn ends and the stored version replaces the painted one. The rule
     is that a reader begins reading at the moment the turn finishes, so anything that
     reflows then reflows under their eyes; it is the same rule that put the row of
@@ -379,7 +384,7 @@ def render_steps(steps: list[dict], seconds: float | None = None) -> None:
     takes the dicts a stored message carries, so the two cannot drift into two designs
     for one control. Folded by default: the answer is what the reader came for.
 
-    `seconds` is the turn's own clock, frozen where the live line left it — see
+    `seconds` is the turn's own clock, frozen where the live line left it. See
     `turn.Status.total_seconds` for why summing the steps instead made the number drop
     the moment the turn ended. Summing is still the fallback, for a message stored
     before that field existed: wrong by the wait for the first word, and the
@@ -451,7 +456,7 @@ def render_notice() -> None:
     Rendered on the landing screen too, and that is the point. It used to live inside
     the branch that draws a conversation, so a refusal with nothing on screen yet had
     nowhere to appear: clear the chat, click a starter card with the token bucket
-    empty, and the click did nothing at all — no question, no answer, no reason, on a
+    empty, and the click did nothing at all: no question, no answer, no reason, on a
     screen whose only controls are those cards.
     """
     if st.session_state.notice:
@@ -484,7 +489,7 @@ def render_error_card(view: View) -> None:
     #
     # And only where switching is the remedy. `context` is the one kind it is not:
     # the request itself is too long, so every model in the lineup refuses the same
-    # message the same way — which is why `turn.FAILOVER_KINDS` leaves it out and the
+    # message the same way, which is why `turn.FAILOVER_KINDS` leaves it out and the
     # turn asks exactly one provider. The card drew "→ Use <model>" beside "clear the
     # chat and ask again" anyway, which is a button guaranteed to fail offered next to
     # the sentence explaining why. Measured: one provider call, two buttons, one of
@@ -508,7 +513,7 @@ def render_error_card(view: View) -> None:
                 )
     if retry or switch:
         # Switching model happens either way, before the gate. It costs nothing and it
-        # is the remedy the card itself recommends — refusing it while a bucket refills
+        # is the remedy the card itself recommends; refusing it while a bucket refills
         # would take the fix away from the reader at the moment they reached for it,
         # and leave "switch to another model and try again" printed above a button
         # that does neither.
@@ -519,7 +524,7 @@ def render_error_card(view: View) -> None:
         # same one-to-five provider calls, and skipping the check meant a spent
         # deployment budget stopped new questions while this button went on spending,
         # one turn per click. On a refusal the error card and its buttons stay exactly
-        # where they are — clearing them would take away the only way back — and the
+        # where they are (clearing them would take away the only way back), and the
         # notice above says how long to wait.
         if may_start_turn():
             # On both paths, not just the deliberate switch: "Try again" is the reader
@@ -531,7 +536,7 @@ def render_error_card(view: View) -> None:
             st.session_state.error_detail = ""
             # The third of the three, for the reason `state.start_new_turn` clears all
             # three: they are one fact about the card on screen, and the card is going.
-            # `rerolls` goes with `tried` for the same reason the comment above gives —
+            # `rerolls` goes with `tried` for the same reason the comment above gives:
             # this is a fresh attempt at the question, so a re-roll budget spent by the
             # attempt that failed is not this one's to have already used.
             st.session_state.error_kind = ""
@@ -546,7 +551,7 @@ _ACTIONS = (("again", ""), ("shorter", "shorter"), ("longer", "longer"))
 
 
 def _last_question(messages: list[dict]) -> tuple[int, dict] | None:
-    """The most recent question, and where it is — what a re-ask has to re-send."""
+    """The most recent question, and where it is: what a re-ask has to re-send."""
     for index in range(len(messages) - 1, -1, -1):
         if messages[index].get("role") == "user":
             return index, messages[index]
@@ -556,8 +561,8 @@ def _last_question(messages: list[dict]) -> tuple[int, dict] | None:
 def render_answer_actions(view: View) -> None:
     """The wire and the words for the row of icons `app.js` draws under each answer.
 
-    Nothing here is visible. `app.js:addAnswerActions` builds the row — copy, run
-    again, shorter, longer — appends it to each answer's keyed container, and gives the
+    Nothing here is visible. `app.js:addAnswerActions` builds the row (copy, run
+    again, shorter, longer), appends it to each answer's keyed container, and gives the
     three re-asks to the LAST answer only. This end of it is the two things a script in
     an iframe cannot supply for itself: the words, which belong to the profile, and a
     channel back to Python, which only a `st.button` has. Exactly the arrangement of
@@ -571,7 +576,7 @@ def render_answer_actions(view: View) -> None:
     finds words for a button it has no wire for.
 
     The re-asks are the last answer's, and that is not a shortcut. All three re-run the
-    question, and `start_new_turn(replacing=…)` drops everything from that question on —
+    question, and `start_new_turn(replacing=…)` drops everything from that question on,
     which is right, and is why `render_user_editor` prints "Sending replaces this
     question and removes the N later questions" before doing it. An icon cannot carry
     that sentence. On the last answer there is nothing after it to lose, so the click
@@ -580,7 +585,7 @@ def render_answer_actions(view: View) -> None:
     Not while an error card is up: it offers "Try again" itself, over the same turn.
 
     Bare `st.button`s, with no `st.container` around them, for the reason
-    `render_edit_hook`'s docstring gives at length — Streamlit reuses a container's DOM
+    `render_edit_hook`'s docstring gives at length: Streamlit reuses a container's DOM
     node across reruns and only relabels its class, so a keyed wrapper here is a node
     that used to be an answer and still holds the copy button `app.js` appended to it.
     Keyed on the widgets themselves, there is no wrapper to reuse.
@@ -604,8 +609,8 @@ def render_answer_actions(view: View) -> None:
     if st.session_state.error or last.get("role") != "assistant":
         return
     # Text, and not `text or stopped` the way `render_conversation` decides whether to
-    # draw the message at all. A turn the reader stopped is offered all three — an
-    # answer cut off because it rambled is exactly when "shorter" is the remedy — but a
+    # draw the message at all. A turn the reader stopped is offered all three (an
+    # answer cut off because it rambled is exactly when "shorter" is the remedy), but a
     # turn stopped before its FIRST token has no answer in it, only a question with the
     # word `Stopped` under it, and there is nothing there to run again differently.
     #
@@ -629,8 +634,8 @@ def render_answer_actions(view: View) -> None:
             key=key,
             # The braces, not the belt, and worth being clear about which. Any click
             # is a rerun and a rerun mid-turn abandons the answer on screen, so
-            # `disabled` — which is what stops the click reaching the server at all;
-            # an inert handler would not, because the rerun IS the click — is how the
+            # `disabled` (which is what stops the click reaching the server at all;
+            # an inert handler would not, because the rerun IS the click) is how the
             # rating row and the pencil survive a turn.
             #
             # Here it cannot fire, because the guard above is stricter: while a turn
@@ -638,7 +643,7 @@ def render_answer_actions(view: View) -> None:
             # hooks to disable. It stays because the cost of it being wrong one day is
             # a click that silently throws away the answer the reader is reading, and
             # `app.js` mirrors it onto the icon so the state would be visible if it
-            # ever did. The copy button beside these three is never disabled — it does
+            # ever did. The copy button beside these three is never disabled: it does
             # not reach the server at all, which is why it is the one control that
             # still works mid-answer.
             disabled=st.session_state.processing,
@@ -657,7 +662,7 @@ def render_answer_actions(view: View) -> None:
 
 def render_conversation(view: View) -> None:
     """Every message so far, then the notice and error strips beneath them."""
-    # Marker only: app.js keys page-scroll behaviour off its presence — without it
+    # Marker only: app.js keys page-scroll behaviour off its presence, and without it
     # the screen is the landing screen, which always starts at the top.
     st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
 
@@ -681,7 +686,7 @@ def render_conversation(view: View) -> None:
 
     # Last, and only because that is where the thing it describes is: the row goes
     # under the newest answer, and the newest answer is the bottom of this loop. Draw
-    # order does not decide anything else here — nothing in it paints, and `app.js`
+    # order does not decide anything else here: nothing in it paints, and `app.js`
     # finds both the marker and the hooks by id and key rather than by position, unlike
     # the pencils it pairs off by ordinal.
     render_answer_actions(view)

@@ -28,7 +28,7 @@ Python 3.14, so `gcloud` works from a bare shell.
 
 The documented one-liner half-fails here. The tarball extracts, then the bootstrap
 step raises `SyntaxError: invalid syntax` on a walrus operator, because it runs under
-whatever `python` is first on PATH — on these login nodes that is 3.6. The fix is to
+whatever `python` is first on PATH, and on these login nodes that is 3.6. The fix is to
 point the installer at a modern interpreter and re-run the post-install step, which
 is idempotent:
 
@@ -61,8 +61,8 @@ cd /project/rcc/youzhi/sage
 ./deploy/cloudrun.sh
 ```
 
-First run enables five APIs, prompts once for the OpenRouter key — which it puts in
-Secret Manager, so the key never enters the repo, the image, or a shell history file —
+First run enables five APIs, prompts once for the OpenRouter key (which it puts in
+Secret Manager, so the key never enters the repo, the image, or a shell history file),
 and creates `sage-run@<project>.iam.gserviceaccount.com` for the service to run as.
 That takes a couple of minutes. Later runs are build-and-deploy only, about 90 seconds.
 
@@ -71,18 +71,18 @@ default is a trap: Cloud Run otherwise runs as the project's compute service acc
 which carries **roles/editor on the entire project**. Sage is a public URL that feeds
 reader-supplied text to a model and runs a tool loop on the result, so an identity
 that can delete the project's buckets is the wrong one to hand it. `sage-run` holds
-one permission — read one secret — and that is the whole of what the app needs.
+one permission, read one secret, and that is the whole of what the app needs.
 
 ## Staying inside the free tier
 
 The Always Free grant has three axes, and the one that binds is not the one you would
 watch. Compute is 180,000 vCPU-seconds and 360,000 GiB-seconds a month; at
-`--cpu=1 --memory=512Mi` that is 180,000 instance-seconds — about **50 hours a month**,
+`--cpu=1 --memory=512Mi` that is 180,000 instance-seconds, about **50 hours a month**,
 against 200 hours of the memory grant. But egress is **1 GB from North America**, and
 measured against the deployed service one cold visit plus one question moves **3.64 MB**:
 3.29 MB of it Streamlit's own JS bundle over 104 requests, and 0.03 MB the question and
 the answer. That is **~295 first-time visitors a month**, against roughly 600 five-minute
-visits' worth of compute — so egress runs out about twice as fast as the thing everyone
+visits' worth of compute, so egress runs out about twice as fast as the thing everyone
 sizes for.
 
 The caveat cuts the other way and is larger: those 3.29 MB are static assets the browser
@@ -92,16 +92,16 @@ times over the line is roughly a dollar.
 
 Two things decide how far that goes, and they pull opposite ways. Streamlit holds a
 WebSocket open for as long as the browser tab is, and Cloud Run counts an instance as
-billable for as long as it is handling at least one request — so an idle tab someone
+billable for as long as it is handling at least one request, so an idle tab someone
 forgot to close bills exactly like one being read. But billing is per INSTANCE, not
 per request, and `--concurrency=80` puts up to eighty of those tabs on one instance:
 ten readers for an hour costs an hour, not ten. So the budget is ~50 hours a month of
-*somebody* having it open — around 1.6 hours a day — however many somebodies there are.
+*somebody* having it open (around 1.6 hours a day), however many somebodies there are.
 
 That is comfortable for a demo link and tight for a service people leave open all day:
 one reader with a tab open during work hours is ~56 hours and over the line on their
-own. Going over is not a cliff — the overage rate works out near **$4–5 for another 50
-hours** — but it is the number to watch, and the way to watch it is a budget alert.
+own. Going over is not a cliff (the overage rate works out near **$4–5 for another 50
+hours**), but it is the number to watch, and the way to watch it is a budget alert.
 
 The settings in `cloudrun.sh` that keep it there:
 
@@ -110,7 +110,7 @@ The settings in `cloudrun.sh` that keep it there:
 | `--min-instances=0` | An always-warm instance is ~2.6M vCPU-s/month, 14× the grant. Costs a 5–15s cold start. |
 | `--max-instances=3` | The default is 100. One crawler on a public URL is otherwise an unbounded bill. |
 | `--cpu=1 --memory=512Mi` | The corpus is 341 KB, so memory is Streamlit's baseline, not Sage's index. |
-| `SAGE_CALL_BUDGET=500` | Sage's own per-window cap on provider calls — a second, app-level brake. |
+| `SAGE_CALL_BUDGET=500` | Sage's own per-window cap on provider calls: a second, app-level brake. |
 
 Also worth doing once, in the console: a **budget alert at $1**. Note that budget
 alerts only notify; the things that actually bound spend are `max-instances` and the
@@ -118,7 +118,7 @@ trial account not auto-upgrading.
 
 Artifact Registry's free storage is **0.5 GB**. Measured rather than estimated: the
 image is **221 MB**, so exactly two fit and a third does not. A cleanup policy is
-applied on the deployed project and should be applied on any new one — `keep` the two
+applied on the deployed project and should be applied on any new one: `keep` the two
 most recent versions, `delete` anything else over a day old, with keep taking
 precedence so a fresh deploy is never the thing that gets collected:
 
@@ -129,6 +129,97 @@ gcloud artifacts repositories set-cleanup-policies cloud-run-source-deploy \
 
 Without it every deploy adds 221 MB and the repository is over the free tier on the
 third one. This is the only part of the setup that bills while nobody is using the app.
+
+## Observability
+
+`cloudrun.sh` sets `SAGE_TELEMETRY=stdout`, so every turn, model call, miss and rating is
+one JSON line on the service's stdout, which Cloud Run ships to Cloud Logging as a
+structured entry. The fields are in [`CONFIG.md`](../CONFIG.md#records). No answer text,
+no file contents, no account: the `session` is a random id per browser tab.
+
+| To see | Look at |
+| --- | --- |
+| The last few minutes | Logs Explorer, with the filter below |
+| The same, from a shell | The `gcloud logging read` command below |
+| History, and SQL over it | BigQuery table `sage_obs.run_googleapis_com_stdout`, once `observability.sh` has run |
+| Charts | Metrics `sage_turns`, `sage_failed_calls`, `sage_turn_seconds`, `sage_tokens_in`, `sage_tokens_out`, and their tiles in `dashboard.json` |
+
+```text
+resource.type="cloud_run_revision"
+resource.labels.service_name="sage"
+jsonPayload.kind="turn"
+```
+
+```bash
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="sage" AND jsonPayload.kind="turn"' \
+  --freshness=1d --limit=20 --format='value(timestamp, jsonPayload.message)'
+```
+
+### Provisioning, once
+
+```bash
+./deploy/observability.sh                  # dataset, log sink, its grant, metrics
+./deploy/observability.sh --openrouter-sa  # and the account OpenRouter's Broadcast writes as
+```
+
+Run it by hand with owner rights; the CI deploy identity has none of them on purpose. It is
+idempotent, and a re-run puts the sink filter and every metric back to what the script
+says. It creates dataset `sage_obs` (partitions expire after 90 days), a sink that routes
+the four record kinds into it as partitioned tables, Data Editor for the sink's writer on
+that dataset only, and the `sage_` metrics. Nothing logged before the sink existed is
+copied in.
+
+### OpenRouter Broadcast, optional
+
+The OpenRouter entry already sends `x-session-id` and `trace`, so in OpenRouter a browser
+session is a session and one question is one trace. After `--openrouter-sa`, by hand:
+
+1. Create a JSON key for `sage-openrouter-broadcast`. The script prints the command and
+   never runs it.
+2. In OpenRouter, **Settings > Observability**, add Google BigQuery and paste the key file.
+   Then delete the local copy.
+3. Run the destination's setup DDL (**View Setup Instructions**), with your project and
+   `sage_obs` in place of its defaults.
+4. Turn on **Privacy Mode**, so prompts and completions are stripped before they arrive.
+5. Give each deployment its own OpenRouter key, and limit the destination to Cloud Run's.
+
+### Two queries
+
+Both run as written in the BigQuery console or `bq query --use_legacy_sql=false`, which
+default to the current project. A column appears the first time a record carries a value
+for it, so `tried` exists only after the first failover.
+
+```sql
+-- Failover rate per day: turns that needed more than one attempt. A failed turn lists
+-- its own last attempt in `tried`, so it counts only past one.
+SELECT DATE(timestamp) AS day,
+       COUNT(*) AS turns,
+       COUNTIF(attempts_failed > IF(outcome = 'failed', 1, 0)) AS failed_over,
+       COUNTIF(outcome = 'failed') AS failed,
+       ROUND(COUNTIF(attempts_failed > IF(outcome = 'failed', 1, 0)) / COUNT(*), 3)
+         AS failover_rate
+FROM (
+  SELECT timestamp, jsonPayload.outcome AS outcome,
+         ARRAY_LENGTH(jsonPayload.tried) AS attempts_failed
+  FROM sage_obs.run_googleapis_com_stdout
+  WHERE jsonPayload.kind = 'turn'
+)
+GROUP BY day
+ORDER BY day DESC;
+```
+
+```sql
+-- Tokens by the model that actually served the call, last 30 days.
+SELECT jsonPayload.served_model AS served_model,
+       COUNT(*) AS calls,
+       SUM(jsonPayload.tokens_in) AS tokens_in,
+       SUM(jsonPayload.tokens_out) AS tokens_out
+FROM sage_obs.run_googleapis_com_stdout
+WHERE jsonPayload.kind = 'call'
+  AND timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+GROUP BY served_model
+ORDER BY tokens_out DESC;
+```
 
 ## Teardown
 
@@ -143,6 +234,18 @@ gcloud secrets delete sage-openrouter-key
 gcloud iam service-accounts delete sage-run@<PROJECT_ID>.iam.gserviceaccount.com
 ```
 
+If `observability.sh` ran, it left a sink, five metrics, a dataset and perhaps an account:
+
+```bash
+gcloud logging sinks delete sage-obs
+for metric in sage_turns sage_failed_calls sage_turn_seconds sage_tokens_in sage_tokens_out; do
+  gcloud logging metrics delete "$metric"
+done
+bq rm --recursive --dataset sage_obs
+gcloud iam service-accounts delete \
+  "sage-openrouter-broadcast@$(gcloud config get-value project).iam.gserviceaccount.com"
+```
+
 Or delete the whole project (`gcloud projects delete <PROJECT_ID>`), which is the only
-way to be sure nothing is left running — and the reason to give this deployment a
+way to be sure nothing is left running, and the reason to give this deployment a
 project of its own rather than sharing one.

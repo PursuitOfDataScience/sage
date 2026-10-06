@@ -7,7 +7,10 @@ loop, the failover, the history builder) knows which endpoint produced either.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -93,10 +96,107 @@ class Model:
 
 @dataclass
 class Chunk:
-    """One normalised streaming event."""
+    """One normalised streaming event.
+
+    The last four fields are what an endpoint says about the call rather than the
+    answer, and every one of them is optional because most events carry none of them.
+    `model` is the id that actually served the request, which on a router is not the
+    id that was asked for; `tokens_in` and `tokens_out` arrive once, usually on the
+    final event, and only from an endpoint that reports usage at all. Nothing that
+    draws the answer reads them: `llm.Turn` keeps the latest of each for the call
+    record, and that is their whole audience.
+    """
 
     text: str = ""
     tool_calls: list[dict] = field(default_factory=list)
+    model: str = ""
+    finish_reason: str = ""
+    tokens_in: int | None = None
+    tokens_out: int | None = None
+
+
+def usage_counts(raw) -> tuple[int | None, int | None]:
+    """`(tokens_in, tokens_out)` from an OpenAI-shaped `usage`, dict or SDK object.
+
+    Output is `total - prompt` where the endpoint reports a total larger than prompt
+    plus completion, and that is not pedantry. Gemini's OpenAI layer leaves its
+    thinking out of `completion_tokens` and puts it in the total, while billing it as
+    output: measured on Vertex on 2026-10-06, a one-word answer came back as 7 prompt,
+    1 completion and 65 total tokens, with 57 of them reported as reasoning. Taken at
+    its word that call cost one token of output, and it cost 58. Everywhere else
+    measured the total is the plain sum, so the difference IS the completion and the
+    rule changes nothing.
+
+    `(None, None)` for anything that is not a usage report, so a missing count stays
+    missing rather than becoming a zero someone sums. And never an exception: this runs
+    inside the stream parser, where a raise ends the turn, and `json.loads` reads
+    `Infinity` and `NaN` without complaint while `int()` of either raises.
+    """
+    if raw is None:
+        return None, None
+
+    def read(name: str) -> int | None:
+        value = raw.get(name) if isinstance(raw, dict) else getattr(raw, name, None)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        if isinstance(value, float) and not math.isfinite(value):
+            return None
+        return int(value)
+
+    try:
+        prompt, completion, total = (
+            read("prompt_tokens"), read("completion_tokens"), read("total_tokens")
+        )
+    except Exception:  # noqa: BLE001 (an SDK object whose attribute raises)
+        return None, None
+    if completion is not None and total is not None and prompt is not None:
+        completion = max(completion, total - prompt)
+    elif completion is None and total is not None and prompt is not None:
+        completion = total - prompt
+    return prompt, completion
+
+
+@dataclass(frozen=True)
+class CallTag:
+    """What a request may say about where it came from: a session and a turn.
+
+    For an endpoint that can group requests (OpenRouter forwards both to whatever
+    observability destination its account has configured), and only where the profile
+    entry names the header or field to carry them in. `session` is a random id minted
+    per browser session, never the signed-in account; `turn_id` groups the calls of one
+    question, failovers included; `round` is the tool round within the model that is
+    answering.
+    """
+
+    session: str = ""
+    turn_id: str = ""
+    round: int = 0
+
+
+# Set by `llm.start` for exactly as long as it takes to open a stream, which is the only
+# moment an adapter builds its headers and body. A context variable rather than a
+# parameter of `Provider.stream`, because `stream` is the contract every adapter
+# implements, including one a deployment registers for itself and the test doubles
+# that stand in for them: a new parameter there breaks each of them on its first
+# request, while an adapter that never reads this simply sends nothing. Streamlit runs
+# every session's script in a thread of its own, and a context variable is per thread,
+# so one reader's tag cannot reach another reader's request.
+_TAG: ContextVar[CallTag | None] = ContextVar("sage_call_tag", default=None)
+
+
+@contextmanager
+def tagged(tag: CallTag | None):
+    """Make `tag` what `current_tag` returns inside the block, and put the old one back."""
+    token = _TAG.set(tag)
+    try:
+        yield
+    finally:
+        _TAG.reset(token)
+
+
+def current_tag() -> CallTag | None:
+    """The tag of the request being opened, or None outside `llm.start`."""
+    return _TAG.get()
 
 
 class Provider(Protocol):

@@ -12,7 +12,14 @@ from collections.abc import Iterator
 
 from .. import config
 from ..profile import ProviderEntry
-from .base import STREAM_TIMEOUT_MS, Chunk, Model, flatten, tool_fragments
+from .base import (
+    STREAM_TIMEOUT_MS,
+    Chunk,
+    Model,
+    flatten,
+    tool_fragments,
+    usage_counts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,20 +65,39 @@ class MistralProvider:
             for event in source:
                 data = getattr(event, "data", None)
                 choices = getattr(data, "choices", None) if data else None
+                # What served the call and what it cost, read by attribute and allowed
+                # to be absent, which is the same scepticism as `choices` below: the
+                # SDK puts `usage` on its last event, and no shape of it is relied on.
+                served = getattr(data, "model", "") if data else ""
+                served = served if isinstance(served, str) else ""
+                tokens_in, tokens_out = usage_counts(
+                    getattr(data, "usage", None) if data else None
+                )
                 # A list, checked before it is indexed, and the same guard the
                 # OpenAI-compatible adapter carries. Without it `choices` arriving as an
-                # object was a `KeyError: 0` — raised from inside this generator, which
+                # object was a `KeyError: 0`, raised from inside this generator, which
                 # `Turn.deltas` can only classify as an unknown failure: the half-streamed
                 # answer already on screen is discarded and replaced with "something went
                 # wrong" at the very end of it. The two adapters normalise onto the same
                 # `Chunk` and had different amounts of scepticism about their input; this
                 # SDK's shapes have moved between 0.x, 1.x and 2.x before.
                 if not isinstance(choices, (list, tuple)) or not choices:
+                    if tokens_in is not None or tokens_out is not None:
+                        yield Chunk(model=served, tokens_in=tokens_in,
+                                    tokens_out=tokens_out)
                     continue
                 delta = getattr(choices[0], "delta", None)
+                # A plain string in 1.x and a str-valued enum in some builds; either
+                # way the word is what the call record wants.
+                finish = getattr(choices[0], "finish_reason", None)
+                finish = getattr(finish, "value", finish)
                 yield Chunk(
                     text=flatten(getattr(delta, "content", None)),
                     tool_calls=tool_fragments(getattr(delta, "tool_calls", None)),
+                    model=served,
+                    finish_reason=finish if isinstance(finish, str) else "",
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
                 )
         finally:
             if manager is not None:

@@ -1,8 +1,8 @@
 """Runtime knobs.
 
-Numbers and switches only. What the assistant is *about* — its name, its documents,
+Numbers and switches only. What the assistant is *about* (its name, its documents,
 the URL its citations point at, the address it hands out when the documentation
-cannot help — lives in `sage/profile.py` and the TOML file it loads, because those
+cannot help) lives in `sage/profile.py` and the TOML file it loads, because those
 are the things a second deployment has to change and none of them are settings.
 
 Every value here can be overridden by an environment variable so a deployment can be
@@ -27,13 +27,13 @@ from .env import text as _env_text
 # OpenRouter's free router, because the model this used to name stopped answering.
 # `opencode:nemotron-3.5-lightning-free` was chosen for being the fastest thing on Zen's
 # free tier at 2.2s; measured again on 2026-08-28 it returns an empty stream, and so does
-# `nemotron-3-ultra-free` behind it — the same two models on OpenRouter return zero
+# `nemotron-3-ultra-free` behind it; the same two models on OpenRouter return zero
 # chunks too, so this is the model family and not the gateway. `openrouter/free` answered
 # six of six with a tool call, median 1.4s, by routing each request to whichever free
 # model is actually up. See `profiles/rcc.toml` for what that trades away.
 # The free router, with a paid model behind it rather than in front of it. It was the
 # paid one for a few hours on 2026-09-12, while the free pool was capped for the day and
-# the other two providers were refusing — "use openrouter free as default and use the v4
+# the other two providers were refusing: "use openrouter free as default and use the v4
 # paid version as the back up in case the free cap has reached", which is what the
 # lineup does now: `allowance` is in `View.PER_MODEL`, so a spent free allowance prefers
 # the next model behind the same key, and that is the paid one.
@@ -51,7 +51,7 @@ TOOLLESS_MODELS = _env_list("SAGE_TOOLLESS_MODELS", ())
 #
 # `openrouter/free` is on the list on evidence rather than on the strength of its name.
 # `GET /models` gives it `modality: text+image->text`, and a probe with an 8x8 PNG came
-# back `200` — so the 4xx this list exists to avoid is not what sending it an image
+# back `200`, so the 4xx this list exists to avoid is not what sending it an image
 # costs. What it does cost is worth knowing: only 10 of the 19 `:free` models the
 # router serves accept image input, the router picks one per request, and the probe's
 # usage came back `image_tokens: 0`, so there is no evidence yet that the model which
@@ -69,8 +69,8 @@ def sees_images(model: str) -> bool:
     return any(mark and mark.lower() in lowered for mark in VISION_MODELS)
 
 
-# Generous on purpose. 1600 was the old value and it cut answers off mid-sentence —
-# "Per the RCC docs," and then nothing — which is worse than a long answer in every
+# Generous on purpose. 1600 was the old value and it cut answers off mid-sentence
+# ("Per the RCC docs," and then nothing), which is worse than a long answer in every
 # way: the reader cannot tell a finished thought from a severed one, and asking again
 # costs another full request. A walkthrough with two code blocks and a Sources strip
 # runs well past 1600, and no answer this app gives is improved by being truncated.
@@ -85,15 +85,15 @@ MAX_TOOL_ROUNDS = _env_int("SAGE_MAX_TOOL_ROUNDS", 4, minimum=1)
 # Total characters of tool output one turn may accumulate, across every round.
 # `history.build()` trims to HISTORY_CHAR_BUDGET once, *before* the loop, and the
 # loop then appended up to MAX_TOOL_ROUNDS reads of MAX_DOC_CHARS each with nothing
-# checking again — six 20k reads put 120k on top of a 48k budget, and the reader was
+# checking again: six 20k reads put 120k on top of a 48k budget, and the reader was
 # told "this conversation got too long" about a conversation of one question.
 TOOL_RESULT_CHAR_BUDGET = _env_int("SAGE_TOOL_RESULT_CHAR_BUDGET", 60000, minimum=1)
 REQUEST_RETRIES = _env_int("SAGE_REQUEST_RETRIES", 2, minimum=0)
 # How many models one turn may ask before it gives up, counting the one it started on.
 #
 # 0 means the whole lineup, and that is the default because the alternative was a dead
-# end the reader could do nothing about. A model that answers nothing at all — the
-# request succeeds, the stream carries no text — used to end the turn with "the model
+# end the reader could do nothing about. A model that answers nothing at all (the
+# request succeeds, the stream carries no text) used to end the turn with "the model
 # returned an empty answer, try a different model" while six models that would have
 # answered sat one row down the picker, and the failover machinery that walks to them
 # already existed and was reserved for three of the eleven ways a turn can fail.
@@ -101,7 +101,7 @@ REQUEST_RETRIES = _env_int("SAGE_REQUEST_RETRIES", 2, minimum=0)
 # Bounded only by the lineup, so the worst case is real and worth stating: a model that
 # fails *after* a full tool loop costs MAX_TOOL_ROUNDS + 1 provider calls, so a lineup
 # of eight can spend forty on one question. That is the price of not dead-ending, and
-# it is the same key CALL_BUDGET is there to protect — set that if the arithmetic
+# it is the same key CALL_BUDGET is there to protect, so set that if the arithmetic
 # matters more than the answer. Set this to 1 to switch failover off entirely, which is
 # what `evals/harness.py` does so a per-model benchmark measures the model it asked.
 MAX_MODEL_ATTEMPTS = _env_int("SAGE_MAX_MODEL_ATTEMPTS", 0, minimum=0)
@@ -110,21 +110,21 @@ MAX_MODEL_ATTEMPTS = _env_int("SAGE_MAX_MODEL_ATTEMPTS", 0, minimum=0)
 # Separate from MAX_MODEL_ATTEMPTS above because it is a different move. That one walks
 # to the NEXT model, which is the only sensible response to a model that has nothing to
 # give; this one asks the SAME id again, and it is only sensible where that id is a
-# router resolving to a different model per request — `ProviderEntry.routers` is where a
+# router resolving to a different model per request. `ProviderEntry.routers` is where a
 # deployment says which ids those are, and `View.reroutes` is the test. On a pinned model
 # a re-ask is a second helping of the same nothing.
 #
 # 2 from the measurement: the free router served 14 distinct models over 33 rolls with a
 # 6% bad-roll rate, where two attempts is 99.6% and even a pessimistic 20% rate reaches
 # 96%. A third adds a rounding error and a second of latency. 0 switches it off, and so
-# does MAX_MODEL_ATTEMPTS = 1 — `evals/harness.py` sets that to measure the model it
+# does MAX_MODEL_ATTEMPTS = 1: `evals/harness.py` sets that to measure the model it
 # asked, and a silent re-roll would measure a different one.
 ROUTER_RETRIES = _env_int("SAGE_ROUTER_RETRIES", 2, minimum=0)
 
 # --- chunking --------------------------------------------------------------
 #
 # Whole-file reads used to be truncated at 15k chars, which silently cut 62% of
-# docs/slurm/sbatch.md — the single most important page in the corpus. Indexing
+# docs/slurm/sbatch.md, the single most important page in the corpus. Indexing
 # heading-sized chunks removes the need to truncate at all.
 
 MAX_CHUNK_CHARS = _env_int("SAGE_MAX_CHUNK_CHARS", 6000, minimum=1)
@@ -153,8 +153,8 @@ SEARCH_RESULTS = _env_int("SAGE_SEARCH_RESULTS", 6, minimum=1)
 #      3      97.1%     97.1%    82.4%  0.892   2.88
 #     off     97.1%     97.1%    82.4%  0.887   3.56
 #
-# 2 is where "which queue should I submit to" — the repository's one recorded lexical
-# gap — first reaches the top five, against its strict two-page expectation. It costs
+# 2 is where "which queue should I submit to" (the repository's one recorded lexical
+# gap) first reaches the top five, against its strict two-page expectation. It costs
 # 1.4 sections of depth on average to get there. 1 buys recall@3 as well and takes
 # depth down to almost nothing, which is too much to pay: a model handed one section
 # per page has pointers, not evidence.
@@ -198,7 +198,7 @@ HISTORY_CHAR_BUDGET = _env_int("SAGE_HISTORY_CHAR_BUDGET", 48000, minimum=1)
 # along on every turn of a long conversation.
 #
 # Not "a PDF is never re-uploaded": while a file is still the most recent attachment it is
-# re-sent on each follow-up, and it has to be — stub it and "what does page 3 say?" has
+# re-sent on each follow-up, and it has to be: stub it and "what does page 3 say?" has
 # nothing to read. What the bound removes is the *accumulation*. Set it to 0 to stub every
 # attachment, which makes follow-ups about a file impossible; 1 is the useful floor.
 ATTACHMENT_FULL_TEXT_TURNS = _env_int("SAGE_ATTACHMENT_FULL_TEXT_TURNS", 1, minimum=0)
@@ -219,36 +219,36 @@ MAX_PROMPT_CHARS = _env_int("SAGE_MAX_PROMPT_CHARS", 8000, minimum=1)
 #
 # So deltas that arrive inside the same interval are painted together. Nothing is
 # dropped or reordered and the finished answer is identical; what changes is how many
-# times the browser is asked to draw it. 40ms is 25 repaints a second — well above the
+# times the browser is asked to draw it. 40ms is 25 repaints a second, well above the
 # rate a throttled browser was actually managing, so the text flows at least as evenly
 # as it did while costing an order of magnitude less to draw.
 #
 # 0 restores a repaint per delta.
 STREAM_REPAINT_MS = _env_int("SAGE_STREAM_REPAINT_MS", 40, minimum=0)
 
-# How much of a tool's argument the progress block puts on the page — the query it
+# How much of a tool's argument the progress block puts on the page: the query it
 # searched for, the path it read. Not a layout number: the row ellipses whatever does
 # not fit the width it has, at every width (`.status-arg` in static/app.css). This is
 # a ceiling on what a MODEL can put in the DOM, because the value is whatever it typed
-# and the block is rewritten in full on every step — a 4 KB query string would be 4 KB
+# and the block is rewritten in full on every step, so a 4 KB query string would be 4 KB
 # of markup per repaint, for a line 40 characters of which are visible.
 #
 # 160, raised from 96, and measured rather than guessed. Since the row resolves a
 # section id to the section's own title, the value is a sentence, and this corpus's
 # headings are frequently whole questions: the longest label the shipped docs produce is
-# 146 characters ("Running Jobs FAQ — Why does my sinteractive job fail with ssh: symbol
-# lookup error: …"). At 96 it arrived ellipsed, which is the complaint the CSS ellipsis
-# had already drawn once — "why can't it show the complete cot?" — reappearing in Python
+# 146 characters (the "Running Jobs FAQ" section "Why does my sinteractive job fail with
+# ssh: symbol lookup error: …", page and section joined). At 96 it arrived ellipsed, which is the complaint the CSS ellipsis
+# had already drawn once ("why can't it show the complete cot?") reappearing in Python
 # after being fixed in the stylesheet. 160 clears every real label whole.
 #
 # Not unbounded, because this is the number `render_check.py` builds its worst case from
 # and the block still has to fit inside a line cap at a 500px viewport. The worst case
-# is an unbroken run of this length, which wraps to about four lines there — which is
+# is an unbroken run of this length, which wraps to about four lines there, and that is
 # what the harness's cap is set to, and what it checks.
 #
 # Here rather than in `sage/ui/turn.py` so `tools/render_check.py` can render the worst
 # case the app can actually produce. That harness runs in a CI job with no Streamlit
-# installed, so it cannot import the module that draws the block — and a worst case
+# installed, so it cannot import the module that draws the block, and a worst case
 # written out twice is a worst case that goes stale on one side.
 STATUS_ARGUMENT_CHARS = _env_int("SAGE_STATUS_ARGUMENT_CHARS", 160, minimum=1)
 
@@ -257,15 +257,15 @@ STATUS_ARGUMENT_CHARS = _env_int("SAGE_STATUS_ARGUMENT_CHARS", 160, minimum=1)
 # `progress._argument_html` puts that word and the ellipsis inside one
 # `white-space: nowrap` span, so the two move to the next line together rather than the
 # ellipsis going alone. Chrome allows a line break before an atomic inline whatever
-# character sits in front of it — WORD JOINER, NBSP and ZERO WIDTH JOINER were all
-# measured and none of them prevents it — and suppressing the break from the containing
+# character sits in front of it (WORD JOINER, NBSP and ZERO WIDTH JOINER were all
+# measured and none of them prevents it), and suppressing the break from the containing
 # inline is the mechanism that does: 0 orphans across 141 column widths, against 34 of
 # them without it.
 #
 # Bounded because `nowrap` is the opposite of what `.status-arg`'s `overflow-wrap:
 # anywhere` is for. A model's query can be one unbroken token of
 # `STATUS_ARGUMENT_CHARS`, and that token has to be allowed to break mid-word or it
-# leaves the column — measured at 127px of overflow with the whole value in one nowrap
+# leaves the column: measured at 127px of overflow with the whole value in one nowrap
 # span. Past this length the old markup is emitted instead, which is safe for the reason
 # the guard exists: a long last word fills the line it is on, so there is nothing for the
 # ellipsis to be orphaned from. 30 characters is longer than any word in a real section
@@ -281,25 +281,25 @@ STATUS_TAIL_CHARS = _env_int("SAGE_STATUS_TAIL_CHARS", 30, minimum=1)
 MAX_UPLOAD_BYTES = _env_int("SAGE_MAX_UPLOAD_BYTES", 10 * 1024 * 1024, minimum=1)
 # What an image is shrunk to before it is sent, not what may be uploaded. 1568px is
 # the longest edge the major vision APIs downscale to on receipt, so anything above
-# it is paid for twice — once in upload and once in the request — and discarded.
+# it is paid for twice (once in upload and once in the request) and discarded.
 IMAGE_MAX_EDGE = _env_int("SAGE_IMAGE_MAX_EDGE", 1568, minimum=64)
 # Below this an image is left alone whatever its dimensions: re-encoding a small
 # sharp PNG as JPEG to save a few KB is a bad trade for a screenshot of text.
 IMAGE_MAX_BYTES = _env_int("SAGE_IMAGE_MAX_BYTES", 256 * 1024, minimum=1)
 # Across all files on one turn, which the per-file limit above does not bound: four
 # 9 MB screenshots are four legal uploads and one 50 MB request, and the only thing
-# that stopped it was the provider's own 413 — surfaced to the reader as "this
+# that stopped it was the provider's own 413, surfaced to the reader as "this
 # conversation got too long. Clear the chat", about a conversation of one question.
 MAX_ATTACHED_BYTES = _env_int("SAGE_MAX_ATTACHED_BYTES", 20 * 1024 * 1024, minimum=1)
 MAX_FILE_TEXT_CHARS = _env_int("SAGE_MAX_FILE_TEXT_CHARS", 30000, minimum=1)
 # And the same arithmetic on the REQUEST side, which the upload cap above does not
 # reach. Base64 inflates by a third, so the 20 MiB of uploads that cap permits
-# assembles a 26.6 MB request — measured, with 87 legal 240 KB images — and
+# assembles a 26.6 MB request (measured, with 87 legal 240 KB images), and
 # `history._length` scores the lot as 4,200 characters, because a data URL counted
 # against a character budget would evict a whole conversation to make room for one
 # screenshot. So nothing bounded it but the provider, and the way a provider bounds one
 # is a 413 that the reader is shown as "This conversation got too long. Clear the chat
-# and ask again" — advice that cannot work, because the picture is attached to the
+# and ask again": advice that cannot work, because the picture is attached to the
 # question they just asked.
 #
 # 4 MiB is about four worst-case downscaled screenshots (one 9.4 MB upload becomes a
@@ -344,7 +344,7 @@ BUDGET_WINDOW_SECONDS = _env_float("SAGE_BUDGET_WINDOW_SECONDS", 86_400.0, minim
 # whoever set the variable. The UI's login gate checks both.
 REQUIRE_LOGIN = _env_flag("SAGE_REQUIRE_LOGIN", False)
 # Email domains allowed past the login gate. Empty = any account the provider
-# authenticates, which for a Google client means the whole internet — so set it.
+# authenticates, which for a Google client means the whole internet, so set it.
 ALLOWED_EMAIL_DOMAINS = _env_list("SAGE_ALLOWED_EMAIL_DOMAINS", ())
 
 
@@ -364,7 +364,30 @@ def email_allowed(email: str) -> bool:
 
 LOG_LEVEL = _env_text("LOG_LEVEL", "WARNING").upper()
 # Set to a writable path to collect thumbs-up/down as JSON lines. Unset = no sink.
+#
+# Two jobs, and the second is why it is not the same switch as the one below: this is a
+# sink for every record `sage.feedback` writes, AND it is what draws the 👍/👎 row under
+# an answer (`feedback.enabled`). A deployment asking for ratings asks for that row.
 FEEDBACK_LOG = _env_text("SAGE_FEEDBACK_LOG", "")
+# Where an operator's copy of those records goes: "" (nowhere, the default), "stdout",
+# or a file path. Every record goes to every sink that is set, this one and the one
+# above alike.
+#
+# A switch of its own because turning on observability must not put a control on the
+# page. If it were SAGE_FEEDBACK_LOG, a deployment that wanted to see its failover rate
+# would grow a rating row nobody asked for, which is a change to how the app looks.
+#
+# "stdout" is the one to use on Cloud Run, which ships a container's stdout to Cloud
+# Logging and turns a line of JSON into a structured entry: each record is one line,
+# with a `severity` and a short `message` beside its fields. Written directly rather
+# than through `logging`, so `LOG_LEVEL=WARNING` does not swallow it, and never over
+# the network, so a slow log collector cannot slow a turn.
+TELEMETRY = _env_text("SAGE_TELEMETRY", "").strip()
+# Which deployment wrote a record and from which commit, so two deployments sharing a
+# log, or one deployment across a redeploy, can be told apart. `deploy/cloudrun.sh`
+# sets both; a local run is "local" with no commit, which is the honest answer.
+DEPLOYMENT = _env_text("SAGE_DEPLOYMENT", "local").strip()
+GIT_SHA = _env_text("SAGE_GIT_SHA", "").strip()
 SNAPSHOT_FILE = _env_text("SAGE_SNAPSHOT_FILE", "./docs_snapshot.json")
 
 
