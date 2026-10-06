@@ -167,7 +167,20 @@ idempotent, and a re-run puts the sink filter and every metric back to what the 
 says. It creates dataset `sage_obs` (partitions expire after 90 days), a sink that routes
 the four record kinds into it as partitioned tables, Data Editor for the sink's writer on
 that dataset only, and the `sage_` metrics. Nothing logged before the sink existed is
-copied in.
+copied in, and on a first run neither is anything logged in the few minutes before the
+new grant takes effect: the sink drops what it cannot write. After that, rows reach
+BigQuery within a few minutes.
+
+The script does not touch the dashboard. To apply `dashboard.json` to the live one
+(this overwrites it, so make chart changes in the file rather than in the console):
+
+```bash
+D="$(gcloud monitoring dashboards list --filter='displayName="Sage: Cloud Run"' --format='value(name)')"
+ETAG="$(gcloud monitoring dashboards describe "$D" --format='value(etag)')"   # the API refuses an update without it
+CONF="$(mktemp)"
+python3 -c 'import json, sys; d = json.load(open("deploy/dashboard.json")); d["etag"] = sys.argv[1]; json.dump(d, open(sys.argv[2], "w"))' "$ETAG" "$CONF"
+gcloud monitoring dashboards update "$D" --config-from-file="$CONF" && rm -f "$CONF"
+```
 
 ### OpenRouter Broadcast, optional
 

@@ -283,4 +283,9 @@ hand, in this order:
 OUT
 fi
 
-echo "==> Done. Records reach ${PROJECT}:${DATASET} within a minute or two of being written."
+# Measured on the first run, 2026-10-06: a record written 49 s after the grant never
+# arrived (the grant had not taken effect, and the sink drops what it cannot write),
+# and the next question's rows took about five minutes to appear in the new table.
+echo "==> Done. On a first run the grant can take a few minutes to take effect, and records"
+echo "    written before then stay in Cloud Logging only. After that, records reach"
+echo "    ${PROJECT}:${DATASET} within a few minutes of being written."
