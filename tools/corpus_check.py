@@ -5,7 +5,7 @@
     python tools/corpus_check.py --save report/corpus.json
 
 The measuring lives in `evals/corpus_health.py` so `pytest` can gate the parts that
-should never regress — an id that stops resolving, a chunk that loses its URL, a new
+should never regress: an id that stops resolving, a chunk that loses its URL, a new
 empty document. This file is the report.
 """
 
@@ -32,13 +32,13 @@ def report(measured: dict) -> None:
               f"{row['chars'] / 1000:8.1f}k chars")
 
     empty = measured["empty_documents"]
-    print(f"\nempty documents ({len(empty)}) — topics nothing can answer")
+    print(f"\nempty documents ({len(empty)}): topics nothing can answer")
     for row in empty:
         print(f"   {row['bytes']:5d} bytes  {row['source']}/{row['path']}")
 
     wrong = measured["unregistered_names"]
     if wrong:
-        print(f"\nUNREGISTERED NAMES ({len(wrong)}) — a typo the five seams fail on "
+        print(f"\nUNREGISTERED NAMES ({len(wrong)}): a typo the five seams fail on "
               "differently, and only two of them loudly")
         for row in wrong:
             print(f"   {row['kind']} {row['name']!r} at {row['where']}; "
@@ -46,14 +46,14 @@ def report(measured: dict) -> None:
 
     braces = measured["unrendered_placeholders"]
     if braces:
-        print(f"\nUNRENDERED PLACEHOLDERS ({len(braces)}) — sent to the model as literal text")
+        print(f"\nUNRENDERED PLACEHOLDERS ({len(braces)}): sent to the model as literal text")
         for row in braces:
             note = "a profile field that is never substituted" if row["is_a_profile_field"] \
                    else "not a profile field; a typo or an intentional brace"
-            print(f"   {{{row['placeholder']}}}  — {note}")
+            print(f"   {{{row['placeholder']}}}: {note}")
 
     nothing = measured["indexing_nothing"]
-    print(f"\nindexed nothing ({len(nothing)}) — read, and no section came out")
+    print(f"\nindexed nothing ({len(nothing)}): read, and no section came out")
     for page in nothing:
         print(f"   {page}")
     if nothing:

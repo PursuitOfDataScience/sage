@@ -19,9 +19,10 @@ jobs:
 
       # The retrieval layer is importable without Streamlit or the Mistral SDK,
       # which is what keeps this job fast. pypdf is installed so the upload tests
-      # exercise real parsing rather than the ImportError fallback.
+      # exercise real parsing rather than the ImportError fallback, and requests and
+      # beautifulsoup4 so the web scraper's tests run here instead of being skipped.
       - name: Install test dependencies
-        run: pip install --disable-pip-version-check pytest ruff pypdf httpx
+        run: pip install --disable-pip-version-check pytest ruff pypdf httpx requests beautifulsoup4
 
       - name: Lint
         run: ruff check .
@@ -36,14 +37,14 @@ jobs:
       # already present on the runner, and fails on clipping, content hidden behind
       # the input bar, horizontal overflow, unwanted wrapping, a control something
       # else is painted on top of, the gap between a question and its answer, dead
-      # space above the input bar, or low contrast — see the docstring in
+      # space above the input bar, or low contrast. See the docstring in
       # tools/render_check.py. Every UI bug that has shipped from this repo was
       # pure CSS, and this runner's Chrome has caught one this sandbox's did not.
       #
       # A missing browser is a BROKEN check, not a passing one. This step used to
       # print `::warning::` and `exit 0` when /usr/bin/google-chrome was not there,
       # so the day the runner image moves Chrome, all 720 renders quietly stop being
-      # checked and the job still goes green — with an annotation nobody reads on a
+      # checked and the job still goes green, with an annotation nobody reads on a
       # tick everybody does. That is the exact failure this repo is written against:
       # a check that cannot fail reads as a pass, which is worse than no check. So
       # the browser is searched for across the names runner images actually use, the
@@ -95,18 +96,9 @@ jobs:
           PY
 
       # The composition root, not its pieces: this is the one check that the profile
-      # the repository ships still assembles into a working assistant — its source
+      # the repository ships still assembles into a working assistant (its source
       # trees found, its reader and URL scheme registered, its engine built, its
-      # tools bound to that index.
+      # tools bound to that index). refresh-corpus.yml runs the same script on a
+      # refreshed corpus, which is why it is a file and not a heredoc here.
       - name: Assemble the assistant from the shipped profile
-        run: |
-          python - <<'PY'
-          import logging
-          logging.basicConfig(level=logging.INFO)
-          from sage import runtime
-          sage = runtime.build()
-          assert sage.corpus.chunks, "no chunks indexed"
-          assert sage.retriever.search("storage quota"), "search returned nothing"
-          assert len(sage.tool_schemas) == 2, sage.tool_schemas
-          print("profile:", sage.profile.origin, "->", sage.summary())
-          PY
+        run: python tools/assembly_check.py

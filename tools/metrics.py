@@ -1,12 +1,17 @@
 """Print retrieval metrics for the golden set. Run it instead of quoting a comment.
 
-Three places in this repository carried hand-written metrics — the eval's docstring and
-two config comments — and the docstring's numbers were never true of the code beside
+Three places in this repository carried hand-written metrics (the eval's docstring and
+two config comments), and the docstring's numbers were never true of the code beside
 them. A number nobody re-derives goes stale silently, so this derives them.
 
     python tools/metrics.py                 # the current tree
     python tools/metrics.py --against a.json
     python tools/metrics.py --save a.json   # to compare a later change against
+    python tools/metrics.py --against a.json --fail-on-recall-drop
+
+The last is the gate the weekly corpus refresh merges on: exit 1 if golden-set recall@5
+or recall@3 is lower than in the saved file. p@1, MRR and the per-question ranks are
+printed for the pull request, and do not gate it.
 
 `depth` is the metric the eval itself cannot see: how many sections *of an acceptable
 page* are among the six results the model is handed. Recall counts pages, so a change
@@ -36,7 +41,7 @@ def cases() -> tuple[list, list]:
     """The eval's own case lists.
 
     Read with `ast` rather than imported, because the eval module imports pytest and
-    this has to run in environments that cannot install it — which is exactly when
+    this has to run in environments that cannot install it, which is exactly when
     someone is reaching for a number and tempted to quote the stale comment instead.
     """
     with open(EVAL, encoding="utf-8") as handle:
@@ -106,7 +111,11 @@ def main() -> int:
     parser.add_argument("--against", help="a JSON file saved by --save")
     parser.add_argument("--save", help="write this run's numbers here")
     parser.add_argument("--label", default="retrieval")
+    parser.add_argument("--fail-on-recall-drop", action="store_true",
+                        help="with --against: exit 1 if golden-set recall@5 or recall@3 fell")
     parsed = parser.parse_args()
+    if parsed.fail_on_recall_drop and not parsed.against:
+        parser.error("--fail-on-recall-drop needs --against")
 
     known, gaps = cases()
     index = retrieval.build(corpus_mod.build())
@@ -129,7 +138,23 @@ def main() -> int:
         with open(parsed.save, "w", encoding="utf-8") as handle:
             json.dump(now, handle, indent=1)
         print(f"\nsaved to {parsed.save}")
+
+    if parsed.fail_on_recall_drop:
+        dropped = recall_drops(now, before)
+        for line in dropped:
+            print(f"RECALL DROPPED: {line}")
+        if dropped:
+            return 1
     return 0
+
+
+def recall_drops(now: dict, before: dict) -> list[str]:
+    """Every golden-set recall that is lower than `before`, as a printable line."""
+    return [
+        f"{key} {before[key]:.1%} -> {now[key]:.1%}"
+        for key in ("recall@5", "recall@3")
+        if key in before and now[key] < before[key] - 1e-9
+    ]
 
 
 if __name__ == "__main__":

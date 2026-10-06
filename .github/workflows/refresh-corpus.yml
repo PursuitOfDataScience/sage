@@ -1,0 +1,236 @@
+# Refresh the bundled corpus every week, and land it on main when it is safe to.
+#
+# docs/ is the RCC User Guide (github.com/rcc-uchicago/user-guide); web/ is the RCC
+# websites, scraped by tools/rcc-web-scrape.py from the pages web_pages.toml lists.
+# `refresh-docs.sh --scrape` refreshes both. This runs it, checks the result, and opens
+# a pull request:
+#
+#   nothing changed        the run succeeds and commits nothing
+#   every guard passed     the pull request is squash-merged, then Deploy is run
+#   anything else          the pull request stays open with the label
+#                          corpus-refresh-needs-review, and the run fails
+#
+# The guards are the checks CI would make on this change, run here because CI cannot:
+# a push or pull request made with GITHUB_TOKEN starts no other workflow (only
+# workflow_dispatch and repository_dispatch are exempt). So CI never runs on the bot's
+# pull request or on its merge, Deploy (which hangs off CI) never fires on its own, and
+# this dispatches Deploy itself. A personal access token would change that; whether to
+# use one is the owner's decision, not this file's.
+#
+# Opening the pull request needs Settings > Actions > General > "Allow GitHub Actions to
+# create and approve pull requests". Without it `gh pr create` fails with "GitHub Actions
+# is not permitted to create or approve pull requests", and the run says so and stops.
+
+name: Refresh corpus
+
+on:
+  schedule:
+    # Saturday 13:17 UTC, which is 08:17 in Chicago on daylight time and 07:17 on
+    # standard (cron here is always UTC). It picks up the whole week's User Guide and
+    # website edits and lands them before the new week starts. Off the top of the hour
+    # because GitHub's scheduled-run queue is busiest on it; runs fire late regardless.
+    #
+    # Scheduled workflows are disabled after sixty days without a commit to the
+    # repository. A refresh that lands something is a commit, so an ordinary week keeps
+    # this alive; two quiet months upstream will not. Re-enable it from the Actions tab
+    # rather than adding empty commits to keep it awake. Failure notices for scheduled
+    # runs go to whoever last edited this cron line.
+    - cron: '17 13 * * 6'
+  workflow_dispatch:
+
+concurrency:
+  group: refresh-corpus
+  # Never cancel a refresh partway: it may already have pushed its branch.
+  cancel-in-progress: false
+
+permissions:
+  contents: write        # push the refresh branch, and merge it
+  pull-requests: write   # open, label and merge the pull request
+  actions: write         # dispatch Deploy
+
+defaults:
+  run:
+    # Named explicitly for `-eo pipefail`, so `tool | tee log` fails when the tool does.
+    shell: bash
+
+jobs:
+  refresh:
+    name: Refresh docs/ and web/
+    runs-on: ubuntu-latest
+    # A full fetch of the list takes about ten minutes at the sites' crawl delay; an
+    # ordinary week, where only the pages without a sitemap date are due, about two.
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      LABEL: corpus-refresh-needs-review
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # requirements.txt for the app and the assembly check, requests and beautifulsoup4
+      # for the scraper, pytest and ruff for the guards.
+      - name: Install dependencies
+        run: >-
+          pip install --disable-pip-version-check -r requirements.txt
+          requests beautifulsoup4 pytest ruff
+
+      - name: Record the baseline
+        id: base
+        run: |
+          mkdir -p /tmp/refresh
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git show HEAD:docs_snapshot.json > /tmp/refresh/stamp-before.json
+          python tools/metrics.py --save /tmp/before.json
+
+      - name: Refresh docs/ and web/
+        id: refresh
+        env:
+          RCC_WEB_SUMMARY: /tmp/refresh/web-summary.json
+        run: ./refresh-docs.sh --scrape
+
+      - name: Say why the refresh stopped
+        if: ${{ failure() && steps.refresh.outcome == 'failure' }}
+        run: |
+          {
+            echo "### The refresh stopped before anything was committed"
+            if [ -s /tmp/refresh/web-summary.json ]; then
+              jq -r '"Scraper: " + (if .refused != "" then .refused else "finished" end)' \
+                /tmp/refresh/web-summary.json
+              jq -r '.failed[] | "- \(.url): \(.error)"' /tmp/refresh/web-summary.json
+            fi
+            echo "See the log of the step above for the rest."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Did anything change?
+        id: changes
+        run: |
+          paths=(docs web docs_snapshot.json web_manifest.json)
+          if [ -z "$(git status --porcelain -- "${paths[@]}")" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing changed upstream, so there is nothing to commit." \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git status --short -- "${paths[@]}" | head -n 60
+          fi
+
+      # The guards. Each runs whether or not the one before it passed, so the pull
+      # request can say which failed; any one failing still fails this run.
+      - name: Lint
+        id: ruff
+        if: steps.changes.outputs.changed == 'true'
+        run: ruff check .
+
+      - name: Test
+        id: pytest
+        if: ${{ !cancelled() && steps.changes.outputs.changed == 'true' }}
+        run: pytest -q
+
+      - name: Assemble the assistant from the shipped profile
+        id: assembly
+        if: ${{ !cancelled() && steps.changes.outputs.changed == 'true' }}
+        run: python tools/assembly_check.py
+
+      - name: Retrieval metrics against the baseline
+        id: metrics
+        if: ${{ !cancelled() && steps.changes.outputs.changed == 'true' }}
+        run: >-
+          python tools/metrics.py --against /tmp/before.json --fail-on-recall-drop
+          | tee /tmp/refresh/metrics.txt
+
+      - name: What the corpus can and cannot answer
+        id: corpus
+        if: ${{ !cancelled() && steps.changes.outputs.changed == 'true' }}
+        run: python tools/corpus_check.py | tee /tmp/refresh/corpus.txt
+
+      - name: Commit to a branch and open the pull request
+        id: pr
+        if: ${{ !cancelled() && steps.changes.outputs.changed == 'true' }}
+        env:
+          OUTCOMES: |
+            ruff ${{ steps.ruff.outcome }}
+            pytest ${{ steps.pytest.outcome }}
+            assembly ${{ steps.assembly.outcome }}
+            metrics ${{ steps.metrics.outcome }}
+            corpus_check ${{ steps.corpus.outcome }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          printf '%s' "$OUTCOMES" > /tmp/refresh/guards.txt
+          git add -A -- docs web docs_snapshot.json web_manifest.json
+          git diff --cached --name-status --no-renames -- docs > /tmp/refresh/docs-changes.txt
+
+          stamp() { python -c "import json, sys; print(json.load(open(sys.argv[1])).get('user_guide_commit') or '')" "$1"; }
+          old=$(stamp /tmp/refresh/stamp-before.json)
+          new=$(stamp docs_snapshot.json)
+          if [ -n "$old" ] && [ "$old" != "$new" ]; then
+            gh api "repos/rcc-uchicago/user-guide/compare/$old...$new" --jq .total_commits \
+              > /tmp/refresh/ug-commits.txt || rm -f /tmp/refresh/ug-commits.txt
+          fi
+          python tools/refresh_report.py /tmp/refresh --stamp docs_snapshot.json
+
+          # corpus-refresh/YYYY-MM-DD, or -2, -3 for a second run the same day: a branch
+          # the owner may be fixing by hand is never pushed over.
+          day=$(date -u +%Y-%m-%d)
+          branch="corpus-refresh/$day"
+          n=1
+          while git ls-remote --exit-code --heads origin "$branch" > /dev/null; do
+            n=$((n + 1))
+            branch="corpus-refresh/$day-$n"
+          done
+          git switch -c "$branch"
+          git commit -q -F /tmp/refresh/message.txt
+          git push -q origin "$branch"
+          if ! url=$(gh pr create --base main --head "$branch" \
+                       --title "$(cat /tmp/refresh/title.txt)" --body-file /tmp/refresh/body.md); then
+            echo "::error title=Could not open the pull request::$branch is pushed. If the message above says GitHub Actions is not permitted to create or approve pull requests, the owner has to enable that under Settings > Actions > General."
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          cat /tmp/refresh/body.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Merge, then deploy
+        if: ${{ success() && steps.changes.outputs.changed == 'true' }}
+        env:
+          URL: ${{ steps.pr.outputs.url }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+          BASE: ${{ steps.base.outputs.sha }}
+        run: |
+          # The guards ran against the main this job checked out. If main has moved
+          # since, they say nothing about the merge, so a person looks instead.
+          head=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$head" != "$BASE" ]; then
+            echo "::error title=main moved during the refresh::main is $head now, not $BASE, which the guards ran against."
+            exit 1
+          fi
+          tail -n +3 /tmp/refresh/message.txt > /tmp/refresh/merge-body.txt
+          gh pr merge "$URL" --squash --match-head-commit "$(git rev-parse HEAD)" \
+            --subject "$(cat /tmp/refresh/title.txt)" --body-file /tmp/refresh/merge-body.txt
+          # Tidying, not a guard: a branch left behind is not worth failing a merged run.
+          git push -q origin --delete "$BRANCH" || echo "::warning::could not delete $BRANCH"
+          gh workflow run deploy.yml --ref main
+          echo "Merged $URL and dispatched Deploy." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Leave the pull request for review
+        if: ${{ failure() && steps.pr.outputs.url != '' }}
+        env:
+          URL: ${{ steps.pr.outputs.url }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          state=$(gh pr view "$URL" --json state --jq .state)
+          if [ "$state" != "OPEN" ]; then
+            echo "::error title=The refresh merged, then a later step failed::$URL is $state. Deploy is dispatched after the merge; check that step, and run deploy.yml by hand if it did not start."
+            exit 1
+          fi
+          gh label create "$LABEL" --color D93F0B --force \
+            --description "A weekly corpus refresh that a guard stopped"
+          gh pr edit "$URL" --add-label "$LABEL"
+          gh pr comment "$URL" --body "Not merged: a guard failed, or main moved while the refresh ran. The run: $RUN"
+          echo "::error title=Corpus refresh needs review::$URL is open with the label $LABEL."
+          exit 1

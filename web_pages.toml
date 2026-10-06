@@ -1,0 +1,97 @@
+# The pages `web/` is made of, and the only pages `tools/rcc-web-scrape.py` fetches.
+#
+# Nothing off this list is fetched and no link is followed. A sitemap page that is not
+# here is printed in every run's summary as "available, not included": add it under
+# [allow] to start fetching it, or under [deny] to stop it being reported. A URL in
+# both is denied, and its file leaves `web/` on the next run; so does the file of a URL
+# taken off [allow].
+#
+# Each URL must be written exactly as its file's `URL:` line says: the file name is
+# made from it, and the `URL:` line is the citation a reader clicks.
+
+[sitemaps]
+# Where `<lastmod>` comes from. A page with no lastmod, which is every page on the four
+# subdomains (they publish no sitemap), is fetched on every run. A page that was in a
+# sitemap and leaves it has its file removed.
+urls = ["https://rcc.uchicago.edu/sitemap.xml"]
+
+[allow]
+urls = [
+    # rcc.uchicago.edu. Two of these are not in its sitemap: the Mind Bytes 2018 story
+    # and /midway2, whose text is the same as /support-and-services/midway2.
+    "https://rcc.uchicago.edu/about-rcc",
+    "https://rcc.uchicago.edu/about-rcc/advisory-committees",
+    "https://rcc.uchicago.edu/about-rcc/artificial-intelligence-spotlight-mind-bytes-2018",
+    "https://rcc.uchicago.edu/about-rcc/director%E2%80%99s-welcome",
+    "https://rcc.uchicago.edu/about-rcc/our-team",
+    "https://rcc.uchicago.edu/about-rcc/rcc-user-policy",
+    "https://rcc.uchicago.edu/about-rcc/research-computing-oversight-committee",
+    "https://rcc.uchicago.edu/about-rcc/vision-mission",
+    "https://rcc.uchicago.edu/accounts-allocations",
+    "https://rcc.uchicago.edu/bayesian-forest-cities-full-data",
+    "https://rcc.uchicago.edu/big-data-sleeping-worms-and-electronic-chef",
+    "https://rcc.uchicago.edu/data-visualization-initiative-advisory-committee",
+    "https://rcc.uchicago.edu/grants-publications",
+    "https://rcc.uchicago.edu/grants-publications/acknowledging-the-RCC",
+    "https://rcc.uchicago.edu/grants-publications/facilities-and-resources-documents",
+    "https://rcc.uchicago.edu/grants-publications/for-PI-proposals",
+    "https://rcc.uchicago.edu/grants-publications/grant-support",
+    "https://rcc.uchicago.edu/grants-publications/hardware-quotes",
+    "https://rcc.uchicago.edu/grants-publications/list-of-publications",
+    "https://rcc.uchicago.edu/grants-publications/publications",
+    "https://rcc.uchicago.edu/grants-publications/support-letters",
+    "https://rcc.uchicago.edu/midway2",
+    "https://rcc.uchicago.edu/resources",
+    "https://rcc.uchicago.edu/resources/high-performance-computing",
+    "https://rcc.uchicago.edu/resources/hosted-data",
+    "https://rcc.uchicago.edu/resources/networking",
+    "https://rcc.uchicago.edu/resources/software",
+    "https://rcc.uchicago.edu/resources/storage-and-backup",
+    "https://rcc.uchicago.edu/support-and-services",
+    "https://rcc.uchicago.edu/support-and-services/cluster-partnership-program",
+    "https://rcc.uchicago.edu/support-and-services/consultant-partnership-program",
+    "https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support",
+    "https://rcc.uchicago.edu/support-and-services/data-management",
+    "https://rcc.uchicago.edu/support-and-services/data-sharing-services",
+    "https://rcc.uchicago.edu/support-and-services/midway2",
+    "https://rcc.uchicago.edu/support-and-services/new-faculty-program",
+    "https://rcc.uchicago.edu/support-and-services/outreach",
+    "https://rcc.uchicago.edu/support-and-services/workshops-and-training",
+
+    # Beagle3.
+    "https://beag3.rcc.uchicago.edu",
+    "https://beag3.rcc.uchicago.edu/access",
+    "https://beag3.rcc.uchicago.edu/publications",
+    "https://beag3.rcc.uchicago.edu/software",
+    "https://beag3.rcc.uchicago.edu/system-details",
+    "https://beag3.rcc.uchicago.edu/workshops",
+
+    # Skyway.
+    "https://cloud-skyway.rcc.uchicago.edu/faqs",
+    "https://cloud-skyway.rcc.uchicago.edu/news-and-events",
+    "https://cloud-skyway.rcc.uchicago.edu/user-guide",
+
+    # Fetched and kept, but not indexed: profiles/rcc.toml lists both hosts under
+    # `exclude_hosts`, so the app never reads these files.
+    "https://learn-radiology.rcc.uchicago.edu/incidence",
+    "https://learn-radiology.rcc.uchicago.edu/mpMRI",
+    "https://learn-radiology.rcc.uchicago.edu/pirads",
+    "https://learn-radiology.rcc.uchicago.edu/takecourse",
+    "https://learn-radiology.rcc.uchicago.edu/team",
+    "https://vislab.rcc.uchicago.edu/our-work-color",
+    "https://vislab.rcc.uchicago.edu/tools-resources-color",
+    "https://vislab.rcc.uchicago.edu/workshops-events",
+]
+
+[deny]
+urls = [
+    # Proposed for removal and waiting on the owner's decision; nothing here is applied.
+    # Uncommenting a line removes that page's file from web/ on the next run.
+    # "https://cloud-skyway.rcc.uchicago.edu/news-and-events",  # an event listing that goes stale between refreshes
+    # "https://vislab.rcc.uchicago.edu/workshops-events",  # past VisLab events from 2020 on, not documentation
+    # "https://learn-radiology.rcc.uchicago.edu/mpMRI",  # prostate MRI course material, not RCC computing
+    # "https://learn-radiology.rcc.uchicago.edu/pirads",  # prostate MRI course material, not RCC computing
+    # "https://learn-radiology.rcc.uchicago.edu/incidence",  # prostate cancer statistics, not RCC computing
+    # "https://rcc.uchicago.edu/bayesian-forest-cities-full-data",  # a Mind Bytes event write-up, not documentation
+    # "https://rcc.uchicago.edu/big-data-sleeping-worms-and-electronic-chef",  # a Mind Bytes event write-up, not documentation
+]
