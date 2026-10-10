@@ -5,33 +5,47 @@ id `search_docs` advertises but `read_doc` cannot resolve is a dead end the mode
 recover from mid-turn. A chunk with no URL is a citation with nothing to click. A new
 empty document is a topic that quietly stops being answerable.
 
-Counts rather than absences where a count is the honest bound: the User Guide and the
-scraped site overlap by construction, so duplicates cannot be forbidden — only held at
-the number measured, so a new one is visible.
+Two kinds of assertion, kept apart because the weekly corpus refresh has to treat them
+differently. The integrity checks hold for any corpus: an id that does not resolve is a
+bug whatever the documents say. The rest are findings ABOUT the documents (which pages
+are empty, which sections repeat, which pages their own title cannot find), and those are
+held to `evals/corpus_baseline.json`, exactly and in both directions, so a new one is
+visible and a fixed one comes off the record. On an ordinary change the corpus is fixed,
+so a finding that moves is the code moving it. The refresh re-measures them on the corpus
+it is about to land and commits the file with it, so an upstream edit changes what is
+expected instead of failing the run: the 2026-10-10 refresh was stopped by three of these
+for content nobody here could have changed.
 """
 
 from __future__ import annotations
+
+import os
 
 import pytest
 
 from evals import corpus_health
 
-# Measured on the tree that introduced this file.
-KNOWN_EMPTY = {
-    # 0 bytes upstream, so no rclone question is answerable at all. The retrieval eval
-    # has carried this as a comment since it was written.
-    "docs/data_transfer/cloud/rclone.md",
-    # 188 bytes of boilerplate from the scrape.
-    "web/takecourse.txt",
-}
-# Split, because the two are not the same problem. A page indexed twice wastes a result
-# slot and is fixable upstream; identical text under two different titles is shared
-# boilerplate that must keep its own citation — deduplicating the index would answer a
-# Booth question with a link to the BFI page.
-MAXIMUM_SAME_PAGE_TWICE = 2          # measured 2 (web/midway2 under two URLs)
-MAXIMUM_SHARED_BOILERPLATE = 2       # measured 2 (bfi.md and booth.md)
-MAXIMUM_NEAR_DUPLICATE_PAIRS = 0     # measured 0
-MINIMUM_PAGES_FINDABLE_BY_TITLE = 1.0    # measured 1.00 (was 0.939, 7 of 114)
+BASELINE = corpus_health.load_baseline()
+UPDATE = "python tools/corpus_check.py --update"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def held(name: str, found: list, explain=None) -> None:
+    """`found` is what the baseline records for `name`, or the failure says what to do."""
+    expected = BASELINE[name]
+    if found == expected:
+        return
+    appeared = [item for item in found if item not in expected]
+    went = [item for item in expected if item not in found]
+    lines = [f"{name} moved: {len(appeared)} appeared, {len(went)} went."]
+    lines += [f"  + {explain(item) if explain else item}" for item in appeared]
+    lines += [f"  - {item}" for item in went]
+    lines.append(
+        f"If docs/ or web/ changed, `{UPDATE}` records it (the weekly refresh does this "
+        "itself). If they did not, the code moved this: run it only if that was the "
+        "point, and say why in the commit message."
+    )
+    pytest.fail("\n".join(lines))
 
 
 @pytest.fixture(scope="module")
@@ -48,8 +62,8 @@ class TestIntegrity:
     def test_every_chunk_has_a_url(self, measured, real_corpus):
         """Every chunk whose source promised one, which is not every chunk.
 
-        `chunks_without_url` reports all of them on purpose — the card prints what was
-        measured — so the scheme a source *declared* is the thing to assert against.
+        `chunks_without_url` reports all of them on purpose (the card prints what was
+        measured), so the scheme a source *declared* is the thing to assert against.
         `links = "none"` says the tree is published nowhere and the honest citation is
         no link at all; the RCC deployment has one (`kb`, the help-desk notes), and over
         the raw list this failed for the app working exactly as designed. The failure it
@@ -69,7 +83,7 @@ class TestIntegrity:
         """A citation is the one string in this app that becomes an `href`.
 
         "Has a URL" was all that was asked. A space in it, two fragment markers, no
-        scheme, a control character — each is a link that lands nowhere, and nothing
+        scheme, a control character: each is a link that lands nowhere, and nothing
         downstream notices: `anchor_check.py` validates against the live site but is
         network-bound and out of the suite.
         """
@@ -80,7 +94,7 @@ class TestIntegrity:
         """Absent is one finding, present-but-unusable is the other. Not both.
 
         `malformed_urls` reported the empty URL as "no http scheme", so every finding was
-        doubled in a report that prints the two side by side — and on a corpus using
+        doubled in a report that prints the two side by side, and on a corpus using
         `links = "none"`, the default scheme, for a corpus with nowhere to send the reader,
         it called every chunk an unusable citation URL. A check that fires on the app
         working as designed is a check nobody can read.
@@ -106,7 +120,7 @@ class TestIntegrity:
     def test_every_source_the_profile_declares_contributed(self, measured, profile):
         """Derived from the profile rather than a hardcoded pair.
 
-        `corpus.build` skips a source whose `reader` nothing registered — deliberately, so
+        `corpus.build` skips a source whose `reader` nothing registered, deliberately, so
         one misconfigured tree cannot take a multi-source deployment down. The cost is that
         the app boots looking healthy with a whole tree missing, and CI's own check only
         asserts that *some* chunks exist. A third source added to the profile is now
@@ -120,7 +134,7 @@ class TestIntegrity:
     def test_no_profile_field_is_left_as_a_literal_brace(self, measured):
         """`prompts.render` substitutes six names and leaves the rest alone by design.
 
-        The cost is silent: a profile author writing `{corpus_name}` — a documented field —
+        The cost is silent: a profile author writing `{corpus_name}`, a documented field,
         sends the braces to the model. Both shipped prompts are clean; this is the check a
         second deployment needs, and it only fails on a placeholder that names a real field.
         """
@@ -139,7 +153,7 @@ class TestIntegrity:
         A bad `links` scheme or `retrieval.engine` raises at boot with the registry's own
         list, which is right. A bad `reader` is skipped with a log line, so a single-source
         deployment boots and answers every question with "the documentation does not appear
-        to cover it" — this app's worst state, and the one hardest to notice.
+        to cover it": this app's worst state, and the one hardest to notice.
         """
         wrong = measured["unregistered_names"]
         assert not wrong, "names nothing registered: " + "; ".join(
@@ -167,18 +181,17 @@ class TestIntegrity:
 
 
 class TestWhatTheCorpusCannotAnswer:
-    def test_no_new_empty_document(self, measured):
-        found = {f"{row['source']}/{row['path']}" for row in measured["empty_documents"]}
-        assert found <= KNOWN_EMPTY, (
-            "documents that have gone empty: " + "; ".join(sorted(found - KNOWN_EMPTY))
-        )
+    def test_the_empty_documents_are_the_ones_on_record(self, measured):
+        """Both directions, so the list cannot outlive the problem it records.
 
-    def test_a_document_that_filled_up_should_be_taken_off_the_list(self, measured):
-        """The other direction, so the list cannot outlive the problem it records."""
-        found = {f"{row['source']}/{row['path']}" for row in measured["empty_documents"]}
-        filled = KNOWN_EMPTY - found
-        assert not filled, (
-            "no longer empty, remove from KNOWN_EMPTY: " + "; ".join(sorted(filled))
+        `docs/data_transfer/cloud/rclone.md` is 0 bytes upstream, so no rclone question
+        is answerable at all, and `web/takecourse.txt` is 188 bytes of boilerplate from
+        the scrape. A page that fills up comes off the record as surely as a new empty
+        one goes on it.
+        """
+        held(
+            "empty_documents",
+            sorted(f"{row['source']}/{row['path']}" for row in measured["empty_documents"]),
         )
 
 
@@ -187,14 +200,12 @@ class TestPagesThatYieldNothing:
 
     A page excluded on purpose never becomes a Document; a page that was read and produced
     nothing becomes one with no chunks. A first version of this walked the tree and
-    reported all twelve deliberate exclusions — the publication dumps and the radiology
-    scrape — as problems.
+    reported all twelve deliberate exclusions (the publication dumps and the radiology
+    scrape) as problems.
     """
 
-    def test_only_the_known_empty_page_yields_nothing(self, measured):
-        assert measured["indexing_nothing"] == [
-            "docs/data_transfer/cloud/rclone.md"
-        ], measured["indexing_nothing"]
+    def test_the_pages_that_yield_nothing_are_the_ones_on_record(self, measured):
+        held("indexing_nothing", sorted(measured["indexing_nothing"]))
 
     def test_deliberate_exclusions_are_not_reported(self, measured):
         reported = " ".join(measured["indexing_nothing"])
@@ -203,16 +214,25 @@ class TestPagesThatYieldNothing:
 
 
 class TestDuplication:
-    def test_no_new_page_is_indexed_twice(self, measured):
-        groups = measured["duplicates"]["same_page_twice"]
-        assert len(groups) <= MAXIMUM_SAME_PAGE_TWICE, (
-            f"{len(groups)} pages indexed twice: {groups[:3]}"
+    """Counts, not absences: the User Guide and the scraped site overlap by construction.
+
+    Split, because the two are not the same problem. A page indexed twice wastes a result
+    slot and is fixable in the scrape; identical text under two different titles is shared
+    boilerplate that must keep its own citation, because deduplicating the index would
+    answer a Booth question with a link to the BFI page. The SDE2 and SDE3 tutorials are
+    the same kind of thing: two systems, one set of instructions, two pages to cite.
+    """
+
+    def test_the_pages_indexed_twice_are_the_ones_on_record(self, measured):
+        held(
+            "same_page_twice",
+            sorted(sorted(group) for group in measured["duplicates"]["same_page_twice"]),
         )
 
-    def test_shared_boilerplate_is_held_at_the_measured_count(self, measured):
-        groups = measured["duplicates"]["shared_boilerplate"]
-        assert len(groups) <= MAXIMUM_SHARED_BOILERPLATE, (
-            f"{len(groups)} boilerplate groups: {groups[:3]}"
+    def test_the_shared_boilerplate_is_the_one_on_record(self, measured):
+        held(
+            "shared_boilerplate",
+            sorted(sorted(group) for group in measured["duplicates"]["shared_boilerplate"]),
         )
 
     def test_the_two_kinds_are_told_apart(self, measured):
@@ -222,54 +242,56 @@ class TestDuplication:
             duplicated["shared_boilerplate"]
         ) == len(duplicated["exact_groups"])
 
-    def test_near_duplicates_are_held_at_the_measured_count(self, measured):
-        near = measured["duplicates"]["near"]
-        assert len(near) <= MAXIMUM_NEAR_DUPLICATE_PAIRS, (
-            f"{len(near)} near-duplicate pairs: {near[:3]}"
+    def test_the_near_duplicates_are_the_ones_on_record(self, measured):
+        held(
+            "near_duplicates",
+            sorted(sorted((row["a"], row["b"])) for row in measured["duplicates"]["near"]),
         )
 
 
 class TestFindability:
-    def test_most_pages_are_retrievable_by_their_own_title(self, measured):
-        rate = measured["self_reachability"]["rate"]
-        assert rate >= MINIMUM_PAGES_FINDABLE_BY_TITLE, (
-            f"only {rate:.1%} of pages can be found by their own title"
-        )
+    def test_the_pages_their_own_title_cannot_find_are_the_ones_on_record(self, measured):
+        """Each page asked for by its own title, against the list of the ones that fail.
 
-    def test_every_page_is_retrievable_by_its_own_title(self, measured):
-        """There is nothing left on the list, so the list itself is the assertion.
+        This list reached empty once, and the history of how is worth keeping. Of the
+        seven on it, `singularity.md` is still titled `# Modules` upstream (its citation
+        chip still reads "Modules", and that part is the User Guide's to fix) but was
+        retrieved at rank 5 for the word. `MidwayGeoSpatial` matched nothing at all: a term
+        appearing in no document *body* scores zero even where it does appear in the title
+        and the path, because `_inverse_document_frequency` returns 0 and the scorer skips
+        the term before reaching either boost. A synonym group in the profile connects the
+        compound to the `gis` and `geospatial` its own prose uses, which is cheaper than a
+        CamelCase split that would touch every score in the index to rescue one page.
 
-        This used to name the two of seven worth a reader's attention and record that
-        neither was fixable here. Both were. `singularity.md` is still titled `# Modules`
-        upstream — the citation chip for the Singularity page still reads "Modules — …",
-        and that part is still the User Guide's to fix — but the page is now retrieved at
-        rank 5 for the word, behind the pages a reader typing it actually wants. The
-        seventh, `MidwayGeoSpatial`, matched nothing at all in the index: a term appearing
-        in no document *body* scores zero even where it does appear in the title and the
-        path, because `_inverse_document_frequency` returns 0 and the scorer skips the
-        term before reaching either boost. A synonym group in the profile connects the
-        compound to the `gis` and `geospatial` its own prose uses, which is cheaper than
-        the CamelCase split this test used to argue against — that would still touch every
-        score in the index to rescue one page.
+        Then the 2026-10-10 refresh brought an SDE2 tutorial whose Spack section says
+        `module` and `software` a dozen times in a few lines, and two one-word titles fell
+        to eighth behind it: `Modules` (`singularity.md` again) and `Software`, which five
+        pages now share. Neither is something the code here got worse at, so they are on
+        the record rather than failing every refresh until someone edits a constant, and
+        the failure below names the page that won and its score when one is added.
         """
-        rows = measured["self_reachability"]["unreachable"]
-        assert rows == [], "\n".join(
-            f"{row['title']!r} -> {row['page']} (rank {row['rank']}); got "
-            + ", ".join(f"{got['page']} {got['score']}" for got in row["found_instead"])
-            for row in rows
-        )
+        rows = {row["page"]: row for row in measured["self_reachability"]["unreachable"]}
+
+        def explain(page: str) -> str:
+            row = rows[page]
+            return (
+                f"{page} (titled {row['title']!r}, rank {row['rank']}); got "
+                + ", ".join(f"{got['page']} {got['score']}" for got in row["found_instead"])
+            )
+
+        held("unfindable_by_title", sorted(rows), explain)
 
     def test_a_miss_says_which_page_won_and_by_how_much(self):
         """The diagnosis, held on a corpus that still has a miss in it.
 
         `7 are not findable, incl. one titled 'Modules'` was the whole report for four
         different causes, and a page name alone cannot tell "came seventh" from "matched
-        nothing" — which need opposite fixes. Asserted against a synthetic miss rather
+        nothing", which need opposite fixes. Asserted against a synthetic miss rather
         than the shipped corpus, because the shipped corpus no longer has one and a check
         that cannot fail reads as a pass.
 
         Seven rivals, because `SEARCH_LIMIT` is six: a smaller corpus cannot produce a
-        ranking miss at all. The shape left is the one no title weighting can cure — the
+        ranking miss at all. The shape left is the one no title weighting can cure: the
         page's own body never says the words in its title, and the rivals' bodies do.
         """
         from sage import retrieval
@@ -294,7 +316,7 @@ class TestFindability:
             documents={},
         )
         # By page, not a single row: the rivals are unfindable by their own titles too
-        # — a synthetic body says nothing about "Rival 3" — and that is beside the point.
+        # (a synthetic body says nothing about "Rival 3"), and that is beside the point.
         rows = {
             row["page"]: row
             for row in corpus_health.self_reachability(
@@ -346,7 +368,7 @@ class TestAdvertisedTopics:
 
         `Slurm`, `storage` and `policy` score 11–19 against a floor of 20, because the
         score is an unnormalised sum and a single common term earns very little of it.
-        Not a missing topic — a property of short queries. An xpass here means short
+        Not a missing topic: a property of short queries. An xpass here means short
         queries have been normalised, which would be worth noticing.
         """
         caveated = [row["topic"] for row in measured["topics"] if not row["confident"]]
@@ -358,7 +380,7 @@ class TestEveryUnreachablePageIsReportedTheSameWay:
 
     The empty-title branch appended a bare string while the branch below it appended a
     dict, so a page whose title is missing took the whole card down with `TypeError:
-    string indices must be integers` — a crash in the report about the corpus, caused by
+    string indices must be integers`: a crash in the report about the corpus, caused by
     the corpus. Latent today because every bundled page has a title.
     """
 
@@ -378,7 +400,7 @@ class TestEveryUnreachablePageIsReportedTheSameWay:
         index, built = self.index_of("")
         rows = corpus_health.self_reachability(index, built)["unreachable"]
         # An untitled page has nothing to search for, so the diagnosis fields are the
-        # empty ones rather than absent — the shape is the point of this class.
+        # empty ones rather than absent; the shape is the point of this class.
         assert rows == [
             {"page": "docs/x.md", "title": "", "rank": None, "found_instead": []}
         ]
@@ -387,3 +409,28 @@ class TestEveryUnreachablePageIsReportedTheSameWay:
     def test_the_shipped_corpus_reports_one_shape_too(self, measured):
         rows = measured["self_reachability"]["unreachable"]
         assert all(isinstance(row, dict) and "page" in row for row in rows), rows
+
+
+class TestTheRecordIsKeptByTheRefresh:
+    """The baseline stops a refresh failing only because the refresh writes it."""
+
+    def test_the_refresh_rewrites_it_before_the_tests_run_and_commits_it(self):
+        path = os.path.join(ROOT, ".github", "workflows", "refresh-corpus.yml")
+        with open(path, encoding="utf-8") as handle:
+            workflow = handle.read()
+        update = workflow.index("tools/corpus_check.py --update")
+        assert update < workflow.index("run: pytest -q")
+        staged = next(line for line in workflow.splitlines() if "git add -A --" in line)
+        assert "evals/corpus_baseline.json" in staged
+
+    def test_what_moved_is_what_changed_and_nothing_else(self, tmp_path):
+        before = {"empty_documents": ["docs/a.md"], "shared_boilerplate": [["x#1", "y#1"]]}
+        after = {"empty_documents": ["docs/a.md", "docs/b.md"], "shared_boilerplate": []}
+        assert corpus_health.moved(before, after) == {
+            "empty_documents": {"appeared": ["docs/b.md"], "went": []},
+            "shared_boilerplate": {"appeared": [], "went": [["x#1", "y#1"]]},
+        }
+        assert corpus_health.moved(after, after) == {}
+        path = tmp_path / "baseline.json"
+        corpus_health.save_baseline(after, str(path))
+        assert corpus_health.load_baseline(str(path)) == after

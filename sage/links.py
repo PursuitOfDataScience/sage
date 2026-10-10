@@ -1,37 +1,43 @@
 """The citations a model emits: point them at real URLs, drop the duplicate list.
 
 The previous version sent *every* `web/` citation to the user-guide root on the
-stated grounds that "website pages have no stable per-page docs URL". They do —
-each scraped file records it on line 1 — and they span five different hosts, so a
+stated grounds that "website pages have no stable per-page docs URL". They do
+(each scraped file records it on line 1), and they span five different hosts, so a
 Skyway or Beagle3 answer was being cited to the Midway user guide.
 """
 
 from __future__ import annotations
 
+import posixpath
 import re
+from collections.abc import Iterable
 
-from .corpus import Corpus
+from .corpus import Corpus, Document
 
 # One level of nesting inside the label, because `[Batch jobs [beta]](docs/…)` is a
 # link a model writes and `[^\]]+` could not match it: the target was neither resolved
 # nor unlinked, so it shipped as a live relative href, which the browser resolves
-# against the Streamlit app's own host and 404s — the exact confident-wrong-citation
+# against the Streamlit app's own host and 404s: the exact confident-wrong-citation
 # this module exists to prevent, and `unresolved()` could not see it either.
 _MARKDOWN_LINK = re.compile(
     r"\[((?:[^\[\]]|\[[^\[\]]*\])+)\]\(\s*([^)\s]+)(?:\s+\"[^\"]*\")?\s*\)"
 )
 _ATTR_LIST = re.compile(r"\{:[^}]*\}")
 _EXTERNAL = ("http://", "https://", "mailto:", "tel:", "#")
+# Two dashes this module has to recognise in text it did not write: `Chunk.label` joins
+# a page title to its section with the first, and a title can end in either. Named by
+# codepoint, so that this file spells neither.
+_EM_DASH, _EN_DASH = chr(0x2014), chr(0x2013)
 
 # A markdown image, with the mkdocs-material size attribute that usually follows one.
-# Eighteen indexed sections carry these — the SDE3 connection tutorial is nothing but
-# screenshots — so a model quoting one echoes the syntax into its answer. The link
+# Eighteen indexed sections carry these (the SDE3 connection tutorial is nothing but
+# screenshots), so a model quoting one echoes the syntax into its answer. The link
 # rules below see `[alt](images/avd_login.png)`, cannot resolve an image path in a
 # corpus of documents, and unlink it: what the reader got was `!Screenshot showing AVD
 # login{ width="1000" }`, a stray exclamation mark and a stray attribute list.
 #
 # `[figure: alt]` instead, which is the wording `normalize._replace_img` already gives
-# an HTML image at index time — the same thing said the same way, and honest about
+# an HTML image at index time: the same thing said the same way, and honest about
 # there being a picture here that this transcript is not showing.
 _MARKDOWN_IMAGE = re.compile(
     r"!\[([^\]]*)\]\(\s*([^)\s]+)(?:\s+\"[^\"]*\")?\s*\)(?:\{[^}\n]*\})?"
@@ -43,8 +49,8 @@ def _as_figure(match: re.Match[str]) -> str:
 
     Only the relative form is broken: there is no image in a corpus of documents for
     it to resolve against, so it reached the reader as `!alt{ width="1000" }`. An
-    `https://` image is a picture the browser can actually fetch — the geocoding
-    tutorial has four — and replacing those with a caption would take a working
+    `https://` image is a picture the browser can actually fetch (the geocoding
+    tutorial has four), and replacing those with a caption would take a working
     figure away, which every other rule in this module is careful not to do.
     """
     if match.group(2).startswith(_EXTERNAL):
@@ -53,8 +59,60 @@ def _as_figure(match: re.Match[str]) -> str:
     return f"[figure: {alt}]" if alt else "[figure]"
 
 
-def resolve(target: str, corpus: Corpus) -> str | None:
-    """Best URL for an internal doc reference, or None if it cannot be resolved."""
+def _cited(text: str, corpus: Corpus) -> list[Document]:
+    """The pages `text` cites by exact id: what its relative links are relative to."""
+    pages: dict[str, Document] = {}
+    for match in _MARKDOWN_LINK.finditer(text):
+        target = match.group(2).strip()
+        if target.startswith(_EXTERNAL):
+            continue
+        chunk = corpus.chunk(target)
+        if chunk is not None:
+            page = corpus.document(f"{chunk.source}/{chunk.path}")
+        else:
+            page = corpus.document(target.partition("#")[0])
+        if page is not None:
+            pages[page.id] = page
+    return list(pages.values())
+
+
+def _relative_to(path: str, pages: Iterable[Document], corpus: Corpus) -> Document | None:
+    """The page `path` names when it is read as a link written on one of `pages`.
+
+    A relative link means something only on the page that wrote it, and an answer that
+    quotes a section takes the link out of its page. The data-transfer pages of the SDE2
+    and SDE3 tutorials both write `[connecting chapter](connection.md)`, and when the
+    User Guide added the SDE2 copy there were two `connection.md` files: matched by
+    filename, the link resolved to nothing, so an answer quoting either page lost its
+    link and was logged as having invented one. The answer also cites the page it
+    quoted, which is what the link is relative to. More than one cited page that could
+    have written it is a guess, so that is None too.
+    """
+    found: dict[str, Document] = {}
+    for page in pages:
+        joined = posixpath.normpath(posixpath.join(posixpath.dirname(page.path), path))
+        if joined == ".." or joined.startswith("../"):
+            continue
+        document = corpus.document(f"{page.source}/{joined}")
+        if document is not None:
+            found[document.id] = document
+    return next(iter(found.values())) if len(found) == 1 else None
+
+
+def _written_by_the_corpus(target: str, corpus: Corpus) -> bool:
+    """Is `target` a link the documentation itself writes, whether or not it resolves?"""
+    needle = f"]({target}"
+    return any(needle in chunk.text for chunk in corpus.chunks)
+
+
+def resolve(
+    target: str, corpus: Corpus, beside: Iterable[Document] = ()
+) -> str | None:
+    """Best URL for an internal doc reference, or None if it cannot be resolved.
+
+    `beside` is the pages cited in the same text (see `_cited`). A relative link is
+    read against them before anything looks at its filename alone.
+    """
     target = target.strip()
     if not target:
         return None
@@ -63,13 +121,15 @@ def resolve(target: str, corpus: Corpus) -> str | None:
     if chunk is not None:
         return chunk.url
 
-    base, _, anchor = target.partition("#")
-    base = base.strip().lstrip("./")
+    path, _, anchor = target.partition("#")
+    base = path.strip().lstrip("./")
 
     document = corpus.document(base)
     if document is None:
+        document = _relative_to(path.strip(), beside, corpus)
+    if document is None:
         # Declaration order is the preference, which is what the two literals that used
-        # to be here — `("docs", "web")` — were really saying: prefer the maintained user
+        # to be here, `("docs", "web")`, were really saying: prefer the maintained user
         # guide to the scraped site when a bare `guide.md` could be either. Written as
         # the RCC's own tree names, that preference belonged to one deployment. Two
         # sources named anything else got no preference and no link: `resolve` returned
@@ -92,7 +152,7 @@ def resolve(target: str, corpus: Corpus) -> str | None:
 
     if document is None:
         return None
-    # The document's own source knows how to place an anchor — or that it cannot,
+    # The document's own source knows how to place an anchor, or that it cannot,
     # which is the right answer for a scraped page with no headings to point at.
     # This used to be `if document.source == "web"`, one of six places the corpus's
     # two tree names were spelled out in code that had no other business knowing them.
@@ -111,22 +171,28 @@ def unresolved(text: str, corpus: Corpus) -> list[str]:
     # a citation, and counting one as an invented section put a warning in the log
     # every time a model quoted the SDE3 screenshots.
     text = _MARKDOWN_IMAGE.sub(_as_figure, _ATTR_LIST.sub("", text))
+    beside = _cited(text, corpus)
     for match in _MARKDOWN_LINK.finditer(text):
         target = match.group(2)
         if target.startswith(_EXTERNAL):
             continue
-        if resolve(target, corpus) is None:
+        if resolve(target, corpus, beside) is not None:
+            continue
+        # A link the documentation writes is not one the model made up, even where it
+        # leads nowhere: the BinSanity page links `metabat2.md`, a page the User Guide
+        # does not have. `fix_links` still unlinks it; it is just not an invention.
+        if not _written_by_the_corpus(target, corpus):
             missing.append(target)
     return missing
 
 
 def cited_pages(text: str, corpus: Corpus) -> set[str]:
-    """Every page an internal link in `text` resolves to — the inverse of `unresolved`.
+    """Every page an internal link in `text` resolves to: the inverse of `unresolved`.
 
     What the *reader* can click, which is not the same as what the turn read: the Sources
     strip is built from `read_doc` calls only, so a model that searches, cites a page from
     the snippet and never reads it delivers a working inline link under an empty strip.
-    Measured over 157 recorded answers with a gold page, that is six turns — and the
+    Measured over 157 recorded answers with a gold page, that is six turns, and the
     benchmark scored every one of them as not having cited the right page, under a column
     labelled `cited_gold`.
     """
@@ -153,20 +219,21 @@ def fix_links(text: str, corpus: Corpus) -> str:
     opposite: an unresolvable target became a live link to `DOCS_BASE_URL`, so a
     reader clicking a citation landed on the front page of the user guide believing
     they had reached the cited section. A confident wrong citation is worse than no
-    citation — it spends the trust the Sources strip exists to earn, and nothing about
+    citation: it spends the trust the Sources strip exists to earn, and nothing about
     it looks different from a citation that works.
 
     The label now survives as plain text: a section named but not linked, which is
     honest about exactly what happened.
     """
     text = _MARKDOWN_IMAGE.sub(_as_figure, _ATTR_LIST.sub("", text))
+    beside = _cited(text, corpus)
 
     def replace(match: re.Match[str]) -> str:
         label, target = match.group(1), match.group(2)
         if target.startswith(_EXTERNAL):
             # A bare in-page anchor has nowhere to go in a chat transcript.
             return label if target.startswith("#") else match.group(0)
-        url = resolve(target, corpus)
+        url = resolve(target, corpus, beside)
         label = _titled(label, target, corpus)
         return f"[{label}]({url})" if url else label
 
@@ -176,7 +243,7 @@ def fix_links(text: str, corpus: Corpus) -> str:
 # The prompt asks for citations "as [Section title](path)", and a model that copies the
 # instruction rather than following it emits that phrase verbatim as the visible label.
 # Observed in a live answer: "The same table in the docs explains each field. Section
-# title" — the reader is shown a fragment of this app's own prompt, and the one thing a
+# title": the reader is shown a fragment of this app's own prompt, and the one thing a
 # citation has to say, which page it is, is the thing missing.
 _PLACEHOLDER_LABELS = frozenset({
     "section title", "page title", "title", "section", "page", "doc title",
@@ -185,7 +252,7 @@ _PLACEHOLDER_LABELS = frozenset({
 
 
 def _titled(label: str, target: str, corpus: Corpus) -> str:
-    """The label, unless it is the prompt's own placeholder — then the real title."""
+    """The label, or the real title when the label is the prompt's own placeholder."""
     if label.strip().lower().strip("*_`") not in _PLACEHOLDER_LABELS:
         return label
     chunk = corpus.chunk(target.strip())
@@ -201,7 +268,7 @@ def _titled(label: str, target: str, corpus: Corpus) -> str:
     return document.title if document is not None and document.title else label
 
 
-# `Sources:`, `**References:**`, `**Citations**:`, `## Sources` — every decoration a
+# `Sources:`, `**References:**`, `**Citations**:`, `## Sources`: every decoration a
 # model puts round the word, matched by treating `*_#` and space as noise either side
 # of it. Both spellings of the bold form turn up, which is why the colon is allowed to
 # fall on either side of the markup rather than in one fixed place.
@@ -216,7 +283,7 @@ _FENCE = re.compile(r"^\s*(?:`{3,}|~{3,})")
 _RULE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
 
 # Links and nothing else: no words outside the brackets, separators only between them.
-# This is the shape a model falls back on when told not to write the word "Sources" —
+# This is the shape a model falls back on when told not to write the word "Sources":
 # it drops the label and leaves the list. Prose that happens to contain a link ("see
 # [Batch jobs](docs/slurm/sbatch.md) for flags") has words outside the brackets and
 # does not match, which is the whole distinction.
@@ -229,7 +296,7 @@ _ONLY_LINKS = re.compile(
 # "Sources": a *sentence* of citations. "Cited from [A] and [B]." is a footer with
 # grammar, so neither the label rule nor the bare-links rule sees it.
 #
-# Split into scaffolding — words a citation sentence is built from — and the signal
+# Split into scaffolding (words a citation sentence is built from) and the signal
 # words that say it IS one. Both are required: without a signal, "See [Batch jobs](…)
 # and [Partitions](…)." is a pointer inside an answer and stays. With any word outside
 # the set, it is prose: "For full details, see [GPU jobs](…) and [PyTorch](…)." keeps
@@ -250,8 +317,8 @@ _WORDS = re.compile(r"[A-Za-z']+")
 def _footer_label(line: str) -> str | None:
     """The text after a `Sources:`-style label, `None` if this is not such a line.
 
-    A payload without a colon is prose — "Sources of variation include …" opens with
-    the word and is a sentence, not a footer — so the colon is what licenses cutting
+    A payload without a colon is prose ("Sources of variation include …" opens with
+    the word and is a sentence, not a footer), so the colon is what licenses cutting
     anything that sits on the same line.
     """
     match = _LABEL_LINE.match(line)
@@ -269,7 +336,7 @@ def _footer_label(line: str) -> str | None:
 # questions: "How do I check how many service units I have remaining on my
 # allocation?" is fourteen words and is a heading, not prose. A phrase that stops
 # like a sentence gets the least, because that is the one ending where a short title
-# and a short sentence look the same. Everything else sits in between — eight words
+# and a short sentence look the same. Everything else sits in between: eight words
 # is longer than any chip label in the corpus and shorter than "This work was
 # completed in part with resources provided by the", which is what a citation
 # paragraph looks like when it wraps.
@@ -293,7 +360,7 @@ def _looks_like_a_title(text: str) -> bool:
     the history sent upstream. "This work was completed in part with resources
     provided by the" is 61 characters.
 
-    A title is a noun phrase — it starts on a capital, a digit or a bracket, and it is
+    A title is a noun phrase: it starts on a capital, a digit or a bracket, and it is
     short. A trailing `?` costs nothing, because this corpus is full of headings that
     are questions; a trailing full stop halves the length allowed, because that is the
     one mark that makes a short phrase and a sentence look alike.
@@ -327,18 +394,18 @@ def _is_citation_payload(text: str, names: set[str]) -> bool:
 
     The label alone used to be enough, and for a list of links or titles it is. It is
     not enough for `Citation: please reference the University of Chicago's Research
-    Computing Center.` — which is not a footer, it is the answer, and the whole line
+    Computing Center.`, which is not a footer, it is the answer, and the whole line
     went.
 
     A markdown link settles it: that is the citation shape whatever else is on the
     line. Otherwise every comma-separated part has to be a name the strip is already
-    showing — proof, so punctuation cannot get in the way — or read as a title.
+    showing (proof, so punctuation cannot get in the way) or read as a title.
     """
     if "](" in text:
         return True
     # The whole payload first, before it is split. A comma is the separator between
-    # citations and also a character inside a heading — "Service units, allocations,
-    # and accounts" is one section of the RCC guide — so splitting first turns a name
+    # citations and also a character inside a heading ("Service units, allocations,
+    # and accounts" is one section of the RCC guide), so splitting first turns a name
     # the strip is showing into three fragments that match nothing.
     if names and _norm_title(text) in names:
         return True
@@ -371,7 +438,7 @@ def _is_citation_line(line: str, names: set[str]) -> bool:
 
 def _pages(line: str, corpus: Corpus) -> set[str] | None:
     """The published pages every link on this line points at, or None if any is a
-    reference this repository cannot resolve — in which case it is not provably a
+    reference this repository cannot resolve, in which case it is not provably a
     duplicate of anything and must be left where it is.
 
     Compared at page granularity, not per anchor: a strip chip linking
@@ -393,7 +460,7 @@ def _pages(line: str, corpus: Corpus) -> set[str] | None:
 
 
 # The fourth shape, and the one that survives every rule above: a parenthetical of
-# bare section titles dropped into a sentence — "…used on a cluster (Allocations and
+# bare section titles dropped into a sentence: "…used on a cluster (Allocations and
 # Service Units FAQ, Running jobs on RCC clusters)." It is not a trailing line, so the
 # line-oriented rules never see it; it holds no links, so `_pages` cannot judge it; and
 # it names the very sections the strip lists three lines below.
@@ -422,26 +489,27 @@ def _norm_title(text: str) -> str:
     text = _MARKDOWN_LINK.sub(r"\1", text)
     text = re.sub(r"[`*_]+", "", text)
     text = re.sub(r"\s+", " ", text).strip().lower()
-    return text.strip(" .,;:!?—–-")
+    return text.strip(" .,;:!?" + _EM_DASH + _EN_DASH + "-")
 
 
 def _source_names(sources: list[dict], *, floor: int = 2) -> set[str]:
     """Every name the Sources strip is already showing a reader.
 
-    A chip reads `Doc title — Section heading`, and a model citing it in prose picks
-    one end or the other, so both halves count as the same reference.
+    A chip is `Chunk.label`, the page title and the section heading joined by a dash,
+    and a model citing it in prose picks one end or the other, so both halves count as
+    the same reference.
 
     `floor` is why this takes an argument. Single-word names are left out for the
     inline rule: `Storage` or `Python` is a title *and* an ordinary word, and
     "(Python)" after a package name is an aside, not a citation. A footer is a
-    different question — `Sources: Storage.` is a whole line whose entire content is
-    that one word — so the footer rules ask for `floor=1`, where an exact match
+    different question (`Sources: Storage.` is a whole line whose entire content is
+    that one word), so the footer rules ask for `floor=1`, where an exact match
     against a chip is proof rather than a guess.
     """
     names: set[str] = set()
     for item in sources:
         label = str(item.get("label", ""))
-        head, sep, tail = label.partition(" — ")
+        head, sep, tail = label.partition(f" {_EM_DASH} ")
         for candidate in (label, head, tail) if sep else (label,):
             name = _norm_title(candidate)
             if name and len(name.split()) >= floor:
@@ -450,7 +518,7 @@ def _source_names(sources: list[dict], *, floor: int = 2) -> set[str]:
 
 
 # A reference the reader cannot use: the index's own name for a section, printed as
-# prose. The loose shape is deliberate — anything that could be a path gets *offered*,
+# prose. The loose shape is deliberate: anything that could be a path gets *offered*,
 # and `resolve()` against the corpus is what decides. That way this cannot invent a rule
 # about file extensions that a second deployment's corpus breaks.
 _REFERENCE_TOKEN = re.compile(
@@ -460,7 +528,7 @@ _REFERENCE_TOKEN = re.compile(
 # Wrappers a model puts around one of those when it thinks it is citing. The last two
 # are not decoration: `【…】` and `{…}` both turned up in real answers, and a wrapper
 # missing from here is left behind empty, so the reader is shown `documentation 【】:`
-# instead of the identifier — a worse leak than the one being removed.
+# instead of the identifier, a worse leak than the one being removed.
 _WRAPPED = {"[": "]", "(": ")", "`": "`", "<": ">", "{": "}", "\u3010": "\u3011"}
 
 
@@ -469,11 +537,11 @@ def strip_bare_references(text: str, corpus: Corpus) -> str:
 
     `search_docs` hands the model strings like `web/about-rcc_our-team.txt#5` and the
     system prompt asks for them back inside `[Title](path)`, where `fix_links` turns
-    them into URLs. A model that instead writes the identifier as text —
+    them into URLs. A model that instead writes the identifier as text, as in
 
         Source: "Our Team" page on the RCC website [web/about-rcc_our-team.txt#5].
 
-    — has published this app's internal filing system to the reader. It is not a broken
+    has published this app's internal filing system to the reader. It is not a broken
     link, which is why nothing else here caught it: `unresolved()` is quiet because the
     id resolves perfectly, `strip_inline_citations` only reads *parenthesised* asides
     naming a section *title*, and `strip_source_footer` judges the shape of a footer
@@ -481,13 +549,13 @@ def strip_bare_references(text: str, corpus: Corpus) -> str:
     in the answer, where it reads as machine output leaking into prose.
 
     Only references that RESOLVE are removed, so ordinary text that merely looks like a
-    filename is left alone. Markdown link targets are skipped — `](path)` is the citation
-    the prompt asked for and the one thing here that must survive — as is anything inside
+    filename is left alone. Markdown link targets are skipped (`](path)` is the citation
+    the prompt asked for and the one thing here that must survive), as is anything inside
     code, where a filename is usually the reader's own file and not ours.
 
     **What models actually write, measured over the 662 recorded answers in
     `report/transcripts*.jsonl`: this pass fires on 10 of them, and every one is a
-    TRAILING BRACKETED ASIDE** — `…is the hard limit 【docs/storage/main.md#quotas】.` or
+    TRAILING BRACKETED ASIDE**: `…is the hard limit 【docs/storage/main.md#quotas】.` or
     the same in square brackets after a working link. `_with_wrapper` takes the brackets
     with the id and the sentence closes cleanly; all ten read correctly afterwards.
 
@@ -495,7 +563,7 @@ def strip_bare_references(text: str, corpus: Corpus) -> str:
     with no wrapper around it: `See docs/accounts.md#apply for the details` becomes `See
     for the details`, and `docs/x.md#y covers this` becomes `covers this`. Zero of 662
     answers do that, which is why removal is the right move and why this is recorded
-    rather than fixed — the cure would be to replace the id with `[Title](path)` and let
+    rather than fixed: the cure would be to replace the id with `[Title](path)` and let
     `fix_links` render it, which is more code, a new failure mode (a link the model did
     not ask for) and, on the evidence, a fix for nothing. If it ever shows up, that is
     the fix, and this paragraph is the measurement it should be re-taken against.
@@ -515,7 +583,7 @@ def strip_bare_references(text: str, corpus: Corpus) -> str:
             continue
         cleaned, removed = _clean_line(line, corpus)
         # A citation line whose only citation has just been taken out of it is a label
-        # with nothing under it — "Source: the RCC website ." — and keeping it would
+        # with nothing under it ("Source: the RCC website ."), and keeping it would
         # replace one leak with a sentence pointing at nothing. Dropped only when this
         # function is what emptied it; a `Sources:` line it never touched belongs to
         # `strip_source_footer`, which has its own rules for judging one.
@@ -546,7 +614,7 @@ def _clean_line(line: str, corpus: Corpus) -> tuple[str, bool]:
             continue
         if resolve(match.group(0), corpus) is None:
             continue
-        # `](path)` — the target half of a working citation, and the one thing here that
+        # `](path)`: the target half of a working citation, and the one thing here that
         # must survive untouched.
         if line[:start].endswith("]("):
             continue
@@ -558,8 +626,8 @@ def _clean_line(line: str, corpus: Corpus) -> tuple[str, bool]:
 
         opened, closed = group
         if line[closed : closed + 1] == "(":
-            # A link *label*. Strip the identifier out of it — `[FAQs (web/faqs.txt#1)]`
-            # should read `[FAQs]` — but never empty it, because a label with nothing in
+            # A link *label*. Strip the identifier out of it (`[FAQs (web/faqs.txt#1)]`
+            # should read `[FAQs]`), but never empty it, because a label with nothing in
             # it is a link the reader cannot see or click. When the label is *only* the
             # identifier there is nothing to keep, so the link is left as it stands and
             # `fix_links` gets to render it.
@@ -571,7 +639,7 @@ def _clean_line(line: str, corpus: Corpus) -> tuple[str, bool]:
 
         # A bracketed group that is not a link and contains an identifier: a citation
         # the model got wrong, whole. Removing only the identifier is what produced
-        # `[Python #Distributions]` out of `[Python (docs/…/python.md)#Distributions]` —
+        # `[Python #Distributions]` out of `[Python (docs/…/python.md)#Distributions]`:
         # the title kept, the link never made, the fragment stranded.
         cuts.append((opened, closed))
 
@@ -616,7 +684,7 @@ def _cut(line: str, start: int, end: int) -> str:
     were edits nobody asked for, in answers the reader was about to read.
     """
     before, after = line[:start], line[end:]
-    # A wrapper the cut has just emptied — `()`, `[]`, `{}`, `【】`.
+    # A wrapper the cut has just emptied: `()`, `[]`, `{}`, `【】`.
     if before and after and _WRAPPED.get(before[-1]) == after[:1]:
         before, after = before[:-1], after[1:]
     # Leading indentation is structure in markdown, so a hole at the start of a line
@@ -679,14 +747,14 @@ def _interior_footer(
     Everything above judges a *trailing* footer, and a model that carries on afterwards
     escapes all of it. Measured across 98 live turns, two answers ended with a
     `**Citations:**` block and then one more sentence, and one of them listed the same two
-    sections the Sources strip printed three lines below — the duplicate list this module
+    sections the Sources strip printed three lines below, the duplicate list this module
     exists to prevent, arriving in a position it could not see.
 
     Cutting inside an answer is more dangerous than cutting off its end, so the bar is the
     strongest evidence available rather than the shape rules: **every line of the block
     must carry a link, and every one of those links must resolve to a page the strip is
     already showing.** No proof, no cut. That is deliberately narrower than the trailing
-    rules — the other surviving case is a `**Citations**` heading over two prose sentences
+    rules: the other surviving case is a `**Citations**` heading over two prose sentences
     summarising what each source says, which is content, and it is left exactly where it
     is.
 
@@ -746,16 +814,16 @@ def strip_source_footer(
 
     Two shapes, deliberately judged by different evidence:
 
-    * **Labelled** — `Sources:`, `**References:**`, `## Citations`. The label is the
+    * **Labelled**: `Sources:`, `**References:**`, `## Citations`. The label is the
       model declaring what the block is, and what follows it has to read as a list of
-      references — or be, provably, names the strip is already showing. The label
+      references, or be, provably, names the strip is already showing. The label
       alone was evidence enough until `Citation: please reference the University of
       Chicago's Research Computing Center.` turned up, which is not a footer, it is
       the answer to "how do I acknowledge RCC in a paper".
-    * **Unlabelled** — a bare paragraph of nothing but links. This is what asking for
+    * **Unlabelled**: a bare paragraph of nothing but links. This is what asking for
       no "Sources" list actually produced: the label went and the links stayed, which
-      is the same duplication with no word to match on. Shape alone is too thin here —
-      an answer could legitimately end on a list of links — so this one comes off only
+      is the same duplication with no word to match on. Shape alone is too thin here
+      (an answer could legitimately end on a list of links), so this one comes off only
       when `sources` proves every link is a page the strip below already shows.
 
     Passing no `corpus`/`sources` leaves the unlabelled shape alone, since nothing can
@@ -773,7 +841,7 @@ def strip_source_footer(
         last -= 1
 
     # What the strip is showing, when the caller told us. A part of a footer that
-    # matches one of these is provably a duplicate, whatever its punctuation — which
+    # matches one of these is provably a duplicate, whatever its punctuation, which
     # is what recovers `Sources: Storage.`, a real footer the shape rules decline to
     # judge because one capitalised word and a full stop is also how a sentence looks.
     names = _source_names(sources or [], floor=1)
@@ -782,13 +850,13 @@ def strip_source_footer(
     payload = _footer_label(lines[last])
     if payload is not None:
         # The label is on the last line, so whatever sits after it is the whole
-        # footer and the decision is about that payload alone. An empty one — `##
-        # Sources` with nothing under it — is a label the model left dangling.
+        # footer and the decision is about that payload alone. An empty one (`##
+        # Sources` with nothing under it) is a label the model left dangling.
         if payload == "" or _is_citation_payload(payload, names):
             cut = last
     else:
         # Otherwise the list is underneath a label of its own. Only the last such
-        # label is considered — scanning further back to find a block that happens
+        # label is considered: scanning further back to find a block that happens
         # to look like citations is how a strip like this eats half an answer.
         for idx in range(last, -1, -1):
             found = _footer_label(lines[idx])
@@ -871,8 +939,8 @@ def strip_source_footer(
 # number in the strip below, small and dimmed, linked where the strip links.
 #
 # Streamlit's own `:small[]` and `:gray[]` directives rather than a span of HTML.
-# Rendering an answer with `unsafe_allow_html` would let anything the model emits —
-# or anything an uploaded file talked it into emitting — reach the page as markup,
+# Rendering an answer with `unsafe_allow_html` would let anything the model emits
+# (or anything an uploaded file talked it into emitting) reach the page as markup,
 # and escaping the answer first would break every code sample containing a `<`, which
 # in this corpus is most of them.
 _MARKER = ":small[:gray[[{number}]({url})]]"
@@ -941,7 +1009,7 @@ def _mark_line(line: str, numbers: dict[str, int]) -> str:
     plain = "".join(out)
 
     # Each citation attaches to the end of the sentence it sits in, which is where a
-    # reader looks for one — not mid-clause, where the model happened to put the link.
+    # reader looks for one, not mid-clause, where the model happened to put the link.
     # Sentences are found in the unlinked text, so a URL's own full stops cannot be
     # mistaken for one.
     plain_code = _spans(_CODE_SPAN, plain)
@@ -972,7 +1040,7 @@ def _mark_line(line: str, numbers: dict[str, int]) -> str:
 
 
 def _url_of(number: int, numbers: dict[str, int]) -> str:
-    """The longest URL recorded for a number — the one with its anchor still on."""
+    """The longest URL recorded for a number: the one with its anchor still on."""
     found = [url for url, value in numbers.items() if value == number]
     return max(found, key=len) if found else ""
 
@@ -986,13 +1054,13 @@ def _url_of(number: int, numbers: dict[str, int]) -> str:
 # free model felt on a Tuesday.
 #
 # So a sentence the model left unlinked is attributed from what the turn actually
-# read — but only when the turn read ONE section, and that restriction is the whole
+# read, but only when the turn read ONE section, and that restriction is the whole
 # of the design.
 #
 # With one section there is no wrong answer available: the answer was built from it
 # and nothing else, so a sentence that draws on the documentation draws on that. With
 # two, picking between them is a guess, and measured on the real corpus it is a
-# biased one — asked how to submit a batch job, the turn read a 422-character section
+# biased one: asked how to submit a batch job, the turn read a 422-character section
 # on submitting and a 4151-character section on script contents, and simple word
 # overlap handed almost every sentence to the longer one because a longer section
 # owns more words. That is a plausible wrong citation, which spends exactly the trust
@@ -1012,8 +1080,8 @@ _STOPWORDS = frozenset({
     "these", "those", "into", "onto", "over", "under", "before", "after", "here",
 })
 # How many distinctive words a sentence has to share with a section before it is
-# marked as resting on it. One is a coincidence — every answer about Slurm says
-# "sbatch" — and three is so strict that only a quotation clears it.
+# marked as resting on it. One is a coincidence (every answer about Slurm says
+# "sbatch"), and three is so strict that only a quotation clears it.
 _MIN_EVIDENCE = 2
 
 
@@ -1030,7 +1098,7 @@ def _distinctive(evidence: dict[str, str], sources: list[dict]) -> dict[int, set
     Sections read in the same turn are about the same question and share most of
     their vocabulary; what is left after the overlap is removed is the part that can
     tell them apart. With only one section read there is nothing to be told apart
-    from, and every word of it counts — there is no wrong answer to pick.
+    from, and every word of it counts: there is no wrong answer to pick.
     """
     # Keyed by the chunk id the strip carries, not by URL: two sections of one page
     # share a URL and are one entry, and their text is the same entry's evidence.
@@ -1109,7 +1177,7 @@ def mark_sources(
     **The model did not, and `evidence` says what was read.** Asked the same question
     twice, `nemotron-3.5-lightning` linked two sections on one run and none on the
     next, so an answer's citations cannot depend on that. A paragraph with no link of
-    its own is attributed to the read section whose distinctive words it uses — and
+    its own is attributed to the read section whose distinctive words it uses, and
     to nothing at all when that does not discriminate. See `_attribute`.
 
     Render-time only. The stored answer keeps its links, because that text goes back

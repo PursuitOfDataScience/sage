@@ -13,6 +13,7 @@ this once the guards have run. It reads, all optional except the first:
     guards.txt         one "name outcome" line per guard, outcome as GitHub reports it
     metrics.txt        tools/metrics.py --against output
     corpus.txt         tools/corpus_check.py output
+    baseline.json      what it moved in evals/corpus_baseline.json (its --changes file)
 
 and writes title.txt, message.txt (the commit message) and body.md into the same DIR.
 A guard is anything that has to pass for the refresh to merge itself, and the body says
@@ -33,7 +34,20 @@ GUARD_NAMES = {
     "pytest": "pytest -q",
     "assembly": "tools/assembly_check.py",
     "metrics": "tools/metrics.py --against (golden-set recall must not drop)",
-    "corpus_check": "tools/corpus_check.py",
+    "corpus_check": "tools/corpus_check.py --update",
+}
+#: The findings `evals/corpus_baseline.json` records, as a reader of the pull request
+#: needs them named. They are about the documents, so the refresh re-measures them
+#: rather than failing on them, and the pull request is where a person sees them.
+FINDINGS = {
+    "empty_documents": "Empty documents (nothing in them can be answered)",
+    "indexing_nothing": "Pages that were read and indexed nothing",
+    "same_page_twice":
+        "One page indexed twice (a wasted result slot; the fix is in the scrape)",
+    "shared_boilerplate":
+        "The same section on different pages (both kept: each cites its own page)",
+    "near_duplicates": "Near-duplicate sections",
+    "unfindable_by_title": "Pages their own title does not find",
 }
 OUTCOMES = {"success": "passed", "failure": "**FAILED**", "skipped": "skipped",
             "cancelled": "cancelled", "": "not run"}
@@ -89,6 +103,32 @@ def docs_changes(directory: str) -> dict[str, list[str]]:
     return changes
 
 
+def _finding(value) -> str:
+    if isinstance(value, list):
+        return ", ".join(f"`{part}`" for part in value)
+    return f"`{value}`"
+
+
+def moved(directory: str) -> tuple[dict, list[str]]:
+    """What the refresh re-measured, as it reads in the pull request."""
+    changes = _json(directory, "baseline.json")
+    lines = ["### What the documents moved", ""]
+    if not changes:
+        lines.append("Nothing recorded in `evals/corpus_baseline.json` moved.")
+        return changes, lines + [""]
+    lines += ["Findings about the documents rather than the code, so the refresh "
+              "re-measured them into `evals/corpus_baseline.json` instead of failing, and "
+              "CI holds the corpus to that file from now on. None of them held up the "
+              "merge; they are listed so that a page which went empty or stopped being "
+              "findable is seen.", ""]
+    for key, row in changes.items():
+        lines.append(f"**{FINDINGS.get(key, key)}**")
+        lines += [f"- new: {_finding(item)}" for item in row.get("appeared", [])]
+        lines += [f"- gone: {_finding(item)}" for item in row.get("went", [])]
+        lines.append("")
+    return changes, lines
+
+
 def build(directory: str, stamp_path: str, day: str) -> tuple[str, str, str]:
     """(title, commit message, pull request body)."""
     run = _json(directory, "web-summary.json")
@@ -117,7 +157,12 @@ def build(directory: str, stamp_path: str, day: str) -> tuple[str, str, str]:
                   f"removed, {len(failures)} failed; "
                   f"{len(run.get('available_not_included', []))} sitemap pages available, "
                   "not included.")
-    message = "\n".join([title, "", range_line + ".", docs_line + ".", pages_line, "",
+    changes, moved_lines = moved(directory)
+    remeasured = (["Re-measured into evals/corpus_baseline.json: " + "; ".join(
+        f"{key} +{len(row.get('appeared', []))} -{len(row.get('went', []))}"
+        for key, row in changes.items()) + "."] if changes else [])
+    message = "\n".join([title, "", range_line + ".", docs_line + ".", pages_line,
+                         *remeasured, "",
                          "Opened by .github/workflows/refresh-corpus.yml."])
 
     if failed:
@@ -139,6 +184,7 @@ def build(directory: str, stamp_path: str, day: str) -> tuple[str, str, str]:
     body += [f"| `{GUARD_NAMES.get(name, name)}` | {OUTCOMES.get(outcome, outcome)} |"
              for name, outcome in checks] or ["| (none recorded) | |"]
     body.append("")
+    body += moved_lines
 
     body += ["### Website pages", ""]
 

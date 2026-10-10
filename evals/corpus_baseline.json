@@ -1,0 +1,32 @@
+{
+ "_about": "What tests/test_corpus_health.py holds the bundled corpus to. Measured, not chosen: `python tools/corpus_check.py --update` writes it, the weekly corpus refresh runs that before its guards, and on any other change a difference here is the code.",
+ "empty_documents": [
+  "docs/data_transfer/cloud/rclone.md",
+  "web/takecourse.txt"
+ ],
+ "indexing_nothing": [
+  "docs/data_transfer/cloud/rclone.md"
+ ],
+ "same_page_twice": [
+  [
+   "web/midway2.txt#1",
+   "web/support-and-services_midway2.txt#1"
+  ],
+  [
+   "web/midway2.txt#2",
+   "web/support-and-services_midway2.txt#2"
+  ]
+ ],
+ "shared_boilerplate": [
+  [
+   "docs/data_sharing/databases/bfi.md#method-2-globus",
+   "docs/data_sharing/databases/booth.md#method-2-globus"
+  ],
+  [
+   "docs/data_sharing/databases/bfi.md#method-3-ssh-scp-sftp-etc",
+   "docs/data_sharing/databases/booth.md#method-3-ssh-scp-sftp-etc"
+  ]
+ ],
+ "near_duplicates": [],
+ "unfindable_by_title": []
+}

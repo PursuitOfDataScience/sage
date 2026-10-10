@@ -3,10 +3,18 @@
 
     python tools/corpus_check.py
     python tools/corpus_check.py --save report/corpus.json
+    python tools/corpus_check.py --update [--changes moved.json]
 
 The measuring lives in `evals/corpus_health.py` so `pytest` can gate the parts that
 should never regress: an id that stops resolving, a chunk that loses its URL, a new
 empty document. This file is the report.
+
+`--update` rewrites `evals/corpus_baseline.json`, the findings that belong to the
+documents rather than the code (which pages are empty, which sections repeat, which
+pages their own title cannot find), and prints what moved. The weekly corpus refresh
+runs it before its guards, so a corpus that changed upstream is held to what it now
+says. Anywhere else, run it only when a change to the code moved one of them on
+purpose, and say in the commit message which and why.
 """
 
 from __future__ import annotations
@@ -120,10 +128,41 @@ def report(measured: dict) -> None:
     print("\nfreshness  " + (json.dumps(snapshot) if snapshot else "no snapshot recorded"))
 
 
+def update(measured: dict, changes_path: str | None) -> None:
+    """Rewrite the baseline from this run, and say what moved."""
+    before = (
+        corpus_health.load_baseline()
+        if os.path.exists(corpus_health.BASELINE)
+        else {}
+    )
+    after = corpus_health.baseline(measured)
+    changes = corpus_health.moved(before, after)
+    corpus_health.save_baseline(after)
+    where = os.path.relpath(corpus_health.BASELINE, ROOT)
+    if not changes:
+        print(f"\nbaseline   {where}: nothing moved")
+    else:
+        print(f"\nbaseline   {where} rewritten; {len(changes)} finding(s) moved")
+        for key, row in changes.items():
+            print(f"   {key}: {len(row['appeared'])} appeared, {len(row['went'])} went")
+            for item in row["appeared"]:
+                print(f"      + {item}")
+            for item in row["went"]:
+                print(f"      - {item}")
+    if changes_path:
+        with open(changes_path, "w", encoding="utf-8") as handle:
+            json.dump(changes, handle, indent=1)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--save", help="write this run's numbers here")
+    parser.add_argument("--update", action="store_true",
+                        help="rewrite evals/corpus_baseline.json from this run")
+    parser.add_argument("--changes", help="with --update, write what moved here as JSON")
     parsed = parser.parse_args()
+    if parsed.changes and not parsed.update:
+        parser.error("--changes needs --update")
 
     built = corpus_mod.build()
     if not built.chunks:
@@ -132,6 +171,8 @@ def main() -> int:
     measured = corpus_health.measure(built, retrieval.build(built))
     report(measured)
 
+    if parsed.update:
+        update(measured, parsed.changes)
     if parsed.save:
         with open(parsed.save, "w", encoding="utf-8") as handle:
             json.dump(measured, handle, indent=1)

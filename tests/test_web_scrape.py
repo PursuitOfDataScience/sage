@@ -738,3 +738,26 @@ class TestThePullRequest:
         texts = report.build(str(tmp_path), stamp, "d")
         assert all(em not in text for text in texts)
         assert "empty documents (1): topics" in texts[2] and "Step 1, Go" in texts[2]
+
+    def test_what_the_documents_moved_is_listed_and_does_not_hold_the_merge(self, tmp_path):
+        stamp = self.write(tmp_path, "corpus_check success\nruff success\npytest success\n")
+        (tmp_path / "baseline.json").write_text(json.dumps({
+            "shared_boilerplate": {"appeared": [["docs/a.md#x", "docs/b.md#x"]],
+                                   "went": []},
+            "unfindable_by_title": {"appeared": ["docs/tutorials/sde3/software.md"],
+                                    "went": ["docs/old.md"]},
+        }))
+        _title, message, body = report.build(str(tmp_path), stamp, "2026-10-10")
+        assert "**Merging**" in body
+        assert "### What the documents moved" in body
+        assert "- new: `docs/a.md#x`, `docs/b.md#x`" in body
+        assert "- new: `docs/tutorials/sde3/software.md`" in body
+        assert "- gone: `docs/old.md`" in body
+        assert ("Re-measured into evals/corpus_baseline.json: shared_boilerplate +1 -0; "
+                "unfindable_by_title +1 -1.") in message
+
+    def test_a_refresh_that_moved_nothing_says_so(self, tmp_path):
+        stamp = self.write(tmp_path, "ruff success\n")
+        _title, message, body = report.build(str(tmp_path), stamp, "2026-10-10")
+        assert "Nothing recorded in `evals/corpus_baseline.json` moved." in body
+        assert "Re-measured" not in message

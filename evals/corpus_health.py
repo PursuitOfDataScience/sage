@@ -2,18 +2,19 @@
 
 The app's ceiling is its documents. No prompt, model or ranking change can answer a
 question the corpus does not contain, so a benchmark that measures the app without
-measuring the corpus attributes the corpus's limits to the app — and the corpus is the
+measuring the corpus attributes the corpus's limits to the app, and the corpus is the
 cheaper thing to fix.
 
 Reachability is reported with its own ceiling attached, and no percentage is offered when
 the ceiling is below the chunk count. An earlier version of this reported "20.6% of
-chunks reachable" from 50 questions at six results each — 300 slots for 572 chunks —
+chunks reachable" from 50 questions at six results each (300 slots for 572 chunks),
 which is a statement about the question set that reads as a statement about the index.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 
@@ -58,7 +59,7 @@ def sources(corpus) -> dict:
 
 
 def empty_documents() -> list[dict]:
-    """Files on disk with nothing in them — a topic the app cannot answer at all.
+    """Files on disk with nothing in them: a topic the app cannot answer at all.
 
     Walked from the profile's own source list, so the paths are the ones the corpus was
     built from, environment overrides included.
@@ -90,12 +91,12 @@ def indexing_nothing(corpus) -> list[str]:
 
     `empty_documents` asks how big a file is; this asks what came out of it, which is the
     question that matters and the one that survives a change to the reader. A 5 KB page
-    that indexes to nothing — a reader that stops recognising a heading style, a section
-    below `MIN_CHUNK_CHARS` after normalisation — is caught only here, and `self_reachability`
+    that indexes to nothing (a reader that stops recognising a heading style, a section
+    below `MIN_CHUNK_CHARS` after normalisation) is caught only here, and `self_reachability`
     cannot see it either, because a page with no chunks never enters the list to check.
 
     Read off the corpus rather than by walking the disk, which is what makes it exact: a
-    page excluded on purpose (`exclude_files`, `exclude_hosts` — the publication dumps and
+    page excluded on purpose (`exclude_files`, `exclude_hosts`: the publication dumps and
     the radiology scrape) never becomes a Document at all, while a page that was read and
     yielded nothing becomes one with no chunks. A first attempt walked the tree and
     reported all twelve deliberate exclusions as problems.
@@ -109,7 +110,7 @@ def duplicates(corpus) -> dict:
 
     Two costs, both already paid once here. A duplicate takes one of the six result slots
     the model is handed, and it arrives in the Sources strip as the same page listed
-    twice — which is what "Show each destination once" and "Stop citing the same section
+    twice, which is what "Show each destination once" and "Stop citing the same section
     twice" were both about. The User Guide and the scraped website overlap by
     construction, so cross-source pairs are expected; the count is what matters.
     """
@@ -145,8 +146,8 @@ def duplicates(corpus) -> dict:
                 )
                 break
     # Two very different things, and counting them together makes the number unreadable.
-    # Identical text under ONE title is a page indexed twice — `web/midway2.txt` and
-    # `web/support-and-services_midway2.txt` are the same RCC page at two URLs — and it
+    # Identical text under ONE title is a page indexed twice (`web/midway2.txt` and
+    # `web/support-and-services_midway2.txt` were the same RCC page at two URLs), and it
     # wastes a result slot. Identical text under DIFFERENT titles is shared boilerplate:
     # `bfi.md` and `booth.md` document two databases with the same Globus instructions,
     # and each must keep its own citation. Deduplicating the index would have answered a
@@ -189,13 +190,13 @@ def self_reachability(index, corpus) -> dict:
 
     The honest version of the reachability question, and it took two tries. Asking the 77
     labelled questions and reporting "160 of 572 chunks surfaced" says nothing about the
-    index — 77 questions at six results is a ceiling of 462 — so that number stays
+    index (77 questions at six results is a ceiling of 462), so that number stays
     unmeasurable by construction.
 
     The obvious next attempt, one query per *section*, measured the wrong thing too: it
     reported 72 sections unreachable, and they were sections like `sbatch.md#batch-jobs`
     losing to two siblings of their own page. That is `MAX_PER_PAGE` doing its job, not
-    dead weight — the page is retrieved and `read_doc` reaches the section by anchor. A
+    dead weight: the page is retrieved and `read_doc` reaches the section by anchor. A
     metric that moves when the cap moves is a statement about the cap.
 
     Page granularity is unaffected by it: the cap allows two sections of any page and this
@@ -210,7 +211,7 @@ def self_reachability(index, corpus) -> dict:
     for page, title in titles.items():
         if not title.strip():
             # The same shape as the branch below, because a list of two shapes is one
-            # `row["page"]` away from a crash — and that is exactly what `scorecard.py`
+            # `row["page"]` away from a crash, and that is exactly what `scorecard.py`
             # does with it: an untitled page would have taken the whole card down with
             # `TypeError: string indices must be integers` rather than printing a row.
             unreachable.append(_miss(page, title, [], None))
@@ -245,8 +246,8 @@ def _rank(index, title: str, page: str) -> int | None:
 def _miss(page: str, title: str, results: list, rank: int | None) -> dict:
     """One unfindable page, with enough attached to say *why* without a second run.
 
-    `page` and `title` are what they always were — `tools/scorecard.py` and
-    `tools/corpus_check.py` both read them and neither may be edited from here — and the
+    `page` and `title` are what they always were (`tools/scorecard.py` and
+    `tools/corpus_check.py` both read them and neither may be edited from here), and the
     three fields after them are the diagnosis.
 
     This is the part that made the number unactionable. "7 are not findable, incl. one
@@ -283,7 +284,7 @@ def topic_coverage(index) -> list[dict]:
 
     `identity.topics` is what `search_docs` tells the model it covers. A topic that comes
     back caveated is a promise the app breaks on the one question a reader most expects
-    it to handle — though note that a one-word query is a hard case for an unnormalised
+    it to handle, though note that a one-word query is a hard case for an unnormalised
     score, which is itself worth knowing.
     """
     names = [
@@ -333,12 +334,12 @@ def malformed_urls(corpus) -> list[dict]:
 
     "Has a URL" was the only thing asked, and a citation is the one string in this app
     that becomes an `href`. A URL with a space in it, two fragment markers, a control
-    character or no scheme is a link that lands nowhere — and unlike a wrong *page*,
+    character or no scheme is a link that lands nowhere, and unlike a wrong *page*,
     nothing downstream notices: `tools/anchor_check.py` validates against the live site
     but is network-bound and out of the suite.
 
     Having *no* URL is `chunks_without_url` above, and this used to report it too, as "no
-    http scheme". The two are printed side by side, so every finding was doubled — and
+    http scheme". The two are printed side by side, so every finding was doubled, and
     worse than doubled on a corpus where the empty URL is correct. `links = "none"` is a
     supported scheme and the default one, for a corpus with nowhere to send the reader; a
     deployment using it saw every chunk it owns listed as an unusable citation URL, which
@@ -371,14 +372,14 @@ def unregistered_names(profile, tool_names=None) -> list[dict]:
     anybody would notice. A bad `links` scheme or `retrieval.engine` raises at boot with the
     registry's own list of valid names, which is the right behaviour. A bad `reader` is
     deliberate the other way: `corpus.build` logs it and skips that source, so a
-    multi-source deployment keeps working — and a single-source one boots looking healthy
+    multi-source deployment keeps working, and a single-source one boots looking healthy
     and answers every question with "the documentation does not appear to cover it", which
     is this app's worst state.
 
     So the names are checked directly, before anything is built, where a typo is one line
     with the valid names next to it rather than an empty corpus.
     """
-    # `sage.corpus.readers` the *name* is the registry, not the module — the package
+    # `sage.corpus.readers` the *name* is the registry, not the module: the package
     # rebinds it. The URL schemes keep theirs inside the module.
     from sage.corpus import readers as reader_registry
     from sage.corpus.urls import schemes as url_registry
@@ -419,11 +420,11 @@ def unrendered_placeholders(profile) -> list[dict]:
     """`{placeholder}` left in the rendered system prompt, naming a real profile field.
 
     `prompts.render` substitutes a fixed list of six names and leaves anything else alone
-    on purpose — a prompt is prose a non-programmer edits, and a stray brace in
+    on purpose: a prompt is prose a non-programmer edits, and a stray brace in
     `${SLURM_JOB_ID}` must read as a brace rather than raise on the first turn. The cost of
     that choice is silent: six `Identity` fields are never substituted, so a profile author
-    writing `{corpus_name}` — a documented field, and a reasonable thing to want in a
-    prompt — sends a literal `{corpus_name}` to the model on every turn with nothing saying
+    writing `{{corpus_name}}` (a documented field, and a reasonable thing to want in a
+    prompt) sends a literal `{corpus_name}` to the model on every turn with nothing saying
     so.
 
     Both shipped prompts are clean. This is for the second deployment, which is the one
@@ -460,3 +461,75 @@ def measure(corpus, index) -> dict:
         "malformed_urls": malformed_urls(corpus),
         "freshness": config.snapshot(),
     }
+
+
+# --- what the documents decide ----------------------------------------------------
+
+#: Where `baseline()` is kept: the findings above that belong to the documents rather
+#: than to the code, as last measured on the corpus this repository bundles.
+BASELINE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "corpus_baseline.json")
+
+_ABOUT = (
+    "What tests/test_corpus_health.py holds the bundled corpus to. Measured, not chosen: "
+    "`python tools/corpus_check.py --update` writes it, the weekly corpus refresh runs "
+    "that before its guards, and on any other change a difference here is the code."
+)
+
+
+def baseline(measured: dict) -> dict[str, list]:
+    """The parts of a measurement that move when the documents move, and only those.
+
+    They were constants in the test file: `KNOWN_EMPTY`, `MAXIMUM_SHARED_BOILERPLATE = 2`,
+    and an empty list of pages their own title cannot find. Each was right on the day it
+    was measured, and the 2026-10-10 refresh broke three of them by doing its job. The
+    User Guide had added an SDE2 tutorial that repeats three sections of the SDE3 one,
+    and two pages with one-word titles fell to eighth behind it. Nothing in the code had
+    changed and nothing in the code could have prevented it, so the refresh stopped and
+    waited for a person to edit numbers in a test.
+
+    Kept as data, the refresh measures them on the corpus it is about to land and commits
+    them with it, and its pull request says what moved. CI keeps the meaning they had for
+    every other change: there the corpus is fixed, so a finding that moves is the code
+    moving it, and the test says so.
+    """
+    duplicated = measured["duplicates"]
+    return {
+        "empty_documents": sorted(
+            f"{row['source']}/{row['path']}" for row in measured["empty_documents"]
+        ),
+        "indexing_nothing": sorted(measured["indexing_nothing"]),
+        "same_page_twice": sorted(sorted(group) for group in duplicated["same_page_twice"]),
+        "shared_boilerplate": sorted(
+            sorted(group) for group in duplicated["shared_boilerplate"]
+        ),
+        "near_duplicates": sorted(
+            sorted((row["a"], row["b"])) for row in duplicated["near"]
+        ),
+        "unfindable_by_title": sorted(
+            row["page"] for row in measured["self_reachability"]["unreachable"]
+        ),
+    }
+
+
+def load_baseline(path: str = BASELINE) -> dict[str, list]:
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    return {key: value for key, value in data.items() if not key.startswith("_")}
+
+
+def save_baseline(values: dict[str, list], path: str = BASELINE) -> None:
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump({"_about": _ABOUT, **values}, handle, indent=1)
+        handle.write("\n")
+
+
+def moved(before: dict[str, list], after: dict[str, list]) -> dict[str, dict[str, list]]:
+    """Per finding, what appeared and what went, for the findings that changed at all."""
+    out: dict[str, dict[str, list]] = {}
+    for key in sorted(set(before) | set(after)):
+        old, new = before.get(key, []), after.get(key, [])
+        appeared = [item for item in new if item not in old]
+        went = [item for item in old if item not in new]
+        if appeared or went:
+            out[key] = {"appeared": appeared, "went": went}
+    return out

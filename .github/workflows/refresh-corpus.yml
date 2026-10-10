@@ -10,12 +10,29 @@
 #   anything else          the pull request stays open with the label
 #                          corpus-refresh-needs-review, and the run fails
 #
+# What the documents decide is re-measured, not guarded. Which pages are empty, which
+# sections repeat and which pages their own title cannot find are findings about the
+# documents, and tests/test_corpus_health.py holds them to evals/corpus_baseline.json.
+# An upstream edit moves them by design: the 2026-10-10 refresh stopped on three of
+# them, for an SDE2 tutorial that copies the SDE3 one, while they were still constants
+# in the test. So `tools/corpus_check.py --update` rewrites that file on the refreshed
+# corpus before any guard runs, it is committed with the refresh, and the pull request
+# lists what moved. Everything else still has to pass.
+#
+# A refresh left for review tries again by itself. When CI passes on main while a pull
+# request with the label is open, this runs again on the new main, so the commit that
+# fixes whatever stopped it is what lands it. Any run that opens a pull request closes
+# the older refresh pull requests it replaces, since it carries all they did and is
+# fresher, unless someone has pushed to one by hand.
+#
 # The guards are the checks CI would make on this change, run here because CI cannot:
 # a push or pull request made with GITHUB_TOKEN starts no other workflow (only
 # workflow_dispatch and repository_dispatch are exempt). So CI never runs on the bot's
 # pull request or on its merge, Deploy (which hangs off CI) never fires on its own, and
-# this dispatches Deploy itself. A personal access token would change that; whether to
-# use one is the owner's decision, not this file's.
+# this dispatches Deploy itself. GitHub does list a CI run on the bot's pull request, as
+# "action required": it is waiting for an approval nothing here needs. A personal
+# access token would change all of that; whether to use one is the owner's decision,
+# not this file's.
 #
 # Opening the pull request needs Settings > Actions > General > "Allow GitHub Actions to
 # create and approve pull requests". Without it `gh pr create` fails with "GitHub Actions
@@ -37,6 +54,12 @@ on:
     # runs go to whoever last edited this cron line.
     - cron: '17 13 * * 6'
   workflow_dispatch:
+  # The retry. Every CI run on main ends here, and the `due` job decides in seconds
+  # whether a refresh is waiting on it; on most runs none is, and nothing else happens.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
 
 concurrency:
   group: refresh-corpus
@@ -53,16 +76,49 @@ defaults:
     # Named explicitly for `-eo pipefail`, so `tool | tee log` fails when the tool does.
     shell: bash
 
+env:
+  GH_TOKEN: ${{ github.token }}
+  LABEL: corpus-refresh-needs-review
+  BOT_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+
 jobs:
+  due:
+    name: Is a refresh due?
+    runs-on: ubuntu-latest
+    # A red CI on main is not a fix for anything, so it does not count as one.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != "workflow_run" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          waiting=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --label "$LABEL" \
+                      --json number --jq length)
+          if [ "$waiting" -gt 0 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "CI passed on main with $waiting refresh pull request(s) waiting for review, so the refresh runs again on it." \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No refresh is waiting for review." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
   refresh:
     name: Refresh docs/ and web/
+    needs: due
+    if: needs.due.outputs.run == 'true'
     runs-on: ubuntu-latest
     # A full fetch of the list takes about ten minutes at the sites' crawl delay; an
     # ordinary week, where only the pages without a sitemap date are due, about two.
     timeout-minutes: 30
-    env:
-      GH_TOKEN: ${{ github.token }}
-      LABEL: corpus-refresh-needs-review
     steps:
       - uses: actions/checkout@v4
         with:
@@ -121,9 +177,19 @@ jobs:
 
       # The guards. Each runs whether or not the one before it passed, so the pull
       # request can say which failed; any one failing still fails this run.
+      #
+      # This one first, because it is also what rewrites evals/corpus_baseline.json,
+      # and the tests read that file: see the top of this file.
+      - name: What the corpus can and cannot answer
+        id: corpus
+        if: steps.changes.outputs.changed == 'true'
+        run: >-
+          python tools/corpus_check.py --update --changes /tmp/refresh/baseline.json
+          | tee /tmp/refresh/corpus.txt
+
       - name: Lint
         id: ruff
-        if: steps.changes.outputs.changed == 'true'
+        if: ${{ !cancelled() && steps.changes.outputs.changed == 'true' }}
         run: ruff check .
 
       - name: Test
@@ -143,26 +209,21 @@ jobs:
           python tools/metrics.py --against /tmp/before.json --fail-on-recall-drop
           | tee /tmp/refresh/metrics.txt
 
-      - name: What the corpus can and cannot answer
-        id: corpus
-        if: ${{ !cancelled() && steps.changes.outputs.changed == 'true' }}
-        run: python tools/corpus_check.py | tee /tmp/refresh/corpus.txt
-
       - name: Commit to a branch and open the pull request
         id: pr
         if: ${{ !cancelled() && steps.changes.outputs.changed == 'true' }}
         env:
           OUTCOMES: |
+            corpus_check ${{ steps.corpus.outcome }}
             ruff ${{ steps.ruff.outcome }}
             pytest ${{ steps.pytest.outcome }}
             assembly ${{ steps.assembly.outcome }}
             metrics ${{ steps.metrics.outcome }}
-            corpus_check ${{ steps.corpus.outcome }}
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "$BOT_EMAIL"
           printf '%s' "$OUTCOMES" > /tmp/refresh/guards.txt
-          git add -A -- docs web docs_snapshot.json web_manifest.json
+          git add -A -- docs web docs_snapshot.json web_manifest.json evals/corpus_baseline.json
           git diff --cached --name-status --no-renames -- docs > /tmp/refresh/docs-changes.txt
 
           stamp() { python -c "import json, sys; print(json.load(open(sys.argv[1])).get('user_guide_commit') or '')" "$1"; }
@@ -194,6 +255,29 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
           cat /tmp/refresh/body.md >> "$GITHUB_STEP_SUMMARY"
+
+          # The older refresh pull requests this one replaces. Tidying rather than a
+          # guard, so nothing here fails the run, and a pull request someone has pushed
+          # to is somebody's work in progress: it is named and left alone.
+          number=${url##*/}
+          for older in $(gh pr list --state open --json number,headRefName \
+                           --jq '.[] | select(.headRefName | startswith("corpus-refresh/")) | .number'); do
+            [ "$older" = "$number" ] && continue
+            # Read first and counted after: a read that failed must not look like a pull
+            # request nobody else has touched.
+            if ! emails=$(gh pr view "$older" --json commits --jq '.commits[].authors[].email'); then
+              echo "::warning::could not read the commits of #$older, so it was left open"
+              continue
+            fi
+            others=$(printf '%s\n' "$emails" | grep -cvxF -e "$BOT_EMAIL" -e '' || true)
+            if [ "$others" = "0" ]; then
+              gh pr close "$older" --delete-branch \
+                --comment "Replaced by #$number, which carries this refresh and everything upstream since." \
+                || echo "::warning::could not close #$older"
+            else
+              echo "::notice title=Refresh pull request left open::#$older has commits from someone other than this workflow, so it was not closed. #$number replaces its corpus."
+            fi
+          done
 
       - name: Merge, then deploy
         if: ${{ success() && steps.changes.outputs.changed == 'true' }}
@@ -231,6 +315,6 @@ jobs:
           gh label create "$LABEL" --color D93F0B --force \
             --description "A weekly corpus refresh that a guard stopped"
           gh pr edit "$URL" --add-label "$LABEL"
-          gh pr comment "$URL" --body "Not merged: a guard failed, or main moved while the refresh ran. The run: $RUN"
+          gh pr comment "$URL" --body "Not merged: a guard failed, or main moved while the refresh ran. It runs again by itself the next time CI passes on main. The run: $RUN"
           echo "::error title=Corpus refresh needs review::$URL is open with the label $LABEL."
           exit 1
