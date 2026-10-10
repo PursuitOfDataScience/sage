@@ -3,7 +3,7 @@ Spaceranger is a set of analysis pipelines that process Visium Spatial Gene Expr
 [Spaceranger Manual](https://support.10xgenomics.com/spatial-gene-expression/software/pipelines/latest/what-is-space-ranger)
 
 ### Installation
-The spaceranger comes as a binary that doesnot require compiling. Use Firefox in Thinlic to download the [software](https://www.10xgenomics.com/support/software/space-ranger/downloads). You may create a folder called 'software' in your home or project directory and extract it to that location. Change pi-cnetid with the the group name. if using for personal purpose, you can use scratch storage available at `$SCRATCH/$USER` folder.
+The spaceranger comes as a binary that does not require compiling. Use Firefox in ThinLinc to download the [software](https://www.10xgenomics.com/support/software/space-ranger/downloads). You may create a folder called 'software' in your home or project directory and extract it to that location. Change pi-cnetid with the the group name. if using for personal purpose, you can use scratch storage available at `$SCRATCH/$USER` folder.
 Change the extraction location to `/project/pi-cnetid/software`, or somewhere else and use the following command:
 
 ```bash
@@ -21,7 +21,7 @@ export PATH=/project/pi-cnetid/software/spaceranger-3.0.0:$PATH
 ```
 
 **Save in .bashrc:**
-Command above will change the $PATH temperorly only for that bash shell. You can permanently update the PATH by appending the following command to the .bashrc file:
+Command above will change the $PATH temporarily only for that bash shell. You can permanently update the PATH by appending the following command to the .bashrc file:
 
 ```bash
 echo 'export PATH=/project/pi-cnetid/software/spaceranger-3.0.0:$PATH' >> ~/.bashrc

@@ -108,7 +108,7 @@ See [Microsoft VS Code Python documentation](https://code.visualstudio.com/docs/
 
 ### 3.2  Jupyter Notebooks
 
-The kernel‑picker lists only interpreters VS Code already knows about. You **can’t** type an arbitrary path. Ensure the desired venv/Conda env is discoverable according to the [table above](#3choosing-an-interpreter-and-how-vscode-finds-them) *before* opening the notebook, then choose it in the top‑right **Select Kernel** dropdown.
+The kernel‑picker lists only interpreters VS Code already knows about. You **can’t** type an arbitrary path. Ensure the desired venv/Conda env is discoverable according to the [table above](#3-choosing-an-interpreter-and-how-vs-code-finds-them) *before* opening the notebook, then choose it in the top‑right **Select Kernel** dropdown.
 
 ---
 

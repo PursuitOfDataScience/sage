@@ -1,7 +1,7 @@
 # Syncing Globus with UChicago Cloud Storage
 
 !!!note 
-     The follwing content is outdated. Please check with RCC helpdesk for more information. 
+     The following content is outdated. Please check with RCC helpdesk for more information. 
 
 **Globus** is a robust file-sharing and transfer service. This page explains how to sync Globus with University of Chicago cloud storage so you can use Globus features, like <a href='./globus/transfer-files/#Schedule-a-File-Transfer'>scheduled file transfers</a>, with files stored in your UChicago **Box**, **Google Drive**, and **OneDrive** accounts.
 

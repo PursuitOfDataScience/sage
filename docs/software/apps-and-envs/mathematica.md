@@ -1,6 +1,6 @@
 # Mathematica
 
-Mathematica is powerful and intuitive computation software.  It is capable of geometric, audio, graphical, and raw data analysis.  The embedded Wolfram Language is an incredibly powerful scripting tool for doing sybolic math analysis and granting command line style access to the plethora of algorithms within the software.  Mathematica has a GUI and CLI that can be used.
+Mathematica is powerful and intuitive computation software.  It is capable of geometric, audio, graphical, and raw data analysis.  The embedded Wolfram Language is an incredibly powerful scripting tool for doing symbolic math analysis and granting command line style access to the plethora of algorithms within the software.  Mathematica has a GUI and CLI that can be used.
 
 ## Getting Started
 
@@ -54,7 +54,7 @@ More information about using the command line interface to Mathematica is availa
 
 ## Running Mathematica Jobs with SLURM
 
-To submit Mathematica jobs to Midway’s resource scheduler, SLURM, the Mathematica commands to be executed must be containined in a single .m script.  The .m script will then be passed to the `math` command in an sbatch file.  For example:
+To submit Mathematica jobs to Midway’s resource scheduler, SLURM, the Mathematica commands to be executed must be contained in a single .m script.  The .m script will then be passed to the `math` command in an sbatch file.  For example:
 
 `math-simple.m` is a basic Mathematica script that computes the sum of A and B:
 
@@ -65,7 +65,7 @@ Answer = A + B
 Quit[];
 ```
 
-This script can be submited to SLURM with `math-simple.sbatch` which will send the job to a compute node:
+This script can be submitted to SLURM with `math-simple.sbatch` which will send the job to a compute node:
 
 ```bash
 #!/bin/bash

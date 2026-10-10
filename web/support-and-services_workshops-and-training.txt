@@ -3,15 +3,57 @@ Title: Workshops and Training | Research Computing Center
 ================================================================================
 The Research Computing Center (RCC) conducts interactive workshops on a variety of topics relevant to research computing. Past workshop topics have included introductory, intermediate, and advanced seminars on programming languages; data management tools and best practices; and sessions focused on using Midway and other RCC resources. Unless otherwise noted, all of our workshops are in-person due to their hands-on nature.
 In addition to workshops led by the RCC staff, the RCC routinely invites industry experts and hardware and software vendors to teach courses focused on specific systems.
-2025-2026 RCC Workshop Series
+2026 RCC Workshop Series
 Fall Workshops
-Introduction to RCC Resources & Services​
-Date: Tuesday, October 14
+Claude Code in Practice
+Presenter: Youzhi Yu
 Time and Location: 2:00 - 4:00 PM, Zar Room
+Date: Wed, Oct 21, 2026
+Containers for HPC: Pre-built Scientific Software with E4S
+Presenter: Parmanand Sinha
+Time and Location: 3:00 - 5:00 PM, Zar Room
+Date: Tuesday, October 27, 2026
+Research Visualization with Claude: Code, Critique, and Iterate
+Presenter: Ashwini Naik
+Date: Thu, Nov 12, 2026
+Building AI Research Agents with Claude
+Presenter: Moshen Zand
+Date: Tue, November 17, 2026
+Introduction to Quantum Computing
+Presenter: Akhil Francis
+Date: Tue, Dec 1, 2026
+Using Machine-Learning Interatomic Potentials with LAMMPS
+Presenter: Trung Nguyen
+Date: Wed, Dec 2, 2026
+Geocoding at Scale on RCC Clusters
+Presenter: Hamid Dashti
+Date: Thu, Dec 3, 2026
+Winter Workshops
+Introduction to RCC Resources & Services
 Presenter: Bailey Howell
-Distributed data processing on RCC Midway​
-Date: Thursday, October 23
+Time and Location: 2:00 - 4:00 PM, Zar Room
+Date: Monday, February 16
+Running Machine Learning Workloads on HPC Using Containers
+Date: Tuesday, February 17
+Using Git and GitHub for Version Control and Collaboration
 Time and Location: 1:00 - 3:00 PM, Zar Room
+Date: Thursday, February 19
+From Raw Data to ML-Ready: Dataset Curation with Pandas
+Presenter: Debasmita Samaddar
+Date: Tuesday, February 24
+Human-in-the-Loop Foundation Models for Biomedical Visualization
+Presenters: Ashwini Naik
+Date: Thursday, February 26
+Fine-Tuning Large Language Models: From Theory to Practice
+Presenters: Youzhi Yu
+Date: Tuesday, March 3
+Understanding Performance Bottlenecks and Reliability Issues in Python Code
+Presenters: Aleksandr Lykhin
+Date: Thursday, March 5
+2025 RCC Workshop Series
+Date: Tuesday, October 14
+Distributed data processing on RCC Midway
+Date: Thursday, October 23
 Presenter: Trung Nguyen
 AI and Deep Learning Capability using Avizo and Amira
 Date: Tuesday, October 28
@@ -20,17 +62,16 @@ Presenters: Arsalan Zolfaghari, ThermoFisher Scientific and Ashwini Naik
 Accelerating Research Workflows: Introduction to Open OnDemand on Midway3
 Date: Thursday, October 30
 Presenter: Aleks Lykhin
-Running jobs on RCC systems using the SLURM batch scheduler and Best Practices​
+Running jobs on RCC systems using the SLURM batch scheduler and Best Practices
 Date: Tuesday, November 4
 Presenter: Debasmita Samaddar
-Grounding Large Language Models with Retrieval-Augmented Generation​
+Grounding Large Language Models with Retrieval-Augmented Generation
 Date: Wednesday, November 5
 Presenter: Youzhi Yu
 Introduction to Quantum Simulators and Algorithms
 Date: Tuesday, November 11
-Time and Location: 2:00 - 4:00 PM, Zar Room
 Presenter: Akhil Francis
-Visualizing Research Data through Interactive Dashboards with React & OpenAI​
+Visualizing Research Data through Interactive Dashboards with React & OpenAI
 Date: Tuesday, November 18
 Presenter: Ashwini Naik
 Graph Neural Networks in Action: From Foundations to Biomedical Applications
@@ -43,7 +84,6 @@ Level: Introductory
 Date: Thursday, July 10, 2025
 Applied Containerization for Machine Learning in HPC
 Date: Tuesday, July 15, 2025
-Presenter: Parmanand Sinha
 Level: Intermediate
 Fundamentals of Research Data Sharing on Midway HPC Systems
 Date: Tuesday, July 22, 2025
@@ -51,22 +91,18 @@ Presenters: Debbie/Ashwini
 Level: Introductory
 AI-Enhanced Image Analysis with 3D Slicer
 Date: Tuesday, July 29, 2025
-Presenter: Ashwini Naik
 Basics of CUDA Programming
 Date: Wednesday, July 30, 2025
 Time and Location: 1:00 - 3:30 PM, Zar Room
 Presenter: Dossay Oryspayev
 Geospatial Python Part 1: Satellite & Climate Raster Analysis
 Date: Thursday, July 31, 2025
-Presenter: Hamid Dashti
 Geospatial Python Part 2: Scaling Geospatial Workflows with Dask
 Date: Tuesday, August 5, 2025
 Distributed data processing in the RCC HPC platform
 Date: Thursday, August 7, 2025
-Presenter: Trung Nguyen
-Unlocking LLMs: Practical Prompt-Engineering Patterns​
+Unlocking LLMs: Practical Prompt-Engineering Patterns
 Date: Tuesday, August 12, 2025
-Presenter: Youzhi Yu
 Date: Thursday, August 14, 2025
 Presenter: Mohsen Zand
 Level: Advanced
@@ -97,7 +133,6 @@ Time and Location: 1:00 - 3:00 PM, Zar Room
 Large Language Model Inference
 Thursday, May 22, 2025
 Level: Intermediate/Advanced
-Winter Workshops
 Introduction to the RCC
 Date: Tuesday, February 11, 2025
 Presenter: Pedram Esfahani
@@ -119,7 +154,6 @@ Date: Tuesday, October 8, 2024
 GPU computing basics
 Date: Thursday, October 10, 2024
 Trung Nguyen
-Introduction to quantum computing
 Date: Tuesday, October 15, 2024
 Presenter: Niladri Gomes
 Remote Code Development

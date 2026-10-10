@@ -14,7 +14,7 @@ Examples of regulated research data include:
 
 The [research data classification](https://srds.uchicago.edu/secure-research-data-usage-guide/) is provided by University Research Administration. If you have any questions about SDE3, please email midwayr-help@rcc.uchicago.edu.
 
-## Eligibililty
+## Eligibility
 
 To use SDE3 resources, you will need to have a SDE3 user account. Although both Midway and SDE3 use CNetID for authentication, they do not share accounts. If you do not have a SDE3 user account, please see the <a href="https://sde-midwayr.rcc.uchicago.edu/getting-started/" target="_blank">Getting Started</a> section for how to apply for an account.
 

@@ -57,7 +57,7 @@ https://manual.gromacs.org/documentation/current/user-guide/mdrun-performance.ht
 
 An example batch script to run GROMACS for Midway3 is given as below
 ```
-!/bin/bash
+#!/bin/bash
 #SBATCH --job-name=gmx-bench
 #SBATCH --account=pi-[cnetid]
 #SBATCH --time=01:00:00

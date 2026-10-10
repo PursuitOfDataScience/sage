@@ -154,7 +154,7 @@ The following tables outline a variety of job states and reason codes you may en
 
 ##### Job State Codes
 
-| Status        | Code  | Explaination                                                           |
+| Status        | Code  | Explanation                                                            |
 | ------------- | :---: | ---------------------------------------------------------------------- |
 | COMPLETED	    | `CD`	| The job has completed successfully.                                    |
 | COMPLETING	| `CG`	| The job is finished, but some processes are still active.              |
@@ -177,7 +177,7 @@ A full list of these Job State codes can be found in [Slurm’s documentation](h
 | `AssociationNodeLimit`   | All nodes assigned to your job’s specified association are in use; the job will run eventually. |
 | `Dependency`	           | This job is waiting for a dependent job to complete and will run afterward.                     |
 | `InvalidAccount`	       | The job’s account is invalid. Cancel the job and rerun with the correct account.                |
-| `InvaldQoS`              | The job’s QoS is invalid. Cancel the job and rerun with the correct account.                    |
+| `InvalidQoS`             | The job’s QoS is invalid. Cancel the job and rerun with the correct account.                    |
 | `PartitionCpuLimit`	   | All CPUs assigned to your job’s specified partition are in use; the job will run eventually.    |
 | `PartitionMaxJobsLimit`  | Maximum number of jobs for your job’s partition has been met; the job will run eventually.      |
 | `PartitionNodeLimit`	   | All nodes assigned to your job’s specified partition are in use; the job will run eventually.   |

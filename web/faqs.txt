@@ -11,10 +11,3 @@ What are the costs associated with this service?
 There is no cost to use Skyway to burst in the cloud, however the cost associated with running jobs or storing data in the cloud is the responsibility of the user. The RCC has a limited amount of credits to use, at no cost, for pilot projects being used for the development of Skyway.
 How can I get help if I have an issue using Skyway?
 Email the RCC at help@rcc.uchicago.edu
-Usage Questions
-How do I check what software modules are available on Skyway?
-You can view the list of all available software modules using command: "module avail". Click here for more details.
-How do I load available modules and application packages?
-You can initiate any module or package environment by using the command: "module load [software name]/[optional: version name]".
-I am using secure or sensitive data for my research. Am I able to use Skyway?
-Skyway is not certified yet for research involving sensitive or restricted data. We recommend usingMidwayR for sensitive data.

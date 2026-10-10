@@ -75,7 +75,7 @@ scode serve-web -- --account <pi-account> --time 01:00:00
     *  default
     ```
 
-    An asterick `*` indicates the currently active environment.
+    An asterisk `*` indicates the currently active environment.
 
 ### 3.4  `scode remove`
 

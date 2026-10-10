@@ -2,7 +2,7 @@
 
  SDE3 use the SLURM scheduler to allocate jobs to compute nodes. However, SDE3 has no SUs allocation requirement. 
 <br><br/>
-Upon connecting to SDE3, users lend on a login node, which can be used for compiling and debugging code, visualizing data, editing and managing files. All intensive computations should be submitted to compute nodes. Running jobs on SDE3 is no different from [running jobs on Midway](../../slurm/main.md).
+Upon connecting to SDE3, users land on a login node, which can be used for compiling and debugging code, visualizing data, editing and managing files. All intensive computations should be submitted to compute nodes. Running jobs on SDE3 is no different from [running jobs on Midway](../../slurm/main.md).
 
 # Slurm Partitions
 
