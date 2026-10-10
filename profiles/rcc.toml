@@ -420,6 +420,14 @@ hint = "Vertex needs no API key: set SAGE_VERTEX=1 and grant the runtime service
 # moves on its own schedule, so read the table before putting one there:
 # https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
 #
+# GOOGLE'S 2026-10-10 NOTICE IS NOT ABOUT THIS LIST. It deprecates gemini-3.5-flash on
+# the Gemini API and AI Studio, routes every request for it to gemini-3.6-flash, and
+# says to "update your code to call gemini-3.6-flash directly". Done here, that puts
+# first the id this endpoint stops serving on 2026-11-19. Checked the day it arrived:
+# Vertex answered a request for 3.5-flash with `modelVersion: gemini-3.5-flash`, and the
+# table above still keeps it to 2027-05-19 or later. The `google` entry below is the
+# surface the notice covers, and it does not list 3.5-flash.
+#
 # 3.5 IS ALSO THE FASTER OF THE TWO. Measured 2026-10-05 against this project with the
 # app's own system prompt and tool schema: the first model call of a turn, 40 pairs
 # after 2 discarded, interleaved so each model went first in half of them.
@@ -563,21 +571,39 @@ base_url_env = "GEMINI_BASE_URL"
 #
 # 3.6 STAYS HERE although the Vertex entry dropped it. Google's notice retiring it on
 # 2026-11-19 covers Vertex only, and this API's deprecations page lists
-# gemini-3.6-flash with no shutdown date (checked 2026-10-05 at
+# gemini-3.6-flash with no shutdown date (checked 2026-10-05, and again 2026-10-10, at
 # https://ai.google.dev/gemini-api/docs/deprecations). The two surfaces retire models
 # on separate schedules, so check that page rather than inferring from the other one.
+#
+# 3.5-FLASH, THE BEST ROW IN THAT TABLE, IS NO LONGER A MODEL HERE. Google deprecated it
+# on this API (notice received 2026-10-10) and routes every request for it to
+# 3.6-flash: asked for 3.5 that day, the API answered with `modelVersion:
+# gemini-3.6-flash`. 3.7-flash is routed to 3.8-flash the same way. Both names are
+# still served by `/models` and listed with no shutdown date, so nothing about them
+# looks retired. Do not add either: failover never asks one id twice, but a second name
+# for a listed model is that model asked twice, on the capacity that just refused it.
 models = [
     "models/gemini-3.6-flash",
     "models/gemini-3.5-flash-lite",
     "models/gemini-3.8-flash",
 ]
-# 56 -> 3, and no `deny` needed: each of these three marks is unique as a substring
-# across everything the API serves. `gemini-2.5-flash` was not: it also caught the
-# tts, image, lite and native-audio variants built on it, which is what the deny list
-# that used to be here existed to undo.
+# THE DENY LIST IS BACK. "Each of these three marks is unique as a substring across
+# everything the API serves" held when it served 56 ids, and stopped holding when
+# gemini-3.8-flash-tts and gemini-3.8-flash-lite-tts shipped (2026-09-22): the first
+# mark matches both, so discovery admitted 5 of 62. Asked a chat question on
+# 2026-10-10, the TTS model answered `400 Unhandled generated data mime type:
+# audio/wav`, and failover walks every model in the lineup once, so a turn walking it
+# spent a round trip on each of these too. Marks are substrings, so a new variant of a
+# listed id gets in until it is named here. `gemini-2.5-flash` caught its tts, image,
+# lite and native-audio variants the same way, which is what the deny list that used
+# to be here existed to undo.
 free_only = true
 free_marks = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]
 free_marks_env = "SAGE_GOOGLE_FREE_MARKS"
+deny = [
+    "models/gemini-3.8-flash-tts",
+    "models/gemini-3.8-flash-lite-tts",
+]
 # Declared by inference, NOT measured here: the hoist was measured on Vertex (see the
 # note on `hoists_system` there), and this free tier's quota was spent when the same
 # check was run against it on 2026-10-05. Same models behind the same OpenAI layer,

@@ -14,6 +14,8 @@ import ast
 import os
 import pathlib
 import re
+import sys
+from types import ModuleType
 
 import pytest
 
@@ -21,6 +23,7 @@ from sage import corpus as corpus_mod
 from sage import profile as profile_mod
 from sage import prompts, retrieval, runtime, tools
 from sage.profile import Profile, from_mapping
+from sage.providers.openai_compat import OpenAICompatProvider
 
 SAGE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sage")
 
@@ -306,6 +309,88 @@ class TestAProviderThatNeedsNoLineupMaintenance:
         assert entry.models[0] == model_id, (
             f"deploy/cloudrun.sh starts on `{model_id}` but {provider}'s lineup leads "
             f"with `{entry.models[0]}`: move them together"
+        )
+
+
+class TestTheGeminiLineupIsWhatItNames:
+    """`google` discovers its lineup and filters it by substring, and a substring
+    admits whatever Google names after it.
+
+    `gemini-3.8-flash` matched only itself until `gemini-3.8-flash-tts` and
+    `gemini-3.8-flash-lite-tts` shipped, and from then on discovery offered both:
+    models that answer a chat request with `400 Unhandled generated data mime type:
+    audio/wav`, and that failover, which walks the whole lineup, spent a round trip on
+    each. The catalogue here is what the API listed on the day that was found.
+    """
+
+    #: Every id `generativelanguage`'s OpenAI surface listed on 2026-10-10, so the
+    #: filter meets the same near-misses here that it meets in production.
+    SERVED = tuple(f"models/{name}" for name in (
+        "antigravity-preview-05-2026", "antigravity-preview-09-2026",
+        "antigravity-preview-latest", "aqa", "deep-research-max-preview-04-2026",
+        "deep-research-preview-04-2026", "deep-research-pro-preview-12-2025",
+        "gemini-2.5-computer-use-preview-10-2025", "gemini-2.5-flash",
+        "gemini-2.5-flash-image", "gemini-2.5-flash-lite",
+        "gemini-2.5-flash-native-audio-latest",
+        "gemini-2.5-flash-native-audio-preview-09-2025",
+        "gemini-2.5-flash-native-audio-preview-12-2025", "gemini-2.5-flash-preview-tts",
+        "gemini-2.5-pro", "gemini-2.5-pro-preview-tts", "gemini-3-flash-preview",
+        "gemini-3-pro-image", "gemini-3-pro-image-preview", "gemini-3.1-flash-image",
+        "gemini-3.1-flash-image-preview", "gemini-3.1-flash-lite",
+        "gemini-3.1-flash-lite-image", "gemini-3.1-flash-lite-preview",
+        "gemini-3.1-flash-live-preview", "gemini-3.1-flash-tts-preview",
+        "gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools", "gemini-3.5-flash",
+        "gemini-3.5-flash-lite", "gemini-3.5-live-translate-preview",
+        "gemini-3.5-transcribe", "gemini-3.5-transcribe-live", "gemini-3.6-flash",
+        "gemini-3.7-flash", "gemini-3.8-flash", "gemini-3.8-flash-lite-tts",
+        "gemini-3.8-flash-tts", "gemini-3.8-live", "gemini-3.8-live-extended-thinking",
+        "gemini-embedding-001", "gemini-embedding-2", "gemini-embedding-2-preview",
+        "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-nano-banana-2.1",
+        "gemini-omni-1.1-flash", "gemini-omni-flash-preview", "gemini-pro-latest",
+        "gemini-robotics-er-2-preview", "gemini-robotics-er-2-streaming-preview",
+        "gemma-4-26b-a4b-it", "gemma-4-31b-it", "lyria-3-clip-preview",
+        "lyria-3-pro-preview", "lyria-3.5", "lyria-realtime-exp", "nano-banana-pro-preview",
+        "veo-3.1-fast-generate-preview", "veo-3.1-generate-preview",
+        "veo-3.1-lite-generate-preview",
+    ))
+
+    #: Names the API still lists and answers as another model: asked for each on
+    #: 2026-10-10, it replied with the `modelVersion` on the right.
+    ROUTED = {
+        "models/gemini-3.5-flash": "gemini-3.6-flash",
+        "models/gemini-3.7-flash": "gemini-3.8-flash",
+    }
+
+    def offered(self, monkeypatch, entry):
+        served = self.SERVED
+
+        class Response:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"data": [{"id": name} for name in served]}
+
+        fake = ModuleType("httpx")
+        fake.get = lambda *a, **k: Response()
+        monkeypatch.setitem(sys.modules, "httpx", fake)
+        return [model.id for model in OpenAICompatProvider(entry, "AIza-test").models()]
+
+    def test_discovery_offers_exactly_the_models_it_names(self, profile, monkeypatch):
+        entry = profile.provider("google")
+        assert self.offered(monkeypatch, entry) == list(entry.models), (
+            "a mark admits an id the lineup does not name: deny it, or nothing stops "
+            "failover from walking onto it"
+        )
+
+    def test_no_name_in_it_is_another_model_in_disguise(self, profile):
+        """Failover never asks one id twice, and an alias is the way to do it anyway:
+        a turn 3.6-flash just refused walks on to `gemini-3.5-flash`, which is 3.6-flash
+        again, on the same contended capacity."""
+        listed = set(profile.provider("google").models)
+        assert not listed & set(self.ROUTED), (
+            f"the lineup lists a name Google answers as another model: "
+            f"{sorted(listed & set(self.ROUTED))}"
         )
 
 
