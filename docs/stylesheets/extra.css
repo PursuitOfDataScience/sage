@@ -8,7 +8,7 @@
   --md-primary-fg-color--dark:  #5c0303;
 }
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color:        #FFA319;
+  --md-primary-fg-color:        #FFD700;
   --md-primary-fg-color--light: #Af2b2b;
   --md-primary-bg-color:        #000000;
   --md-hue: 210; 
@@ -40,6 +40,49 @@ img.responsive-img {
     max-width: 100%;
     padding: 0 5px;
   }
+}
+
+/* Tabbed styling — scoped to .rcc-tabs only, does not affect other pages */
+.rcc-tabs .tabbed-set {
+  border: 2px solid var(--md-primary-fg-color);
+  border-radius: 0.2rem;
+}
+
+.rcc-tabs .tabbed-labels {
+  border-bottom: 2px solid var(--md-primary-fg-color);
+  background-color: transparent;
+}
+
+/* Inactive tab */
+.rcc-tabs .tabbed-labels > label {
+  background-color: #e8e8e8;
+  border-radius: 0.2rem 0.2rem 0 0;
+  border: 1px solid var(--md-primary-fg-color);
+  border-bottom: none;
+  margin-right: 0.2rem;
+}
+
+/* Active tab */
+.rcc-tabs .tabbed-set > input:nth-child(1):checked ~ .tabbed-labels > label:nth-child(1),
+.rcc-tabs .tabbed-set > input:nth-child(2):checked ~ .tabbed-labels > label:nth-child(2),
+.rcc-tabs .tabbed-set > input:nth-child(3):checked ~ .tabbed-labels > label:nth-child(3) {
+  background-color: #FFD700;
+  color: #1a1a1a;
+}
+
+[data-md-color-scheme="slate"] .rcc-tabs .tabbed-labels > label {
+  background-color: #2a2a2a;
+}
+
+[data-md-color-scheme="slate"] .rcc-tabs .tabbed-set > input:nth-child(1):checked ~ .tabbed-labels > label:nth-child(1),
+[data-md-color-scheme="slate"] .rcc-tabs .tabbed-set > input:nth-child(2):checked ~ .tabbed-labels > label:nth-child(2),
+[data-md-color-scheme="slate"] .rcc-tabs .tabbed-set > input:nth-child(3):checked ~ .tabbed-labels > label:nth-child(3) {
+  background-color: #FFD700;
+  color: #1a1a1a;
+}
+
+.rcc-tabs .tabbed-content {
+  padding: 0 0.8rem;
 }
 
 /* rounded image */

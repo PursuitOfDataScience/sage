@@ -28,7 +28,7 @@ width='650'
 alt='Globus File Manager open to Create new Guest Collection with the Create Collection button highlighted.'/>
 </p>
 
-The Filer Manager will open to the Permissions tab of your new collection, which you can now share.
+The File Manager will open to the Permissions tab of your new collection, which you can now share.
 
 ## Share a Collection
 If the files you have selected are already part of a Guest Collection, click the collection name:

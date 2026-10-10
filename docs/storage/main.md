@@ -30,7 +30,7 @@ The amount of data that can be stored in home directories, project directories, 
       |---------|----------|------------|------------|--------------|
       | Home    | `/home/$USER`            | 30 GB <br /> (or 300K files) | 35 GB <br /> (or 1M files) | Personal data  |
       | Project | `/project/<folder>`      | varies                  | varies                   | Shared data, environments  |
-      | Scratch | `/scratch/midway3/$USER` | 100 GB                       | 5 TB                       | Temporary files            |
+      | Scratch | `/scratch/midway3/$USER` | 100 GB                       | 2 TB                       | Temporary files            |
       | Beagle 3 project | `/project/<folder>`      | varies                     | varies                   | Shared data, environments |
       | Beagle 3 scratch | `/scratch/beagle3/$USER` | 400 GB  <br /> (or 5.1M files) | 1 TB <br /> (5.6M files) | Temporary files           |
 
@@ -119,7 +119,7 @@ pi-drpepper         blocks (group)       59.10T     60.00T     60.00T     none
 
 ### Home Space 
 
-Every user has Midway2 and Midway3 home directories `/home/$USER`. **Midway2 home dierctory** is accessible from Midway2 and DaLI login nodes, while **Midway3 home directory** from Midway3, Beagle3, and SSD login nodes. Home directories are generally used for storing files that do not need to be shared with others and are only accessible by their owner (mode `0700`).
+Every user has Midway2 and Midway3 home directories `/home/$USER`. **Midway2 home directory** is accessible from Midway2 and DaLI login nodes, while **Midway3 home directory** from Midway3, Beagle3, and SSD login nodes. Home directories are generally used for storing files that do not need to be shared with others and are only accessible by their owner (mode `0700`).
 
 ### Research Space
 

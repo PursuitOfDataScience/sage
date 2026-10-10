@@ -62,13 +62,13 @@ There are two likely explanations for this error.
 
 One possibility is that you are over the time limit. The default walltime for sinteractive is 2 hours. This can be increased by including the ```--time``` flag to your ```sinteractive``` call.
 
-Another possiblity is that your job exceeded the memory limit. You can resolve this by requesting additional memory using ```--mem``` or ```--mem-per-cpu```.
+Another possibility is that your job exceeded the memory limit. You can resolve this by requesting additional memory using ```--mem``` or ```--mem-per-cpu```.
 
 ### Why does my ```sinteractive``` job fail with ```ssh: symbol lookup error: ssh: undefined symbol: EVP_KDF_ctrl, version OPENSSL_1_1_1b?``` "
 The error `ssh: symbol lookup error: ssh: undefined symbol: EVP_KDF_ctrl, version OPENSSL_1_1_1b` indicates
 the mismatch version of the OpenSSL used by `sinteractive` and that by the `python` module loaded in your shell environment. There are two options to resolve this issue:
 
-1) Prepend `LD_LBIRARY_PATH` with the path to the SSH-compatible version of OpenSSL:
+1) Prepend `LD_LIBRARY_PATH` with the path to the SSH-compatible version of OpenSSL:
 ```
 export LD_LIBRARY_PATH=/lib64:$LD_LIBRARY_PATH
 ```

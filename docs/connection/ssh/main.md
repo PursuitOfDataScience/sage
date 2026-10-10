@@ -79,7 +79,7 @@ To set up SSH key pairing:
 ssh-keygen -f ~/.ssh/<cnetid> -t rsa -b 4096
 ```
 
-When you run this command in your shell (Mac terminal, Windows PowerShell, etc.), you will get a message specifying where your private and public keys have been saved. Note that the `.` in `.ssh` indicates a hidden folder, so you will need to show hidden items to see your pyblic key `<cnetid>.pub`. You can do this from your shell (run `ls -la`) or your file explorer (press `command` + `shift` + `.` on Mac or select View > Hidden items on Windows).
+When you run this command in your shell (Mac terminal, Windows PowerShell, etc.), you will get a message specifying where your private and public keys have been saved. Note that the `.` in `.ssh` indicates a hidden folder, so you will need to show hidden items to see your public key `<cnetid>.pub`. You can do this from your shell (run `ls -la`) or your file explorer (press `command` + `shift` + `.` on Mac or select View > Hidden items on Windows).
 
 **2. Share your public key:** Now that you have generated your public key, share it with the RCC so we can add it to our login nodes. Send <a href=mailto:'help@rcc.uchicago.edu'>help@rcc.uchicago.edu</a> an email with the following information:
 

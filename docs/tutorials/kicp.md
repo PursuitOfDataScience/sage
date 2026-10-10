@@ -183,7 +183,7 @@ Note, this section is under construction.  Updated build instructions for a vari
 ### ART
 
 ART has default compilation flags for Midway.  Set the environment variable PLATFORM to midway. This platform file will automatically detect
-the MPI environment and compiler option you are using and configure the code accordinly.
+the MPI environment and compiler option you are using and configure the code accordingly.
 
 ### RAMSES
 
@@ -310,7 +310,7 @@ def compute_pk(N_eff=3.04, output="pk.dat"):
             print >>output, "%.6e %.6e" % (k, c.pk(k, z=0.0))
     c.struct_cleanup()
 
-    # if necesssary for visualization, add a 5 second delay
+    # if necessary for visualization, add a 5 second delay
     #import time; time.sleep(5)
 
 # perform work associated with i out of N steps
@@ -545,7 +545,7 @@ Seq Host    Starttime   Runtime Send    Receive Exitval Signal  Command
 ```
 
 In our case we requested the output from each work step be directed to a file **logs/runtask.{1}**,
-allowing us to peform further diagnostics if necessary. The parallel option `--resume` creates a file
+allowing us to perform further diagnostics if necessary. The parallel option `--resume` creates a file
 **parallel.log** which allows GNU Parallel to resume a job that has been stopped due to failure or by hitting
 a walltime limit before all tasks have been completed. If you need to rerun a GNU Parallel job, be sure
 to delete **parallel.log** or it will think it has already finished!

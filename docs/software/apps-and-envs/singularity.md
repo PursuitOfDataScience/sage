@@ -58,7 +58,7 @@ export SINGULARITY_TMPDIR=$SCRATCH/$USER/container/faketmp
 Apptainer builds need access to local storage rather than NFS storage.
 ```
 export APPTAINER_CACHEDIR=/tmp/$USER
-export APPATINER_TMPDIR=/tmp/$USER
+export APPTAINER_TMPDIR=/tmp/$USER
 ```
 
 You can delete everything in the `faketmp` and `fakecache` directories after creation of your container.

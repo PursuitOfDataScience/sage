@@ -45,7 +45,7 @@ Welcome to the RCC Glossary, your go-to guide for understanding the key terms in
 		<tr>
 			<td dir="ltr" style="text-align:center">FLOPS</td>
 			<td dir="ltr">
-			<p>Floating point Operation Per Second (FLOPS) is a measure of computing performance in terms of number of floating operations that a CPU can perfomr per second. Modern CPUs are capable of doing Tera FLOPS (10^12 floating point operations per second).</p>
+			<p>Floating point Operation Per Second (FLOPS) is a measure of computing performance in terms of number of floating operations that a CPU can perform per second. Modern CPUs are capable of doing Tera FLOPS (10^12 floating point operations per second).</p>
 			</td>
 		</tr>
 		<tr>
