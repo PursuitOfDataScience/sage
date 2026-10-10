@@ -7,9 +7,9 @@ Importantly, you must use an existing installation of CUDA and/or CuDNN, which y
 !!! note "Versions, versions, versions"
     As of March 2023, we find the combination of module versions `python/anaconda-2021.05`, `cuda/11.2`, and `cudnn/11.2` to be the most stable. If wish to use newer versions of Python or CUDA, be sure to check the version compatibility as a first troubleshooting step when checking GPU engagement. 
 
-With the CUDA module/s loaded, and being connected to a GPU node, you should be able to import either Tensorflow and PyTorch and check GPU engagment with the following steps: 
+With the CUDA module/s loaded, and being connected to a GPU node, you should be able to import either Tensorflow or PyTorch and check GPU engagement with the following steps: 
 
-## GPU Enagement
+## GPU Engagement
 Here are a few quick tips on how to make sure you're actually using a GPU.
 
 ### Checking in terminal

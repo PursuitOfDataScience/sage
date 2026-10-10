@@ -124,7 +124,7 @@ Other options to prepare the molecular structure used in the input files include
 
 Alternatively, users can use <a href='https://molview.org/' target='_blank'>MolView</a> (a web-based application), or <a href='https://www.chemcraftprog.com/' target='_blank'>ChemCraft</a> (a cross-platform application). After generating the molecular structure from these packages, users put the atom coordinates into  the Gaussian input file, or use another tool to assemble a proper input file.
 
-Gaussian output can be visualized using Avogradro, VMD or OVITO. Uses can check the installed versions of these software packages on Midway2 and Midway3 via the `module avail` command.
+Gaussian output can be visualized using Avogadro, VMD or OVITO. Users can check the installed versions of these software packages on Midway2 and Midway3 via the `module avail` command.
 
 
 ### GPU support

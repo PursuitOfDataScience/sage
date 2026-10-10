@@ -1,6 +1,10 @@
 URL: https://vislab.rcc.uchicago.edu/tools-resources-color
 Title: Resources | Visualization Laboratory - Research Computing Center
 ================================================================================
+Hardware
+Services
+Visualization Wall
+Visualization Wall Specs:
 - 6 X 3 array of 55 inch LCD Samsung UD55E-B displays
 - Each display has full HD resolution (1920 X 1080)
 - Ultra-narrow bezel width of 3.5mm from image to image

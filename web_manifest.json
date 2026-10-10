@@ -1,0 +1,555 @@
+{
+  "about": "Per-page state for tools/rcc-web-scrape.py: the sitemap lastmod and the sha256 of the file each page was last written as, its consecutive failed runs, and where its URL landed. Written by the weekly refresh.",
+  "pages": {
+    "https://beag3.rcc.uchicago.edu": {
+      "error": "",
+      "failures": 0,
+      "file": "index.txt",
+      "final_url": "https://beag3.rcc.uchicago.edu",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "39d61be724fc1b4b5344560f9b0be85ba4f6a912a048ab5b05c1efd559e20b62"
+    },
+    "https://beag3.rcc.uchicago.edu/access": {
+      "error": "",
+      "failures": 0,
+      "file": "access.txt",
+      "final_url": "https://beag3.rcc.uchicago.edu/access/",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "5195fff5498f9a0eb78472d8990f98509257a2bd1ad35e680b5a8127169359d2"
+    },
+    "https://beag3.rcc.uchicago.edu/publications": {
+      "error": "",
+      "failures": 0,
+      "file": "publications.txt",
+      "final_url": "https://beag3.rcc.uchicago.edu/publications/",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "ec68111480182e504fb59eeb0d9d54c4d4a5ca2930b8fa8b1a195341e7e482f9"
+    },
+    "https://beag3.rcc.uchicago.edu/software": {
+      "error": "",
+      "failures": 0,
+      "file": "software.txt",
+      "final_url": "https://beag3.rcc.uchicago.edu/software/",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "196088fbddbfcbd8836eb36aefec7df2659e945504523959a14c78145dff17a8"
+    },
+    "https://beag3.rcc.uchicago.edu/system-details": {
+      "error": "",
+      "failures": 0,
+      "file": "system-details.txt",
+      "final_url": "https://beag3.rcc.uchicago.edu/system-details/",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "0fcd5326838ff3ca80377db5bba1b0979e8accf66d6feebc285411ce08317a1e"
+    },
+    "https://beag3.rcc.uchicago.edu/workshops": {
+      "error": "",
+      "failures": 0,
+      "file": "workshops.txt",
+      "final_url": "https://beag3.rcc.uchicago.edu/workshops/",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "dea4176d764e5310af3399161661b5c41df7acf089df36e1878f81ece7492d84"
+    },
+    "https://cloud-skyway.rcc.uchicago.edu/faqs": {
+      "error": "",
+      "failures": 0,
+      "file": "faqs.txt",
+      "final_url": "https://cloud-skyway.rcc.uchicago.edu/faqs/",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "8707372ff4b393f9c7706d48f93f51a5fc1cf39fd37ddefde34fbbf2d5ee1537"
+    },
+    "https://cloud-skyway.rcc.uchicago.edu/news-and-events": {
+      "error": "",
+      "failures": 0,
+      "file": "news-and-events.txt",
+      "final_url": "https://cloud-skyway.rcc.uchicago.edu/news-and-events/",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "2a09d875c2360f332460ff462bce8c7ce490fcbeba5b7f6d0154b4bb28888207"
+    },
+    "https://cloud-skyway.rcc.uchicago.edu/user-guide": {
+      "error": "",
+      "failures": 0,
+      "file": "user-guide.txt",
+      "final_url": "https://cloud-skyway.rcc.uchicago.edu/user-guide/",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "491d83cb13a7ecc1f7491862648a8519d6b72803f8de95c327e856882a930405"
+    },
+    "https://learn-radiology.rcc.uchicago.edu/incidence": {
+      "error": "HTTP 404",
+      "failures": 1,
+      "file": "incidence.txt",
+      "final_url": "https://learn-radiology.rcc.uchicago.edu/incidence",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "467450aa7cd8285ecb40f7ecfd00f688c73662f2698289d9ea281ca5821d4941"
+    },
+    "https://learn-radiology.rcc.uchicago.edu/mpMRI": {
+      "error": "HTTP 400",
+      "failures": 1,
+      "file": "mpMRI.txt",
+      "final_url": "https://learn-radiology.rcc.uchicago.edu/mpMRI",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "cb989faf4c76fc945250624b8fa15e917a3af7936a7fe71950b1ab2d9a247701"
+    },
+    "https://learn-radiology.rcc.uchicago.edu/pirads": {
+      "error": "HTTP 401",
+      "failures": 1,
+      "file": "pirads.txt",
+      "final_url": "https://learn-radiology.rcc.uchicago.edu/pirads",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "e34005f2d96dd0dc7f24fbbc11a2b0a5c48ebc8009158711febdcec87813d293"
+    },
+    "https://learn-radiology.rcc.uchicago.edu/takecourse": {
+      "error": "HTTP 404",
+      "failures": 1,
+      "file": "takecourse.txt",
+      "final_url": "https://learn-radiology.rcc.uchicago.edu/takecourse",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "6d5170d5a5e234cde462bec6d9666ab059c0a1936abd345641ba6f8b14524918"
+    },
+    "https://learn-radiology.rcc.uchicago.edu/team": {
+      "error": "HTTP 404",
+      "failures": 1,
+      "file": "team.txt",
+      "final_url": "https://learn-radiology.rcc.uchicago.edu/team",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "192232cd43dc13f57543fb2fd3660684cefe333254383cb3a4aea6be476cd453"
+    },
+    "https://rcc.uchicago.edu/about-rcc": {
+      "error": "",
+      "failures": 0,
+      "file": "about-rcc.txt",
+      "final_url": "https://rcc.uchicago.edu/about-rcc",
+      "in_sitemap": true,
+      "lastmod": "2022-11-17T21:07Z",
+      "removed": "",
+      "sha256": "ed30a88f4ef3be526b354c111cc0968c2074b8ba7e224e4281d1ec27065e6fd9"
+    },
+    "https://rcc.uchicago.edu/about-rcc/advisory-committees": {
+      "error": "",
+      "failures": 0,
+      "file": "about-rcc_advisory-committees.txt",
+      "final_url": "https://rcc.uchicago.edu/about-rcc/advisory-committees",
+      "in_sitemap": true,
+      "lastmod": "2025-07-21T14:25Z",
+      "removed": "",
+      "sha256": "1070fa210ece6c2dd1925aeaefc5f2bf353934a87c6b707402a4b8226d12dedd"
+    },
+    "https://rcc.uchicago.edu/about-rcc/artificial-intelligence-spotlight-mind-bytes-2018": {
+      "error": "",
+      "failures": 0,
+      "file": "about-rcc_artificial-intelligence-spotlight-mind-bytes-2018.txt",
+      "final_url": "https://rcc.uchicago.edu/about-rcc/artificial-intelligence-spotlight-mind-bytes-2018",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "e191dbcb68caf17cced6948bb53125940d7943e1ff1c1064b2b37dfaaa52dbb1"
+    },
+    "https://rcc.uchicago.edu/about-rcc/director%E2%80%99s-welcome": {
+      "error": "",
+      "failures": 0,
+      "file": "about-rcc_director\u2019s-welcome.txt",
+      "final_url": "https://rcc.uchicago.edu/about-rcc/director%E2%80%99s-welcome",
+      "in_sitemap": true,
+      "lastmod": "2025-04-28T14:50Z",
+      "removed": "",
+      "sha256": "498cfca32609660a38888af9a4716c2476d458963281cb33a23eefe949e098e3"
+    },
+    "https://rcc.uchicago.edu/about-rcc/our-team": {
+      "error": "",
+      "failures": 0,
+      "file": "about-rcc_our-team.txt",
+      "final_url": "https://rcc.uchicago.edu/about-rcc/our-team",
+      "in_sitemap": true,
+      "lastmod": "2026-07-16T18:56Z",
+      "removed": "",
+      "sha256": "b5b106596e0d12a359ed51b17c05b8cb22261bf7ff5b771d9f78ced6c23f91df"
+    },
+    "https://rcc.uchicago.edu/about-rcc/rcc-user-policy": {
+      "error": "",
+      "failures": 0,
+      "file": "about-rcc_rcc-user-policy.txt",
+      "final_url": "https://rcc.uchicago.edu/about-rcc/rcc-user-policy",
+      "in_sitemap": true,
+      "lastmod": "2022-11-17T21:07Z",
+      "removed": "",
+      "sha256": "2192845341c3ff58afca54aabaa9f31fd5546d44d73a9edca1f8262228a8a014"
+    },
+    "https://rcc.uchicago.edu/about-rcc/research-computing-oversight-committee": {
+      "error": "",
+      "failures": 0,
+      "file": "about-rcc_research-computing-oversight-committee.txt",
+      "final_url": "https://rcc.uchicago.edu/about-rcc/research-computing-oversight-committee",
+      "in_sitemap": true,
+      "lastmod": "2024-12-02T21:07Z",
+      "removed": "",
+      "sha256": "616adc18f5af546ac70fd89da252279f6a4f80d1edad18e724628a277ee5f260"
+    },
+    "https://rcc.uchicago.edu/about-rcc/vision-mission": {
+      "error": "",
+      "failures": 0,
+      "file": "about-rcc_vision-mission.txt",
+      "final_url": "https://rcc.uchicago.edu/about-rcc/vision-mission",
+      "in_sitemap": true,
+      "lastmod": "2024-11-18T15:10Z",
+      "removed": "",
+      "sha256": "67b9847f115ef7e40d292a3a375695f04f3aae6fd2e35a18fb38e393a2f86035"
+    },
+    "https://rcc.uchicago.edu/accounts-allocations": {
+      "error": "",
+      "failures": 0,
+      "file": "accounts-allocations.txt",
+      "final_url": "https://rcc.uchicago.edu/accounts-allocations",
+      "in_sitemap": true,
+      "lastmod": "2024-11-18T15:00Z",
+      "removed": "",
+      "sha256": "b6a1ae42e8cb85cb738561f62e36b5ceed108facf93089d2c5780775d54b0d75"
+    },
+    "https://rcc.uchicago.edu/bayesian-forest-cities-full-data": {
+      "error": "",
+      "failures": 0,
+      "file": "bayesian-forest-cities-full-data.txt",
+      "final_url": "https://rcc.uchicago.edu/bayesian-forest-cities-full-data",
+      "in_sitemap": true,
+      "lastmod": "2022-06-04T16:18Z",
+      "removed": "",
+      "sha256": "ba11b96a706190b8ba7fad0d6e8444d18e165e3a0c5f563c52f391dea3278e4a"
+    },
+    "https://rcc.uchicago.edu/big-data-sleeping-worms-and-electronic-chef": {
+      "error": "",
+      "failures": 0,
+      "file": "big-data-sleeping-worms-and-electronic-chef.txt",
+      "final_url": "https://rcc.uchicago.edu/big-data-sleeping-worms-and-electronic-chef",
+      "in_sitemap": true,
+      "lastmod": "2022-06-04T16:18Z",
+      "removed": "",
+      "sha256": "c46420b2e54d64d54b991abc6b8813e0173cd21b1462e051b53362eb08d56b51"
+    },
+    "https://rcc.uchicago.edu/data-visualization-initiative-advisory-committee": {
+      "error": "",
+      "failures": 0,
+      "file": "data-visualization-initiative-advisory-committee.txt",
+      "final_url": "https://rcc.uchicago.edu/data-visualization-initiative-advisory-committee",
+      "in_sitemap": true,
+      "lastmod": "2023-02-03T16:58Z",
+      "removed": "",
+      "sha256": "27c3429c1731ceffddf437b1686c580bcd1d71dce56c926f68014abe610a34df"
+    },
+    "https://rcc.uchicago.edu/grants-publications": {
+      "error": "",
+      "failures": 0,
+      "file": "grants-publications.txt",
+      "final_url": "https://rcc.uchicago.edu/grants-publications",
+      "in_sitemap": true,
+      "lastmod": "2022-11-17T21:07Z",
+      "removed": "",
+      "sha256": "841ce4d092cef5406078fc0b7b420da6f983de2938e74d4199abf2e05bc9cae5"
+    },
+    "https://rcc.uchicago.edu/grants-publications/acknowledging-the-RCC": {
+      "error": "",
+      "failures": 0,
+      "file": "grants-publications_acknowledging-the-RCC.txt",
+      "final_url": "https://rcc.uchicago.edu/grants-publications/acknowledging-the-RCC",
+      "in_sitemap": true,
+      "lastmod": "2024-11-18T15:13Z",
+      "removed": "",
+      "sha256": "99e0b642c809bcf0c97166570f2653cf886fd72d724ca0c6836c2823846773d4"
+    },
+    "https://rcc.uchicago.edu/grants-publications/facilities-and-resources-documents": {
+      "error": "",
+      "failures": 0,
+      "file": "grants-publications_facilities-and-resources-documents.txt",
+      "final_url": "https://rcc.uchicago.edu/grants-publications/facilities-and-resources-documents",
+      "in_sitemap": true,
+      "lastmod": "2025-02-26T15:24Z",
+      "removed": "",
+      "sha256": "7df11965ddbca6c41daa92a18efabe87fa82ae437bb9e45867108c382b5672b6"
+    },
+    "https://rcc.uchicago.edu/grants-publications/for-PI-proposals": {
+      "error": "",
+      "failures": 0,
+      "file": "grants-publications_for-PI-proposals.txt",
+      "final_url": "https://rcc.uchicago.edu/grants-publications/for-PI-proposals",
+      "in_sitemap": true,
+      "lastmod": "2022-11-17T21:07Z",
+      "removed": "",
+      "sha256": "20d5bea5c9b0ffda72261c97e13bd962fb9c5628fb601dc0fd68f5f90c2b7ee6"
+    },
+    "https://rcc.uchicago.edu/grants-publications/grant-support": {
+      "error": "",
+      "failures": 0,
+      "file": "grants-publications_grant-support.txt",
+      "final_url": "https://rcc.uchicago.edu/grants-publications/grant-support",
+      "in_sitemap": true,
+      "lastmod": "2025-02-28T22:13Z",
+      "removed": "",
+      "sha256": "36f6223bf9f8bf7e8498a03e348e0bca9dc06a5c26ca0bf8380220b3554e6be6"
+    },
+    "https://rcc.uchicago.edu/grants-publications/hardware-quotes": {
+      "error": "",
+      "failures": 0,
+      "file": "grants-publications_hardware-quotes.txt",
+      "final_url": "https://rcc.uchicago.edu/grants-publications/hardware-quotes",
+      "in_sitemap": true,
+      "lastmod": "2018-04-17T19:51Z",
+      "removed": "",
+      "sha256": "0f96e9eafb7bfa60802e0539d7ad436d5176e5dec37d7785e6b977793a1fbc04"
+    },
+    "https://rcc.uchicago.edu/grants-publications/list-of-publications": {
+      "error": "",
+      "failures": 0,
+      "file": "grants-publications_list-of-publications.txt",
+      "final_url": "https://rcc.uchicago.edu/grants-publications/list-of-publications",
+      "in_sitemap": true,
+      "lastmod": "2025-08-19T18:25Z",
+      "removed": "",
+      "sha256": "0b3f69349966c95e5a00f512e1443e3190327beee20da2d438d5073244572ca1"
+    },
+    "https://rcc.uchicago.edu/grants-publications/publications": {
+      "error": "",
+      "failures": 0,
+      "file": "grants-publications_publications.txt",
+      "final_url": "https://rcc.uchicago.edu/grants-publications/publications",
+      "in_sitemap": true,
+      "lastmod": "2022-11-17T21:07Z",
+      "removed": "",
+      "sha256": "cab8cd4db00ffe5925fb44dcb3cbf86f381e94916e4ed5fa07bb1d1f28b9ad3c"
+    },
+    "https://rcc.uchicago.edu/grants-publications/support-letters": {
+      "error": "",
+      "failures": 0,
+      "file": "grants-publications_support-letters.txt",
+      "final_url": "https://rcc.uchicago.edu/grants-publications/support-letters",
+      "in_sitemap": true,
+      "lastmod": "2018-04-17T19:52Z",
+      "removed": "",
+      "sha256": "492d8c45046d4e9863cdabbfe6650e93cb374b416eacc041c35ece4a6cfcb02f"
+    },
+    "https://rcc.uchicago.edu/midway2": {
+      "error": "",
+      "failures": 0,
+      "file": "midway2.txt",
+      "final_url": "https://rcc.uchicago.edu/support-and-services/midway2",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "lands on the same page as https://rcc.uchicago.edu/support-and-services/midway2",
+      "sha256": null
+    },
+    "https://rcc.uchicago.edu/resources": {
+      "error": "",
+      "failures": 0,
+      "file": "resources.txt",
+      "final_url": "https://rcc.uchicago.edu/resources",
+      "in_sitemap": true,
+      "lastmod": "2022-11-17T21:07Z",
+      "removed": "",
+      "sha256": "72625b4188c169c7b6295b345380525e42a05418d48c5606e52cc7b208952a5b"
+    },
+    "https://rcc.uchicago.edu/resources/high-performance-computing": {
+      "error": "",
+      "failures": 0,
+      "file": "resources_high-performance-computing.txt",
+      "final_url": "https://rcc.uchicago.edu/resources/high-performance-computing",
+      "in_sitemap": true,
+      "lastmod": "2022-11-17T21:07Z",
+      "removed": "",
+      "sha256": "c6917b2f002bcae30ef6e074b883336d07fc4b389d8db238a21bf87327fbe7f5"
+    },
+    "https://rcc.uchicago.edu/resources/hosted-data": {
+      "error": "",
+      "failures": 0,
+      "file": "resources_hosted-data.txt",
+      "final_url": "https://rcc.uchicago.edu/resources/hosted-data",
+      "in_sitemap": true,
+      "lastmod": "2025-12-09T17:29Z",
+      "removed": "",
+      "sha256": "27870d7b952fd73db1d5e0a204b396e1b3545b8585a6d647cef40795ffd467f3"
+    },
+    "https://rcc.uchicago.edu/resources/networking": {
+      "error": "",
+      "failures": 0,
+      "file": "resources_networking.txt",
+      "final_url": "https://rcc.uchicago.edu/resources/networking",
+      "in_sitemap": true,
+      "lastmod": "2022-11-17T21:07Z",
+      "removed": "",
+      "sha256": "9034e7556d15bc7a5608884a280844b96cec54d1cc4d7bf0191904cc50a7c67b"
+    },
+    "https://rcc.uchicago.edu/resources/software": {
+      "error": "",
+      "failures": 0,
+      "file": "resources_software.txt",
+      "final_url": "https://rcc.uchicago.edu/resources/software",
+      "in_sitemap": true,
+      "lastmod": "2022-11-17T21:07Z",
+      "removed": "",
+      "sha256": "d40da6a44eac4800859eea4f79d49593042b075fa66703d14b20bf0adc90585a"
+    },
+    "https://rcc.uchicago.edu/resources/storage-and-backup": {
+      "error": "",
+      "failures": 0,
+      "file": "resources_storage-and-backup.txt",
+      "final_url": "https://rcc.uchicago.edu/resources/storage-and-backup",
+      "in_sitemap": true,
+      "lastmod": "2022-11-17T21:07Z",
+      "removed": "",
+      "sha256": "d4ae0706c241b80daaadb623196821a859a89ed4c09bf393d08f640ad3fd8f1b"
+    },
+    "https://rcc.uchicago.edu/support-and-services": {
+      "error": "",
+      "failures": 0,
+      "file": "support-and-services.txt",
+      "final_url": "https://rcc.uchicago.edu/support-and-services",
+      "in_sitemap": true,
+      "lastmod": "2025-02-26T15:20Z",
+      "removed": "",
+      "sha256": "7f2aa3ca2415d31983c89b15b414ac0e1c73b5d4e6cb4e2c95889f340fc27f82"
+    },
+    "https://rcc.uchicago.edu/support-and-services/cluster-partnership-program": {
+      "error": "",
+      "failures": 0,
+      "file": "support-and-services_cluster-partnership-program.txt",
+      "final_url": "https://rcc.uchicago.edu/support-and-services/cluster-partnership-program",
+      "in_sitemap": true,
+      "lastmod": "2024-11-18T14:50Z",
+      "removed": "",
+      "sha256": "fe0f6ae1bc5a9d22ce0c75c814e49f16e38d302d4ff406a115601c9c9a005adc"
+    },
+    "https://rcc.uchicago.edu/support-and-services/consultant-partnership-program": {
+      "error": "",
+      "failures": 0,
+      "file": "support-and-services_consultant-partnership-program.txt",
+      "final_url": "https://rcc.uchicago.edu/support-and-services/consultant-partnership-program",
+      "in_sitemap": true,
+      "lastmod": "2024-11-18T14:52Z",
+      "removed": "",
+      "sha256": "dfd79a85f2962a7ac5eb390d6585ca20099723932f91dff3293df0ccd305ecad"
+    },
+    "https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support": {
+      "error": "",
+      "failures": 0,
+      "file": "support-and-services_consulting-and-technical-support.txt",
+      "final_url": "https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support",
+      "in_sitemap": true,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "056f0fdb4939acfd8eeb0cb8e3168a622fe39cce592c3d7c6973438c37ff5f76"
+    },
+    "https://rcc.uchicago.edu/support-and-services/data-management": {
+      "error": "",
+      "failures": 0,
+      "file": "support-and-services_data-management.txt",
+      "final_url": "https://rcc.uchicago.edu/support-and-services/data-management",
+      "in_sitemap": true,
+      "lastmod": "2025-02-12T20:36Z",
+      "removed": "",
+      "sha256": "ba497b0558799f25654df75450c00766c032da086844bc4b63ed1c4ba39456bf"
+    },
+    "https://rcc.uchicago.edu/support-and-services/data-sharing-services": {
+      "error": "",
+      "failures": 0,
+      "file": "support-and-services_data-sharing-services.txt",
+      "final_url": "https://rcc.uchicago.edu/support-and-services/data-sharing-services",
+      "in_sitemap": true,
+      "lastmod": "2022-11-17T21:07Z",
+      "removed": "",
+      "sha256": "44f83ec4143edb6065fa580a29b0eeabb355d54aa5f99f732b376ed461edeba5"
+    },
+    "https://rcc.uchicago.edu/support-and-services/midway2": {
+      "error": "",
+      "failures": 0,
+      "file": "support-and-services_midway2.txt",
+      "final_url": "https://rcc.uchicago.edu/support-and-services/midway2",
+      "in_sitemap": true,
+      "lastmod": "2022-06-04T16:19Z",
+      "removed": "",
+      "sha256": "8c474e45a24a548570cf2cc59ecc8e87ab110e44e964ad6f2b3d148eca51ee75"
+    },
+    "https://rcc.uchicago.edu/support-and-services/new-faculty-program": {
+      "error": "",
+      "failures": 0,
+      "file": "support-and-services_new-faculty-program.txt",
+      "final_url": "https://rcc.uchicago.edu/support-and-services/new-faculty-program",
+      "in_sitemap": true,
+      "lastmod": "2024-11-18T15:10Z",
+      "removed": "",
+      "sha256": "5c73e3ff9fe1c3dc9fd923e26ff2ac5687b69bd5ed9c7a79cd864f44aeba98f2"
+    },
+    "https://rcc.uchicago.edu/support-and-services/outreach": {
+      "error": "",
+      "failures": 0,
+      "file": "support-and-services_outreach.txt",
+      "final_url": "https://rcc.uchicago.edu/support-and-services/outreach",
+      "in_sitemap": true,
+      "lastmod": "2023-03-14T13:38Z",
+      "removed": "",
+      "sha256": "224156a5871eb24c03f457d6adce1d7bef95a45bd946932e2947d0da1dd8f3f4"
+    },
+    "https://rcc.uchicago.edu/support-and-services/workshops-and-training": {
+      "error": "",
+      "failures": 0,
+      "file": "support-and-services_workshops-and-training.txt",
+      "final_url": "https://rcc.uchicago.edu/support-and-services/workshops-and-training",
+      "in_sitemap": true,
+      "lastmod": "2026-10-02T20:20Z",
+      "removed": "",
+      "sha256": "553aaf571fd57d0150e5d1cd849d1a3fd00efbeb8a6b212b7e3f022c5b51ada3"
+    },
+    "https://vislab.rcc.uchicago.edu/our-work-color": {
+      "error": "",
+      "failures": 0,
+      "file": "our-work-color.txt",
+      "final_url": "https://vislab.rcc.uchicago.edu/our-work-color/",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "c971bfd16081f486468ed30fd0c891eb7ccc8a12e05c8574729e4127aab81447"
+    },
+    "https://vislab.rcc.uchicago.edu/tools-resources-color": {
+      "error": "",
+      "failures": 0,
+      "file": "tools-resources-color.txt",
+      "final_url": "https://vislab.rcc.uchicago.edu/tools-resources-color/",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "742ceed433cb14aa9b1a7a8b17a1bf8445018a6f24680e753e8a0196d6c266c7"
+    },
+    "https://vislab.rcc.uchicago.edu/workshops-events": {
+      "error": "",
+      "failures": 0,
+      "file": "workshops-events.txt",
+      "final_url": "https://vislab.rcc.uchicago.edu/workshops-events/",
+      "in_sitemap": false,
+      "lastmod": null,
+      "removed": "",
+      "sha256": "e5a2e381236915e4638c06cbda123497dbc38a57c29cd4bf50520ced756eb018"
+    }
+  }
+}

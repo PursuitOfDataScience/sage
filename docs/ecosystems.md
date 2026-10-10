@@ -35,7 +35,7 @@ GM4, a GPU-enabled cluster, is part of the Midway2 ecosystem and facilitates mul
 
 ## SDE Ecosystem
 ### [SDE3](https://sde-midwayr.rcc.uchicago.edu/)
-SDE3 is a trusted HPC environment for research on regulated data.
+SDE3 is a trusted HPC environment for research on regulated data. While the workflows on SDE3 are largely similar to those of a general-purpose HPC environment, additional controls are in place to strengthen data security and privacy, as described in the [SDE3 User Guide](tutorials/sde3/overview.md).
 
 ### SDE2
-SDE2 is a trusted HPC environment for research on regulated data.
+SDE2 is a trusted HPC environment for research on regulated data compliant with NIST SP800-53. While the workflows on SDE2 are largely similar to those of a general-purpose HPC environment, additional controls are in place to strengthen data security and privacy, as described in the [SDE2 User Guide](tutorials/sde2/overview.md).

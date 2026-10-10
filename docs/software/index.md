@@ -41,10 +41,12 @@ If you need software not currently available in the module system and believe th
 This guide contains instructions for some commonly used applications and environments, including: 
 
 * [Alphafold](../software/apps-and-envs/alphafold.md)
+* [CESM](../software/apps-and-envs/cesm.md)
 * [CryoSPARC](../software/apps-and-envs/cryosparc.md)
 * [Gaussian](../software/apps-and-envs/gaussian.md)
 * [GROMACS](../software/apps-and-envs/gromacs.md) 
 * [LAMMPS](../software/apps-and-envs/lammps.md)
+* [MeshLab](../software/apps-and-envs/meshlab.md)
 * [MATLAB](../software/apps-and-envs/matlab.md)    
 * [Mathematica](../software/apps-and-envs/mathematica.md)
 * [NAMD](../software/apps-and-envs/namd.md)
@@ -61,4 +63,5 @@ This guide contains instructions for some commonly used applications and environ
 * [Stata](../software/apps-and-envs/stata.md) 
 * [Tensorflow and PyTorch](../software/apps-and-envs/tf-and-torch.md)
 * [VS Code (SCode)](../software/apps-and-envs/scode/main.md)
+* [WRF](../software/apps-and-envs/wrf.md)
 

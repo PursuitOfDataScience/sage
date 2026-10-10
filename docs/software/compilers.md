@@ -54,14 +54,14 @@ The list of libraries and software suites that provide MPI libraries is given as
       |----------------|-------------------------|----------------------|-------------------------------------|
       | OpenMPI        | `openmpi`               | C <br>C++<br>Fortran | `mpicc`<br>`mpicxx`<br>`mpif90`     |
       | MPICH          | `mpich`                 | C <br>C++<br>Fortran | `mpicc`<br>`mpicxx`<br>`mpif90`     |
-      | Intel          | `intelmpi`<br>`oneaapi` | C <br>C++<br>Fortran | `mpiicc`<br>`mpiicpc`<br>`mpiifort` |
+      | Intel          | `intelmpi`<br>`oneapi` | C <br>C++<br>Fortran | `mpiicc`<br>`mpiicpc`<br>`mpiifort` |
       | NVIDIA         | `nvhpc`                 | C <br>C++<br>Fortran | `nvc`<br>`nvc++`<br>`nvfortran`     |
 ===+ "Midway3"
       | Implementation | Module                  | Language             | Wrapper                             |
       |----------------|-------------------------|----------------------|-------------------------------------|
       | OpenMPI        | `openmpi`               | C <br>C++<br>Fortran | `mpicc`<br>`mpicxx`<br>`mpif90`     |
       | MPICH          | `mpich`                 | C <br>C++<br>Fortran | `mpicc`<br>`mpicxx`<br>`mpif90`     |
-      | Intel          | `intelmpi`<br>`oneaapi` | C <br>C++<br>Fortran | `mpiicc`<br>`mpiicpc`<br>`mpiifort` |
+      | Intel          | `intelmpi`<br>`oneapi` | C <br>C++<br>Fortran | `mpiicc`<br>`mpiicpc`<br>`mpiifort` |
       | NVIDIA         | `nvhpc`                 | C <br>C++<br>Fortran | `nvc`<br>`nvc++`<br>`nvfortran`     |
 
 !!! note
@@ -88,7 +88,7 @@ make -j4
 
 If the build succeeds, you will see a LAMMPS binary, namely `lmp`, generated under the folder `/project/[pi-folder]/lammps/[your-cnetid]/build`.
 
-You can use other compilers (Intel oneAPI, GNU GCC) and MPI libraries (OpenMPI, MPICH). For GPU codes, you can use NVIDIA HPC SDK and Intel oneAPI. More information on the available development tools is given in [Compilers](../software/compilers.md). 
+You can use other compilers (Intel oneAPI, GNU GCC) and MPI libraries (OpenMPI, MPICH). For GPU codes, you can use NVIDIA HPC SDK and Intel oneAPI. More information on the available development tools is given in the [GPU codes](#gpu-codes) section below. 
 
 ## GPU codes
 

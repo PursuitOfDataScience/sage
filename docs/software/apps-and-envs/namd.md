@@ -90,7 +90,7 @@ The following script shows how to run NAMD 2.14 for a replica exchange simulatio
 #SBATCH --gres=gpu:1          # 1 GPU per node
 #SBATCH --constraint=v100
 
-module load namd/2.14+intel-2022.0+cuda-11.5+mult
+module load namd/2.14+intel-2022.0+cuda-11.5+multi
 
 ulimit -l unlimited
 

@@ -32,7 +32,7 @@ This will launch Matlab’s textual interface. We recommend running Matlab on a 
 
 ## Using Matlab’s GUI Interface
 
-To use Matlab’s GUI interface on Midway, we reccomend connecting to Midway via ThinLinc. 
+To use Matlab’s GUI interface on Midway, we recommend connecting to Midway via ThinLinc. 
 
 Note that once connected via ThinLinc, you will be accessing a Midway login node.  In order to run Matlab with its GUI interface on a compute node, obtain a terminal in the ThinLinc desktop and issue the **sinteractive** command.  This will deliver you to a compute node.  From there, you can launch Matlab with the command:
 
@@ -45,7 +45,7 @@ and have access to the GUI interface.
 
 ## Running Matlab Jobs with SLURM
 
-To submit Matlab jobs to Midway’s resource scheduler, SLURM, the Matlab commands to be executed must be containined in a single .m script.
+To submit Matlab jobs to Midway’s resource scheduler, SLURM, the Matlab commands to be executed must be contained in a single .m script.
 
 `matlab_simple.m` is a basic Matlab script that computes and prints a 10x10 magic square
 
@@ -67,7 +67,7 @@ Computing Toolbox User’s Guide is the official documentation and should be
 referred to for further details, examples and explanations.  Here, we provide
 some Midway-specific considerations that RCC users should be aware of.
 
-RCC reccomends MATLAB 2014b for parallel matlab computing as it relaxes the restriction on number of workers available through the PCT.
+RCC recommends MATLAB 2014b for parallel matlab computing as it relaxes the restriction on number of workers available through the PCT.
 
 **NOTE**: At this time, RCC does not support the Matlab Distributed Compute Server (MDCS).  As such, parallel Matlab jobs are limited to a single node with the “local” pool through use of the Parallel Compute Toolbox (PCT). 
 

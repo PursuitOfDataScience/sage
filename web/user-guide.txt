@@ -2,100 +2,60 @@ URL: https://cloud-skyway.rcc.uchicago.edu/user-guide
 Title: User Guide | Skyway - RCC Cloud Solution
 ================================================================================
 Learn how to use Skyway - RCC Cloud Solution Offering
-Requirements of using Skyway
-Have an active RCC user account
-Experience using the Midway cluster
-Experience using the SLURM resource scheduler
-Login to Skyway
-[et_pb_dmb_code_snippet title="First, Login to the Midway cluster." code="c3NoIFtDTmV0SURdQG1pZHdheTIucmNjLnVjaGljYWdvLmVkdQ==" _builder_version="4.4.1″ body_font="Ubuntu Mono||||||||" header_font="|700|||||||" header_font_size="16px" _i="4″ _address="1.0.0.4″ /][et_pb_dmb_code_snippet title="Then, login to Skyway from Midway" code="c3NoIHNreXdheS5yY2MudWNoaWNhZ28uZWR1″ _builder_version="4.4.1″ body_font="Ubuntu Mono||||||||" header_font="|700|||||||" header_font_size="16px" _i="5″ _address="1.0.0.5″ /]
-File Systems
-1. /home/[CNetID]
-This is the temporary home directory (no backup) for users on Skyway. Note, this isNOT the home file system on Midway, so you won't see any contents from your home directory on midway. Please do store any sizable or important data here.
-TO DO: Add note here about changing
-$HOME environment variable to
-/cloud/aws/[CNetID]
-2. /project and /project2
-This is the RCC high-performance capacity storage file systems from Midway, mounted on Skyway, with the same quotas and usages as on Midway. Just as with running jobs on Midway, /project and /project2 should be treated as the location for users to store the data they intend to keep. This also acts as a way to make data accessible between Skyway and midway as the /project and /project2 filesystems are mounted on both systems.
-Run cd /project/<labshare>
-/project2/<labshare>
-, where
-<labshare>
-is the name of the lab account, to access the files by your lab or group. This will work even if the lab share directory does not appear in a file listing, e.g.,
-ls /project
-3. /cloud/[cloud]/[CNetID]
-Options of [
-cloud aws gcp
-This is the cloud scratch folder (no backup), which is intended for read/write of cloud compute jobs. For example, with Amazon cloud resources (AWS) The remote cloud S3 AWS bucket storage is mounted to Skyway at this path. Before submitting jobs to the cloud compute resources, users must first stage the data, scripts and executables their cloud job will use to the folder. After running their cloud compute job, users should then copy the data they wish to keep from the folder back to their project folder. Similarly, if users are using Google Cloud Platform (GCP), the scratch folder /cloud/gcp/[CNetID]
-should be used.
-Software Modules uses the same module version as is used on the Midway cluster to manage software packages, but the software modules are not the same. To check the available software modules on Skyway, issue the command "
-module avail
-". For more information on using the module commands, see the module user manual . If there is a particular software package missing that your workflow requires, please write to help@rcc.uchicago.edu to request it be added to Skyway.
-Current list of software modules installed on Skyway includes the following:
-anaconda2
--- Python2 Anaconda distribution anaconda3
--- Python3 Anaconda distribution parallelstudio
--- Intel compilers and mkl library
--- statistical analsysis cuda
--- compiler tools gromacs
--- molecular dynamics software plumed
--- metadynamics package
-How to prepare executable binaries?
-It is not recommended to compile or install software packages directly on
-. Users should compile and install their own codes on the
-Midway2 cluster. Midway2 and Skyway have the same system architecture so any codes compiled on Midway2 will also likely run on Skyway without any recompilation.
-Note that the
-/project and /project2 folders are only visible from skyway (skyway login). They are not visible from the cloud compute nodes, which is why users must copy the executable and other data required of their job, into the scratch space (
-/cloud/aws
-) in order for it to be accessible from the cloud compute nodes.
-Submit and Manage Jobs via SLURM
-Skyway uses
-SLURM to submit jobs the same as on the Midway cluster. Some commonly used commands are:
-sinfo
-- Show compute nodes status sbatch
-- Submit computing jobs scancel
-- Cancel submitted jobs sacct
-- Check logs of recent jobs
-When submitting jobs, include following two options in the job script:
--partition=rcc-aws
--account=rcc-aws
-Specify the cloud compute resource:
-To submit jobs to cloud, you must specify a type of virtual machine (VM) by the option
---constraint=[VM Type]
-. The VM types currently supported through Skyway can be found in the table below. You can also get an up-to-date listing of the machine types by running command sinfo-node-types on a skyway login node.
-VM Type
-Description
-AWS EC2 Instance Type
-1 core, 1G Mem (for testing and building software)
-t2.micro
-1 core, 4G Mem (for serial jobs)
-c5.large
-8 cores, 32G Mem (for medium sized multicore jobs)
-c5.4xlarge c36
-36 cores, 144G Mem (for large memory jobs)
-c5.18xlarge m24
-24 cores, 384G Mem r5.12xlarge
-1x V100 GPU p3.2xlarge
-4x V100 GPUs p3.8xlarge
-8x V100 GPUs p3.16xlarge
-To see more information about these types, please visit
-AWS EC2 Website
-. Please note that we are using the C5 compute optimized for Skyway at this moment, and the cores for each type is half (physical cores) as the numbers listed as vCPU (with hyper-threaded cores) on the website.
-[et_pb_dmb_code_snippet title="A sample job script: sample.sbatch" code="IyEvYmluL3NoCgojU0JBVENIIC0tam9iLW5hbWU9VEVTVAojU0JBVENIIC0tcGFydGl0aW9uPXJjYy1hd3MKI1NCQVRDSCAtLWFjY291bnQ9cmNjLWF3cwojU0JBVENIIC0tZXhjbHVzaXZlCiNTQkFUQ0ggLS1udGFza3M9MQojU0JBVENIIC0tY29uc3RyYWludD10MiAjIFNwZWNpZmllcyB5b3Ugd291bGQgbGlrZSB0byB1c2UgYSB0MiBpbnN0YW5jZQoKY2QgJFNMVVJNX1NVQk1JVF9ESVIKCmhvc3RuYW1lCmxzY3B1CmxzY3B1IC0tZXh0ZW5kZWQKZnJlZSAtaA==" _builder_version="4.4.1″ body_font="Ubuntu Mono||||||||" header_font="|700|||||||" header_font_size="16px" _i="3″ _address="1.3.0.3″ /]
-Interactive Jobs
-[et_pb_dmb_code_snippet title="Example of a testing node" code="c2ludGVyYWN0aXZlIC0tcGFydGl0aW9uPXJjYy1hd3MgLS1jb25zdHJhaW50PXQyIC0tbnRhc2tzPTE=" _builder_version="4.4.1″ body_font="Ubuntu Mono||||||||" header_font="|700|||||||" header_font_size="16px" _i="5″ _address="1.3.0.5″ /][et_pb_dmb_code_snippet title="Example of GPU jobs:" code="c2ludGVyYWN0aXZlIC0tcGFydGl0aW9uPXJjYy1hd3MgLS1jb25zdHJhaW50PWcxIC0tbnRhc2tzPTEgLS1ncmVzPWdwdTox" _builder_version="4.4.1″ body_font="Ubuntu Mono||||||||" header_font="|700|||||||" header_font_size="16px" _i="6″ _address="1.3.0.6″ /]
-User Packages for R and Python
-The popular scripting languages, Python and R, manage their own packages/modules library. As usually the system location for these software and library are read-only, regular users usually install local packages by their own in the home folders (i.e.,
-/home/[username]
-) by default. However, this is not recommended on Skyway, as it is expected that all user contents are stored at the cloud scratch space at /cloud/aws/[username]
-. Therefore, there are some extra steps to modify the default packages path for using Python and R.
-Setting user local packages path for R
-[et_pb_dmb_code_snippet title="You can run following commands before running R or put them into ~/.bashrc" code="ZXhwb3J0IFJfTElCU19VU0VSPS9jbG91ZC9hd3MvJHtVU0VSfS9wa2dzLVIKaWYgWyAhIC1kICIke1JfTElCU19VU0VSfSIgXTsgdGhlbiBta2RpciAke1JfTElCU19VU0VSfTsgZmk=" _builder_version="4.4.1″ body_font="Ubuntu Mono||||||||" header_font="|700|||||||" header_font_size="16px" _i="10″ _address="1.3.0.10″ /][et_pb_dmb_code_snippet title="After launching R, you can check if the default (first) path for packages is correct. Example" code="W3l1eGluZ0ByY2MtYXdzLXQyLW1pY3JvLTAwMSB+XSQgbW9kdWxlIGxvYWQgUgpbeXV4aW5nQHJjYy1hd3MtdDItbWljcm8tMDAxIH5dJCBSCi4uLgo+IC5saWJQYXRocygpClsxXSAiL2Nsb3VkL2F3cy95dXhpbmcvcGtncy1SIiAgICAgICAgICIvc29mdHdhcmUvci0zLjUvbGliNjQvUi9saWJyYXJ5Ig==" _builder_version="4.4.1″ body_font="Ubuntu Mono||||||||" header_font="|700|||||||" header_font_size="16px" _i="11″ _address="1.3.0.11″ /]
-Setting user local packages path for IPython
-PIP tool is used to install/manage Python packages.
-[et_pb_dmb_code_snippet title="To install packages in a different location, you need to specify the %22prefix%22 option. Example:" code="cGlwIGluc3RhbGwgLS1pbnN0YWxsLW9wdGlvbj0iLS1wcmVmaXg9JHtQS0dTX1BZVEhPTn0iIHBhY2thZ2VfbmFtZQ==" _builder_version="4.4.1″ body_font="Ubuntu Mono||||||||" header_font="|700|||||||" header_font_size="16px" custom_padding="0px|||||" _i="14″ _address="1.3.0.14″ /]
-${PKGS_PYTHON}
-should point to the path for the package installations, and you need to also add it intoPYTHONPATH before running IPython in order to load modules successfully. Example:
-[et_pb_dmb_code_snippet title="The following commands can be added to ~/.bashrc" code="ZXhwb3J0IFBLR19QWVRIT049L2Nsb3VkL2F3cy8ke1VTRVJ9L3BrZ3MtcHl0aG9uCmlmIFsgISAtZCAiJHtQS0dfUFlUSE9OfSIgXTsgdGhlbiBta2RpciAke1BLR19QWVRIT059OyBmaQpleHBvcnQgUFlUSE9OUEFUTj0ke1BLR19QWVRIT059OiR7UFlUSE9OUEFUSH0=" _builder_version="4.4.1″ body_font="Ubuntu Mono||||||||" header_font="|700|||||||" header_font_size="16px" _i="16″ _address="1.3.0.16″ /]
-Setting user local packages path for Conda
-The best way to manage your local packages for Python within Conda software (Anaconda or Miniconda) is using the virtual environment.
-[et_pb_dmb_code_snippet title="You can create your own virtual environment under the cloud scratch space. Example:" code="Y29uZGEgY3JlYXRlIC0tcHJlZml4PS9jbG91ZC9hd3MvJHtVU0VSfS9jb25kYQ==" _builder_version="4.4.1″ body_font="Ubuntu Mono||||||||" header_font="|700|||||||" header_font_size="16px" _i="18″ _address="1.3.0.18″ /][et_pb_dmb_code_snippet title="You should see the result like:" code="U29sdmluZyBlbnZpcm9ubWVudDogZG9uZQoKIyMgUGFja2FnZSBQbGFuICMjCgogIGVudmlyb25tZW50IGxvY2F0aW9uOiAvY2xvdWQvYXdzL3l1eGluZy9jb25kYQoKUHJvY2VlZCAoW3ldL24pPyB5CgpQcmVwYXJpbmcgdHJhbnNhY3Rpb246IGRvbmUKVmVyaWZ5aW5nIHRyYW5zYWN0aW9uOiBkb25lCkV4ZWN1dGluZyB0cmFuc2FjdGlvbjogZG9uZQojCiMgVG8gYWN0aXZhdGUgdGhpcyBlbnZpcm9ubWVudCwgdXNlOgojID4gc291cmNlIGFjdGl2YXRlIC9jbG91ZC9hd3MveXV4aW5nL2NvbmRhCiMKIyBUbyBkZWFjdGl2YXRlIGFuIGFjdGl2ZSBlbnZpcm9ubWVudCwgdXNlOgojID4gc291cmNlIGRlYWN0aXZhdGUKIw==" _builder_version="4.4.1″ body_font="Ubuntu Mono||||||||" header_font="|700|||||||" header_font_size="16px" _i="19″ _address="1.3.0.19″ /]
+## Requirements of using Skyway
+* Have an active RCC user account
+* Experience using the Midway cluster
+* Experience using the SLURM resource scheduler (optional)
+## Access to Skyway
+* Login to the RR Midway3 cluster
+```bash ssh [your-cnetid]@midway3.rcc.uchicago.edu
+```
+* Load the Skyway module on the login node module load skyway
+## Using Skyway on the RCC Midway3 cluster
+You submit jobs to cloud in a similar manner to what do on your HPC cluster. The difference is that you should specify different partitions and accounts corresponding to the cloud services you have access to. Additionally, the instance configuration should be specified via --constraint.
+### List all the node types available to an account skyway_nodetypes --account=your-cloud-account skyway_nodetypes --account=your-gcp-account To submit jobs to cloud, you must specify a type of virtual machine (VM) by the option `--constraint=[VM Type]`. For instance, the AWS VM types currently available through Skyway can be found in the table below. Other VM types will be included per requests.
+| VM Type | AWS EC2 Instance | Configuration | Description |
+| ------- | ---------------- | ------------- | ----------- |
+| t1 | t2.micro | 1 core, 1GB RAM | for testing and building software |
+| c1 | c5.large | 1 core, 4B RAM | for serial jobs |
+| c8 | c5.4xlarge | 8 cores, 32GB RAM | for medium sized multicore jobs |
+| c36 | c5.18xlarge | 36 cores, 144GB RAM | for large memory jobs |
+| g1 | p3.2xlarge | 4 cores, 61 GB RAM, 1x V100 GPU | for GPU jobs |
+| g4 | p3.8xlarge | 16 cores, 244 GB RAM, 4x V100 GPU | for heavy GPU jobs |
+| g5 | p5.2xlarge | 8 cores, 32 GB RAM, 1x A10G GPU | for heavy GPU jobs |
+| m24 | c5.12xlarge | 24 cores, 384GB RAM | for large memory jobs |
+The following steps show a representative workflow with Skyway.
+### Allocate/provision an instance skyway_alloc --account=your-cloud-account --constraint=t1 --time=01:00:00
+For a GPU instance, use skyway_alloc -A your-cloud-account --constraint=g5 --time=00:30:00
+### List all the running VMs with an account skyway_list --account=your-cloud-account ### Transfer data To copy a file from the login node to the instance named `your-run`
+skyway_transfer -A your-cloud-account -J your-run training.py
+Transfer a file from an instance to the login node skyway_transfer -A your-cloud-account -J your-run --from-cloud --cloud-path=~/output.txt $HOME/output.txt ### Connect to the VM named your-run skyway_connect --account=your-cloud-account your-run Once on the VM, do nvidia-smi source activate pytorch python training.py > ~/output.txt scp output.txt [yourcnetid]@midway3.rcc.uchicago.edu:~/
+exit
+At this point, there would be a file named output.txt in your Midway3 home folder.
+### Stop/restart a job
+To stop an instance, you use the `skyway_stop` command with your account and the instance ID:
+skyway_stop -A=your-cloud-account -i [instanceID]
+The stopped instance does not get charged and the data on the VM is preserved.
+To restart a stopped instance, you use the `skyway_restart` command with your account and the instance ID:
+skyway_restart -A=your-cloud-account -i [instanceID] -t 02:00:00
+### Cancel/terminate/cancel a job skyway_cancel --account=your-cloud-account [job_name]
+Expected behavior: The jobs (VMs) got terminated. When run `skyway_list` (step 3 above) the VM will not be present.
+Note that when a VM is terminated, all the data on the VM is erased. The user should transfer the intermediate output to a cloud storage space or to local storage.
+The following steps are for launching interactive and batch jobs.
+### Submit an interactive job skyway_interative --account=your-cloud-account --constraint=t1 --time=01:00:00 skyway_interative --account=your-cloud-account --constraint=g5 -t 00:30:00
+Expected behavior: the user lands on a compute node or a VM on a separate terminal.
+### Submit a batch job
+A sample job script `job_script.sh` is given as bellow
+#!/bin/sh
+#SBATCH --job-name=your-run
+#SBATCH --account=your-cloud-account
+#SBATCH --constraint=g1
+#SBATCH --time=06:00:00 skyway_transfer training.py wget [url-of-the-dataset]
+python training.py
+To submit the job, use the `skyway_batch` command skyway_batch job_script.sh
+If the job is terminated due to time limit, the instance is stopped. You can find the instance ID with the `skyway_list` command and restart it to back up the data.
+Transfer output data from cloud skyway_transfer -A your-cloud-account -J your-run --from-cloud --cloud-path=~/model*.pkl .
+You can cancel the job using the `skyway_cancel` command.
+## Troubleshooting
+For further assistance, please contact our Help Desk at [help@rcc.uchicago.edu](mailto:help@rcc.uchicago.edu).
+Loading ...

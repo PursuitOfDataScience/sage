@@ -6,7 +6,7 @@ Keywords: `biology`, `physics`, `chemistry`, `molecular dynamics`
 
 
 ## Available modules
-There are several OpenMM modules on Midway3 that you can check via `module avail opemm`:
+There are several OpenMM modules on Midway3 that you can check via `module avail openmm`:
 
 ===+ "Midway3"
     ```
@@ -36,7 +36,7 @@ https://openmm.org/documentation
 
 The following is an example batch script for running OpenMM on Midway3.
 ```
-!/bin/bash
+#!/bin/bash
 #SBATCH --job-name=openmm-bench
 #SBATCH --account=pi-[cnetid]
 #SBATCH --time=01:00:00

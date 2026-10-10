@@ -1,6 +1,7 @@
 URL: https://rcc.uchicago.edu/data-visualization-initiative-advisory-committee
 Title: Data Visualization Initiative Advisory Committee | Research Computing Center
 ================================================================================
+Data Visualization Initiative Advisory Committee
 The charge of the Research Computing Center Data Visualization Initiative Advisory Committee is to promote and advise data visualization services that will support research and scholarship at the University of Chicago.
 The committee includes:
 John A. Goldsmith

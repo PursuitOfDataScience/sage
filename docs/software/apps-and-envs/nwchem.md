@@ -7,7 +7,7 @@ Check out the NWChem documentation for more information: https://nwchemgit.githu
 Keywords: `quantum chemistry`, `chemistry`
 
 ## Available modules
-You can check the avaiable `nwchem` module(s) installed via `module avail nwchem`:
+You can check the available `nwchem` module(s) installed via `module avail nwchem`:
 
 ===+ "Midway3"
     ```

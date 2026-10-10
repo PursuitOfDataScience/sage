@@ -39,7 +39,7 @@ You will be prompted to enter the password when establishing the connection. Avo
     
 
 ### Method 3. Download Data from UChicago Box 		
-If regulated data was shared with you via UChicago Box or was originally collected through UChicago Box, you can access it using browser. Please consult with [UChicago Sensitive Data Usage Guide](https://dsc.uchicago.edu/university-of-chicago-sensitive-data-usage-guide/) for data types allowed in UChciago Box.
+If regulated data was shared with you via UChicago Box or was originally collected through UChicago Box, you can access it using a browser. Please consult with [UChicago Sensitive Data Usage Guide](https://dsc.uchicago.edu/university-of-chicago-sensitive-data-usage-guide/) for data types allowed in UChicago Box.
 
 Once you logged in to the SDE3 desktop , you can open a browser and log in to a Box account at [https://uchicago.account.box.com](https://uchicago.account.box.com/login):<br><br>
 ![screenshot showing VMware Horizon data transfer](images/box_login.jpg)

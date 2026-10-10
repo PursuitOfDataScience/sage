@@ -77,7 +77,7 @@ This will ensure that necessary environment variables and system modules such as
 
 ### Step 1.3: Install Necessary VS Code Extensions
 
-To take full advantage of language features in VS Code (e.g., autocompletion, linting, Jupyter notebook support), you can install the relevant extensions using `scode` before [starting the server](#step-2-launch-a-vscode-server).
+To take full advantage of language features in VS Code (e.g., autocompletion, linting, Jupyter notebook support), you can install the relevant extensions using `scode` before [starting the server](#step-2-launch-a-vs-code-server).
 
 For instance, for Python developments, run the following command **on the login node**:
 

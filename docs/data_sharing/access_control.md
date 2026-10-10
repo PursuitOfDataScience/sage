@@ -131,7 +131,7 @@ $ chmod -R 770 drpepper
 $ cd drpepper
 ```
 
-By this steo, the folder `drpepper` becomes readable and writable by all members of group `pi-drpepper`. Then, you can use the `setfacl` command to control the individual user's access precisely. First, you need to remove the default group access by ACL:
+By this step, the folder `drpepper` becomes readable and writable by all members of group `pi-drpepper`. Then, you can use the `setfacl` command to control the individual user's access precisely. First, you need to remove the default group access by ACL:
 
 ```default
 $ setfacl -m g::--- my_folder

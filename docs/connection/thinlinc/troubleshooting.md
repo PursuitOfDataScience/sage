@@ -3,7 +3,7 @@
 
 ## ThinLinc client 
 
-When logging into the ThinLinc app, click `end existing session`. This will terminal other open sessions. 
+When logging into the ThinLinc app, click `end existing session`. This will terminate other open sessions. 
 
 ## Check your account quota
 

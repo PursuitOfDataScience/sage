@@ -49,12 +49,12 @@ module unload <module-name>
 
 ### How do I request installation of a new or updated software package? 
 
-Please [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'} with the details of your software request, including the following informaiton: 
+Please [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'} with the details of your software request, including the following information: 
 
 ### How can I use Gaussian on the RCC machines?
 
-Gaussian is a commercial software. If you need to use Gaussian for your research, please [fill out this from](https://rcc.uchicago.edu/accounts-allocations/general-user-account-request){:target='_blank'} and for the `Principal Investigator account name (probably pi-CNetID):` type in `gaussian`. Our team will process you request in a few hours. 
+Gaussian is a commercial software. If you need to use Gaussian for your research, please [fill out this form](https://rcc.uchicago.edu/accounts-allocations/general-user-account-request){:target='_blank'} and for the `Principal Investigator account name (probably pi-CNetID):` type in `gaussian`. Our team will process your request in a few hours. 
 
 ### How can I run COMSOL on the RCC machines?
 
-COMSOL is a commercial software. To use COMSOL for your research, please [fill out this from](https://rcc.uchicago.edu/accounts-allocations/general-user-account-request){:target='_blank'} and for the `Principal Investigator account name (probably pi-CNetID):` type in `comsol`. Our team will process you request in a few hours.
+COMSOL is a commercial software. To use COMSOL for your research, please [fill out this form](https://rcc.uchicago.edu/accounts-allocations/general-user-account-request){:target='_blank'} and for the `Principal Investigator account name (probably pi-CNetID):` type in `comsol`. Our team will process your request in a few hours.

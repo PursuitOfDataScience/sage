@@ -1,6 +1,9 @@
 URL: https://vislab.rcc.uchicago.edu/workshops-events
 Title: Events | Visualization Laboratory - Research Computing Center
 ================================================================================
+Events
+Upcoming Events
+Past Events
 Covid-19 Epidemic Data Visualization Workshop
 Wednesday, May 20, 2020
 5:00 pm

@@ -5,7 +5,7 @@
 - [Available R Modules](#available-r-modules)
 - [Using R for High-Performance Computing (HPC)](#using-r-for-high-performance-computing-hpc)
 - [Installing R Packages](#installing-r-packages)
-- [Using the renv Package for Reproducibility](#using-the-renv-package-for-reproducibility)
+- [Using the renv Package for Reproducibility](#using-the-renv)
 - [Best Practices](#best-practices)
 - [FAQ](#faq)
 - [Troubleshooting](#troubleshooting)
@@ -235,7 +235,7 @@ install.packages(c("package1", "package2"))
 ---
 
 
-## Using the `renv` R Package to Create a Personal R Project Environment
+## Using the `renv` R Package to Create a Personal R Project Environment {#using-the-renv}
 
 The `renv` package in R helps manage project-specific libraries, ensuring consistent package versions across projects. Here’s a step-by-step guide to set up and use `renv` for your project located at `/project/pi-cnetid/rproject/` on the Midway cluster.
 
