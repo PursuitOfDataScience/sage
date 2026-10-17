@@ -5,9 +5,12 @@ The Research Computing Center (RCC) conducts interactive workshops on a variety 
 In addition to workshops led by the RCC staff, the RCC routinely invites industry experts and hardware and software vendors to teach courses focused on specific systems.
 2026 RCC Workshop Series
 Fall Workshops
+Introduction to RCC Resources & Services
+Presenter: RCC staff
+Time and Location: 2:00 - 4:00 PM, Zar Room
+Date: Tuesday, October 13, 2026
 Claude Code in Practice
 Presenter: Youzhi Yu
-Time and Location: 2:00 - 4:00 PM, Zar Room
 Date: Wed, Oct 21, 2026
 Containers for HPC: Pre-built Scientific Software with E4S
 Presenter: Parmanand Sinha
