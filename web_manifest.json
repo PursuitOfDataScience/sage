@@ -92,8 +92,8 @@
       "sha256": "491d83cb13a7ecc1f7491862648a8519d6b72803f8de95c327e856882a930405"
     },
     "https://learn-radiology.rcc.uchicago.edu/incidence": {
-      "error": "HTTP 404",
-      "failures": 1,
+      "error": "HTTP 401",
+      "failures": 2,
       "file": "incidence.txt",
       "final_url": "https://learn-radiology.rcc.uchicago.edu/incidence",
       "in_sitemap": false,
@@ -102,18 +102,18 @@
       "sha256": "467450aa7cd8285ecb40f7ecfd00f688c73662f2698289d9ea281ca5821d4941"
     },
     "https://learn-radiology.rcc.uchicago.edu/mpMRI": {
-      "error": "HTTP 400",
-      "failures": 1,
+      "error": "HTTP 404",
+      "failures": 2,
       "file": "mpMRI.txt",
       "final_url": "https://learn-radiology.rcc.uchicago.edu/mpMRI",
       "in_sitemap": false,
       "lastmod": null,
-      "removed": "",
-      "sha256": "cb989faf4c76fc945250624b8fa15e917a3af7936a7fe71950b1ab2d9a247701"
+      "removed": "dead: HTTP 404",
+      "sha256": null
     },
     "https://learn-radiology.rcc.uchicago.edu/pirads": {
-      "error": "HTTP 401",
-      "failures": 1,
+      "error": "HTTP 400",
+      "failures": 2,
       "file": "pirads.txt",
       "final_url": "https://learn-radiology.rcc.uchicago.edu/pirads",
       "in_sitemap": false,
@@ -122,8 +122,8 @@
       "sha256": "e34005f2d96dd0dc7f24fbbc11a2b0a5c48ebc8009158711febdcec87813d293"
     },
     "https://learn-radiology.rcc.uchicago.edu/takecourse": {
-      "error": "HTTP 404",
-      "failures": 1,
+      "error": "HTTP 401",
+      "failures": 2,
       "file": "takecourse.txt",
       "final_url": "https://learn-radiology.rcc.uchicago.edu/takecourse",
       "in_sitemap": false,
@@ -133,13 +133,13 @@
     },
     "https://learn-radiology.rcc.uchicago.edu/team": {
       "error": "HTTP 404",
-      "failures": 1,
+      "failures": 2,
       "file": "team.txt",
       "final_url": "https://learn-radiology.rcc.uchicago.edu/team",
       "in_sitemap": false,
       "lastmod": null,
-      "removed": "",
-      "sha256": "192232cd43dc13f57543fb2fd3660684cefe333254383cb3a4aea6be476cd453"
+      "removed": "dead: HTTP 404",
+      "sha256": null
     },
     "https://rcc.uchicago.edu/about-rcc": {
       "error": "",
@@ -517,9 +517,9 @@
       "file": "support-and-services_workshops-and-training.txt",
       "final_url": "https://rcc.uchicago.edu/support-and-services/workshops-and-training",
       "in_sitemap": true,
-      "lastmod": "2026-10-02T20:20Z",
+      "lastmod": "2026-10-16T20:44Z",
       "removed": "",
-      "sha256": "553aaf571fd57d0150e5d1cd849d1a3fd00efbeb8a6b212b7e3f022c5b51ada3"
+      "sha256": "d3ec0b5f868a7572062171bfc33fdb3517971c70a449105ab06b1c80d87f0599"
     },
     "https://vislab.rcc.uchicago.edu/our-work-color": {
       "error": "",
