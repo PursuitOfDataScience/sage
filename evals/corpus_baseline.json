@@ -1,8 +1,7 @@
 {
  "_about": "What tests/test_corpus_health.py holds the bundled corpus to. Measured, not chosen: `python tools/corpus_check.py --update` writes it, the weekly corpus refresh runs that before its guards, and on any other change a difference here is the code.",
  "empty_documents": [
-  "docs/data_transfer/cloud/rclone.md",
-  "web/takecourse.txt"
+  "docs/data_transfer/cloud/rclone.md"
  ],
  "indexing_nothing": [
   "docs/data_transfer/cloud/rclone.md"

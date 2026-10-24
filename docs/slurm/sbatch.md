@@ -431,29 +431,55 @@ mpicc test-mpi.c -o mytest
 
 Then prepare a job script `test.sbatch` to submit a job to Midway to run the program:
 
-```bash
-#!/bin/bash
+=== "Midway2"
+    ```bash
+    #!/bin/bash
 
-#SBATCH --job-name=test
-#SBATCH --output=test.out
-#SBATCH --nodes=2
-#SBATCH --ntasks-per-node=28
-#SBATCH --partition=broadwl
+    #SBATCH --job-name=test
+    #SBATCH --output=test.out
+    #SBATCH --nodes=2
+    #SBATCH --ntasks-per-node=28
+    #SBATCH --partition=broadwl
 
-# Load the default OpenMPI module you used to compile the source file.
-module load openmpi
+    # Load the default OpenMPI module you used to compile the source file.
+    module load openmpi
 
-# relax the locked memory limit
-ulimit -l unlimited
+    # relax the locked memory limit
+    ulimit -l unlimited
 
-# Run the MPI program with mpirun. Although the -n flag is not required and
-# mpirun will automatically figure out the best configuration from the
-# Slurm environment variables, it is recommended to specify -n and/or -ppn
-# as explicit as possible.
+    # Run the MPI program with mpirun. Although the -n flag is not required and
+    # mpirun will automatically figure out the best configuration from the
+    # Slurm environment variables, it is recommended to specify -n and/or -ppn
+    # as explicit as possible.
 
-n=$(( SLURM_NUM_NODES * SLURM_NTASKS_PER_NODE ))
-mpirun -n $n --bind-to core --map-by core ./mytest
-```
+    n=$(( SLURM_NUM_NODES * SLURM_NTASKS_PER_NODE ))
+    mpirun -n $n --bind-to core --map-by core ./mytest
+    ```
+
+===+ "Midway3"
+    ```bash
+    #!/bin/bash
+
+    #SBATCH --job-name=test
+    #SBATCH --output=test.out
+    #SBATCH --nodes=2
+    #SBATCH --ntasks-per-node=48
+    #SBATCH --partition=caslake
+
+    # Load the default OpenMPI module you used to compile the source file.
+    module load openmpi
+
+    # relax the locked memory limit
+    ulimit -l unlimited
+
+    # Run the MPI program with mpirun. Although the -n flag is not required and
+    # mpirun will automatically figure out the best configuration from the
+    # Slurm environment variables, it is recommended to specify -n and/or -ppn
+    # as explicit as possible.
+
+    n=$(( SLURM_NUM_NODES * SLURM_NTASKS_PER_NODE ))
+    mpirun -n $n --bind-to core --map-by core ./mytest
+    ```
 
 !!! Note
     The options `--bind-to core --map-by core` were added to the `mpirun` command, indicating that the MPI tasks should be bound to physical CPU cores to improve performance.
@@ -749,7 +775,7 @@ or
 
 In the example `.sbatch` script above, the `%A_%a` notation is filled in with the master job id (`%A`) and the array task id (`%a`). This is a simple way to create output files in which the file name differs for each job in the array.
 
-The remaining options in the `.sbatch` script are the same as the options used in other, non-array settings; in this example, we are requesting that each array task be allocated 1 CPU (`--ntasks=1`) and 4 GB of memory (`--mem=4G`) on the `broadwl` partition (`--partition=broadwl`) for up to one hour (`--time=01:00:00`).
+The remaining options in the `.sbatch` script are the same as the options used in other, non-array settings; in this example, we are requesting that each array task be allocated 1 CPU (`--ntasks=1`) and 4 GB of memory (`--mem=4G`) on the standard compute partition (`--partition=caslake` on Midway3, `--partition=broadwl` on Midway2) for up to one hour (`--time=01:00:00`).
 
 Most partitions have limits on the number of array tasks that can run simultaneously. Consider parallel batch jobs to achieve a higher throughput.
 
@@ -762,40 +788,77 @@ Computations involving a very large number of independent computations should be
 
 Here’s an example script, `parallel.sbatch`:
 
-```bash
-#!/bin/bash
+=== "Midway2"
+    ```bash
+    #!/bin/bash
 
-#SBATCH --time=01:00:00
-#SBATCH --partition=broadwl
-#SBATCH --ntasks=28
-#SBATCH --mem-per-cpu=2G  # NOTE DO NOT USE THE --mem= OPTION
+    #SBATCH --time=01:00:00
+    #SBATCH --partition=broadwl
+    #SBATCH --ntasks=28
+    #SBATCH --mem-per-cpu=2G  # NOTE DO NOT USE THE --mem= OPTION
 
-# Load the default version of GNU parallel.
-module load parallel
+    # Load the default version of GNU parallel.
+    module load parallel
 
-# When running a large number of tasks simultaneously, it may be necessary to increase the user process limit.
-ulimit -u 10000
+    # When running a large number of tasks simultaneously, it may be necessary to increase the user process limit.
+    ulimit -u 10000
 
-# This specifies the options used to run srun. The "-N1 -n1" options are used to allocate a single core to each task.
-srun="srun --exclusive -N1 -n1"
+    # This specifies the options used to run srun. The "-N1 -n1" options are used to allocate a single core to each task.
+    srun="srun --exclusive -N1 -n1"
 
-# This specifies the options used to run GNU parallel:
-#   --delay of 0.2 prevents overloading the controlling node.
-#   -j is the number of tasks run simultaneously.
-#   The combination of --joblog and --resume create a task log that can be used to monitor progress.
+    # This specifies the options used to run GNU parallel:
+    #   --delay of 0.2 prevents overloading the controlling node.
+    #   -j is the number of tasks run simultaneously.
+    #   The combination of --joblog and --resume create a task log that can be used to monitor progress.
 
-parallel="parallel --delay 0.2 -j $SLURM_NTASKS --joblog runtask.log --resume"
+    parallel="parallel --delay 0.2 -j $SLURM_NTASKS --joblog runtask.log --resume"
 
-# Run a script, runtask.sh, using GNU parallel and srun. Parallel will run the runtask script for the numbers 1 through 128. To illustrate, the first job will run like this:
+    # Run a script, runtask.sh, using GNU parallel and srun. Parallel will run the runtask script for the numbers 1 through 128. To illustrate, the first job will run like this:
 
-# srun --exclusive -N1 -n1 ./runtask.sh arg1:1 > runtask.1
+    # srun --exclusive -N1 -n1 ./runtask.sh arg1:1 > runtask.1
 
-$parallel "$srun ./runtask.sh arg1:{1} > runtask.sh.{1}" ::: {1..128}
+    $parallel "$srun ./runtask.sh arg1:{1} > runtask.sh.{1}" ::: {1..128}
 
-# Note that if your program does not take any input, use the -n0 option to call the parallel command:
+    # Note that if your program does not take any input, use the -n0 option to call the parallel command:
 
-#   $parallel -n0 "$srun ./run_noinput_task.sh > output.{1}" ::: {1..128}
-```
+    #   $parallel -n0 "$srun ./run_noinput_task.sh > output.{1}" ::: {1..128}
+    ```
+
+===+ "Midway3"
+    ```bash
+    #!/bin/bash
+
+    #SBATCH --time=01:00:00
+    #SBATCH --partition=caslake
+    #SBATCH --ntasks=48
+    #SBATCH --mem-per-cpu=2G  # NOTE DO NOT USE THE --mem= OPTION
+
+    # Load the default version of GNU parallel.
+    module load parallel
+
+    # When running a large number of tasks simultaneously, it may be necessary to increase the user process limit.
+    ulimit -u 10000
+
+    # This specifies the options used to run srun. The "-N1 -n1" options are used to allocate a single core to each task.
+    srun="srun --exclusive -N1 -n1"
+
+    # This specifies the options used to run GNU parallel:
+    #   --delay of 0.2 prevents overloading the controlling node.
+    #   -j is the number of tasks run simultaneously.
+    #   The combination of --joblog and --resume create a task log that can be used to monitor progress.
+
+    parallel="parallel --delay 0.2 -j $SLURM_NTASKS --joblog runtask.log --resume"
+
+    # Run a script, runtask.sh, using GNU parallel and srun. Parallel will run the runtask script for the numbers 1 through 128. To illustrate, the first job will run like this:
+
+    # srun --exclusive -N1 -n1 ./runtask.sh arg1:1 > runtask.1
+
+    $parallel "$srun ./runtask.sh arg1:{1} > runtask.sh.{1}" ::: {1..128}
+
+    # Note that if your program does not take any input, use the -n0 option to call the parallel command:
+
+    #   $parallel -n0 "$srun ./run_noinput_task.sh > output.{1}" ::: {1..128}
+    ```
 
 In this example, we aim to run the script `runtask.sh` 128 times. The `--ntasks` option is set to 28, so at most, 28 tasks can be run simultaneously.
 
@@ -836,47 +899,89 @@ task arg1:1 seq:1 sleep:14s host:midway2-0002 date:Thu Jan 10 09:17:36 CST 2017
 
 Another file `runtask.log` is also created. It gives a list of the completed jobs. (Note: If the `.sbatch` is submitted again, nothing will be run until `runtask.log` is removed.)
 
-Using this same technique to run multithreaded tasks in parallel is also possible. Here is an example `.sbatch` script, `parallel-hybrid.sbatch`, that distributes multithreaded computations (each using 28 CPUs) across two nodes:
+Using this same technique to run multithreaded tasks in parallel is also possible. Here is an example `.sbatch` script, `parallel-hybrid.sbatch`, that distributes multithreaded computations across two nodes:
 
-```bash
-#!/bin/bash
+=== "Midway2"
+    ```bash
+    #!/bin/bash
 
-#SBATCH --partition=broadwl
-#SBATCH --time=01:00:00
-#SBATCH --nodes=2
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=28
-#SBATCH --exclusive
+    #SBATCH --partition=broadwl
+    #SBATCH --time=01:00:00
+    #SBATCH --nodes=2
+    #SBATCH --ntasks-per-node=1
+    #SBATCH --cpus-per-task=28
+    #SBATCH --exclusive
 
-# Load the default version of GNU parallel.
-module load parallel
+    # Load the default version of GNU parallel.
+    module load parallel
 
-srun="srun --exclusive -N1 -n1 --cpus-per-task $SLURM_CPUS_PER_TASK"
+    srun="srun --exclusive -N1 -n1 --cpus-per-task $SLURM_CPUS_PER_TASK"
 
-# Instead of $SLURM_NTASKS, use $SLURM_NNODES to determine how
-# many jobs should be run simultaneously.
-parallel="parallel --delay 0.2 -j $SLURM_NNODES --joblog runtask.log --resume"
+    # Instead of $SLURM_NTASKS, use $SLURM_NNODES to determine how
+    # many jobs should be run simultaneously.
+    parallel="parallel --delay 0.2 -j $SLURM_NNODES --joblog runtask.log --resume"
 
-# Run the parallel command.
-$parallel "$srun ./runtask.sh arg1:{1} > runtask.sh.{1}" ::: {1..6}
-```
+    # Run the parallel command.
+    $parallel "$srun ./runtask.sh arg1:{1} > runtask.sh.{1}" ::: {1..6}
+    ```
+
+===+ "Midway3"
+    ```bash
+    #!/bin/bash
+
+    #SBATCH --partition=caslake
+    #SBATCH --time=01:00:00
+    #SBATCH --nodes=2
+    #SBATCH --ntasks-per-node=1
+    #SBATCH --cpus-per-task=48
+    #SBATCH --exclusive
+
+    # Load the default version of GNU parallel.
+    module load parallel
+
+    srun="srun --exclusive -N1 -n1 --cpus-per-task $SLURM_CPUS_PER_TASK"
+
+    # Instead of $SLURM_NTASKS, use $SLURM_NNODES to determine how
+    # many jobs should be run simultaneously.
+    parallel="parallel --delay 0.2 -j $SLURM_NNODES --joblog runtask.log --resume"
+
+    # Run the parallel command.
+    $parallel "$srun ./runtask.sh arg1:{1} > runtask.sh.{1}" ::: {1..6}
+    ```
 #### Launching concurrent processes
 Another option for setting up parallel runs is to launch background processes concurrently. This setup would be suitable for independent runs that use a single node exclusively. You can then submit multiple jobs, each on a separate node, if the total number of runs require more cores than on a single node.
 
-```
-#!/bin/bash
+=== "Midway2"
+    ```
+    #!/bin/bash
 
-#SBATCH --partition=broadwl
-#SBATCH --time=06:00:00
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=12
-#SBATCH --exclusive
+    #SBATCH --partition=broadwl
+    #SBATCH --time=06:00:00
+    #SBATCH --nodes=1
+    #SBATCH --ntasks-per-node=12
+    #SBATCH --exclusive
 
-module load openmpi/4.1.1
-mpirun --cpu-set 0-7 --bind-to core -np 8 ./your-mpi-app1 &
-mpirun --cpu-set 8-11 --bind-to core -np 4 ./your-mpi-app2 &
-wait
-```
+    module load openmpi/4.1.1
+    mpirun --cpu-set 0-7 --bind-to core -np 8 ./your-mpi-app1 &
+    mpirun --cpu-set 8-11 --bind-to core -np 4 ./your-mpi-app2 &
+    wait
+    ```
+
+===+ "Midway3"
+    ```
+    #!/bin/bash
+
+    #SBATCH --partition=caslake
+    #SBATCH --time=06:00:00
+    #SBATCH --nodes=1
+    #SBATCH --ntasks-per-node=12
+    #SBATCH --exclusive
+
+    module load openmpi/4.1.1
+    mpirun --cpu-set 0-7 --bind-to core -np 8 ./your-mpi-app1 &
+    mpirun --cpu-set 8-11 --bind-to core -np 4 ./your-mpi-app2 &
+    wait
+    ```
 
 Here, the first `mpirun` uses 8 CPU cores for eight tasks, and the second uses another 4 CPU cores to avoid oversubscription. The two "&" mean to launch the `mpirun` commands to the background, and the `wait` command ensures all the processes are complete before terminating the job.
 
@@ -922,23 +1027,41 @@ You can schedule jobs depending on the termination status of previously schedule
 
 For example, `job1.sbatch` is a submission script you plan to submit a batch job:
 
-```bash
-#!/bin/bash
+=== "Midway2"
+    ```bash
+    #!/bin/bash
 
-#SBATCH --job-name=hellompi
-#SBATCH --output=hellompi.out
-#SBATCH --nodes=2
-#SBATCH --ntasks-per-node=16
-#SBATCH --partition=broadwl
+    #SBATCH --job-name=hellompi
+    #SBATCH --output=hellompi.out
+    #SBATCH --nodes=2
+    #SBATCH --ntasks-per-node=16
+    #SBATCH --partition=broadwl
 
-# Load the MPI module that was used to build the application
-module load openmpi
+    # Load the MPI module that was used to build the application
+    module load openmpi
 
-ulimit -l unlimited
+    ulimit -l unlimited
 
-mpirun -np 32 ./hellompi
+    mpirun -np 32 ./hellompi
+    ```
 
-```
+===+ "Midway3"
+    ```bash
+    #!/bin/bash
+
+    #SBATCH --job-name=hellompi
+    #SBATCH --output=hellompi.out
+    #SBATCH --nodes=2
+    #SBATCH --ntasks-per-node=24
+    #SBATCH --partition=caslake
+
+    # Load the MPI module that was used to build the application
+    module load openmpi
+
+    ulimit -l unlimited
+
+    mpirun -np 48 ./hellompi
+    ```
 
 Submit the job script to the Slurm job scheduler from a Midway login node:
 

@@ -92,10 +92,10 @@
       "sha256": "491d83cb13a7ecc1f7491862648a8519d6b72803f8de95c327e856882a930405"
     },
     "https://learn-radiology.rcc.uchicago.edu/incidence": {
-      "error": "HTTP 401",
-      "failures": 2,
+      "error": "",
+      "failures": 0,
       "file": "incidence.txt",
-      "final_url": "https://learn-radiology.rcc.uchicago.edu/incidence",
+      "final_url": "https://learn-radiology.rcc.uchicago.edu/incidence/",
       "in_sitemap": false,
       "lastmod": null,
       "removed": "",
@@ -112,24 +112,24 @@
       "sha256": null
     },
     "https://learn-radiology.rcc.uchicago.edu/pirads": {
-      "error": "HTTP 400",
-      "failures": 2,
+      "error": "",
+      "failures": 0,
       "file": "pirads.txt",
-      "final_url": "https://learn-radiology.rcc.uchicago.edu/pirads",
+      "final_url": "https://learn-radiology.rcc.uchicago.edu/pirads/",
       "in_sitemap": false,
       "lastmod": null,
       "removed": "",
       "sha256": "e34005f2d96dd0dc7f24fbbc11a2b0a5c48ebc8009158711febdcec87813d293"
     },
     "https://learn-radiology.rcc.uchicago.edu/takecourse": {
-      "error": "HTTP 401",
-      "failures": 2,
+      "error": "",
+      "failures": 0,
       "file": "takecourse.txt",
-      "final_url": "https://learn-radiology.rcc.uchicago.edu/takecourse",
+      "final_url": "https://learn-radiology.rcc.uchicago.edu/takecourse/",
       "in_sitemap": false,
       "lastmod": null,
       "removed": "",
-      "sha256": "6d5170d5a5e234cde462bec6d9666ab059c0a1936abd345641ba6f8b14524918"
+      "sha256": "d88605156fe785e486fea43a844bad5657941fc4057290a13f29714f37c320b5"
     },
     "https://learn-radiology.rcc.uchicago.edu/team": {
       "error": "HTTP 404",
