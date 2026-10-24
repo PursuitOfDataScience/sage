@@ -1,12 +1,12 @@
 {
-  "refreshed_at": "2026-10-17 16:26 UTC",
-  "user_guide_commit": "ac82c47",
+  "refreshed_at": "2026-10-24 16:37 UTC",
+  "user_guide_commit": "f46b31a",
   "docs_files": 81,
   "web_files": 52,
-  "web_refreshed_at": "2026-10-17 16:26 UTC",
+  "web_refreshed_at": "2026-10-24 16:37 UTC",
   "sitemap_urls": 101,
-  "web_pages_fetched": 20,
+  "web_pages_fetched": 17,
   "web_pages_changed": 1,
-  "web_pages_removed": 2,
-  "web_pages_failed": 5
+  "web_pages_removed": 0,
+  "web_pages_failed": 0
 }

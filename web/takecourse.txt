@@ -2,3 +2,31 @@ URL: https://learn-radiology.rcc.uchicago.edu/takecourse
 Title: Take the Course
 | Learn Radiology: Prostate
 ================================================================================
+Select Case
+Case 1: Normal Anatomy
+Case 2: Anterior Cancer
+Case 3: Stromal BPH
+Case 4: Glandular BPH
+Case 5: Cystic BPH
+Case 6: Gleason 3+3
+Case 7: Gleason 3+4
+Case 8: Gleason 4+3
+Case 9: Gleason 4+4
+Case 10: Gleason 4+5
+Case 11: Wedge-Shaped
+Cancer
+Case 12: Extraprostatic extension
+Case 13: SVI
+Case 14: TZ Cancer
+Case 15: CZ Cancer
+Case 16: AFMS Cancer
+Case 17: Acute
+Inflammation
+Case 18: Chronic
+Case 19: Atrophy
+Case 20: Whole Prostate
+Labels
+Case Notes
+Teaching Points
+Quiz
+Sign In for Access
