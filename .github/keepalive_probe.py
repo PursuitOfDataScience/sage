@@ -34,6 +34,16 @@ The probe is layered, cheapest first, and only the last layer is authoritative:
 Then it asserts the app view rendered and the composer exists, so an app that comes up
 empty is a red run rather than a pass. Nothing here swallows a failure.
 
+The browser is the Chrome every GitHub Ubuntu image already ships, and Playwright's own
+Chromium is downloaded only on a machine without one. It is never
+`playwright install --with-deps`, which is what the workflow used to run: that sends apt
+to Ubuntu's mirrors for nine font packages the probe has no use for, and on 2026-11-11 a
+runner could not resolve the mirror for ten minutes, so the run went red without the app
+being looked at. Network steps are retried, and a red run says why in an annotation at
+the top of the run page. One that could not start a browser names the runner, and one
+whose page would not load says whether the app's own health check answered, so a missed
+ping does not read as a sleeping app.
+
 No question is asked, so no provider quota is spent.
 """
 
@@ -42,6 +52,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -59,6 +70,30 @@ WAKE_BUDGET = int(os.environ.get("WAKE_BUDGET", "900"))
 HEALTH = f"{APP_URL}/~/+/_stcore/health"
 STATUS = f"{APP_URL}/api/v2/app/status"
 RESUME = f"{APP_URL}/api/v2/app/resume"
+
+DASHBOARD = "https://share.streamlit.io"
+STATUS_PAGE = "https://www.streamlitstatus.com"
+
+#: Browsers already on the machine, tried in order before anything is downloaded. GitHub's
+#: Ubuntu images ship Google Chrome, 24.04 and 26.04 alike, so a scheduled run fetches
+#: nothing but the Python package and the app. `PROBE_CHROME` names another.
+SYSTEM_BROWSERS = (
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/opt/google/chrome/chrome",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+)
+
+#: Downloads of Playwright's headless Chromium before giving up, on a machine with none of
+#: the above. A blip on the runner's network is the usual reason one fails.
+INSTALL_ATTEMPTS = 3
+
+#: What a red run caused by the runner rather than the app should leave the reader with.
+RUNNER_NOT_APP = (
+    "That is the runner, not the app: the next scheduled run tries again, and one missed "
+    "run still leaves eight hours before the app would sleep."
+)
 
 SLEEP_PAGE = re.compile(r"gone to sleep|Zzzz|get this app back up", re.I)
 WAKE_SELECTORS = (
@@ -114,6 +149,70 @@ def platform_status() -> str:
     return json.dumps({key: parsed.get(key) for key in keys})
 
 
+def _first_line(exc: BaseException) -> str:
+    lines = str(exc).strip().splitlines()
+    return (lines[0] if lines else type(exc).__name__)[:200]
+
+
+def report(title: str, message: str) -> None:
+    """One annotation at the top of the run page, and the same words in its summary."""
+    flat = message.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+    print(f"::error title={title}::{flat}")
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as handle:
+            handle.write(f"### {title}\n\n{message}\n")
+
+
+def launch_browser(pw, at):
+    """A browser to visit the app with, or None when this machine cannot provide one."""
+    candidates = (os.environ.get("PROBE_CHROME", ""), *SYSTEM_BROWSERS)
+    for path in dict.fromkeys(c for c in candidates if c):
+        if not os.access(path, os.X_OK):
+            continue
+        try:
+            browser = pw.chromium.launch(executable_path=path, args=["--no-sandbox"])
+        except Exception as exc:  # noqa: BLE001 - the next candidate may start
+            print(f"{at()} browser  {path} would not start: {_first_line(exc)}")
+            continue
+        print(f"{at()} browser  {path} {browser.version}")
+        return browser
+
+    fetched = False
+    for attempt in range(INSTALL_ATTEMPTS + 1):
+        try:
+            browser = pw.chromium.launch(args=["--no-sandbox"])
+        except Exception as exc:  # noqa: BLE001 - usually not downloaded yet
+            print(f"{at()} browser  Playwright's Chromium would not start: {_first_line(exc)}")
+        else:
+            print(f"{at()} browser  Playwright's Chromium {browser.version}")
+            return browser
+        # Downloaded and still would not start: another download will not help.
+        if fetched or attempt == INSTALL_ATTEMPTS:
+            break
+        if attempt:
+            time.sleep(30 * attempt)
+        print(f"{at()} browser  fetching it, attempt {attempt + 1} of {INSTALL_ATTEMPTS}")
+        install = [sys.executable, "-m", "playwright", "install", "--only-shell", "chromium"]
+        fetched = subprocess.run(install, check=False).returncode == 0
+    return None
+
+
+def open_app(page, at) -> str:
+    """Load the app's page, a second time if the first does not arrive. Why, if neither did."""
+    reason = ""
+    for attempt in (1, 2):
+        try:
+            page.goto(f"{APP_URL}/", wait_until="domcontentloaded", timeout=120_000)
+            return ""
+        except Exception as exc:  # noqa: BLE001 - a dropped navigation is a result
+            reason = _first_line(exc)
+            print(f"{at()} GET      attempt {attempt} failed: {reason}")
+        if attempt == 1:
+            page.wait_for_timeout(30_000)
+    return reason
+
+
 def app_frame(page):
     """The frame the app is actually in.
 
@@ -131,6 +230,9 @@ def app_frame(page):
 
 
 def main() -> int:
+    # Line by line, so a wake can be watched live and a browser download's own output
+    # lands where it happened rather than ahead of everything printed before it.
+    sys.stdout.reconfigure(line_buffering=True)
     started = time.monotonic()
 
     def at() -> str:
@@ -145,11 +247,33 @@ def main() -> int:
         print(f"{at()} resume   POST -> http {code} {body[:160]!r}")
         print(f"{at()}          (logged only; the browser below is the guarantee)")
 
+    health = "said ok" if serving else "did not say ok"
+
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(args=["--no-sandbox"])
+        browser = launch_browser(pw, at)
+        if browser is None:
+            print(f"{at()} FAILED: no browser would start, so the app was not visited")
+            report("The runner could not start a browser",
+                   "Neither a Chrome on the runner nor Playwright's Chromium would start, "
+                   f"so the app was not visited. Its health check {health}. {RUNNER_NOT_APP}")
+            return 1
+        # The wait for a wake starts here, so time spent fetching a browser is not
+        # taken out of it.
+        waiting_since = time.monotonic()
         page = browser.new_page(viewport={"width": 1000, "height": 800})
         print(f"{at()} GET      {APP_URL}/")
-        page.goto(f"{APP_URL}/", wait_until="domcontentloaded", timeout=120_000)
+        reason = open_app(page, at)
+        if reason:
+            print(f"{at()} FAILED: the page did not load")
+            browser.close()
+            if serving:
+                verdict = ("Its health check said ok, so the runner's network is the likelier "
+                           f"cause. {RUNNER_NOT_APP}")
+            else:
+                verdict = f"Its health check did not say ok either: check {STATUS_PAGE}."
+            report("The app's page did not load",
+                   f"{APP_URL}/ did not load in two attempts ({reason}). {verdict}")
+            return 1
         page.wait_for_timeout(6_000)
 
         if SLEEP_PAGE.search(page.inner_text("body")[:2_000]):
@@ -164,7 +288,7 @@ def main() -> int:
         else:
             print(f"{at()} no sleep page")
 
-        deadline = started + WAKE_BUDGET
+        deadline = waiting_since + WAKE_BUDGET
         frame = None
         while time.monotonic() < deadline:
             frame = app_frame(page)
@@ -176,6 +300,10 @@ def main() -> int:
             print(f"{at()} FAILED: no app view within {WAKE_BUDGET}s")
             print("  top-level text:", repr(page.inner_text("body")[:300]))
             browser.close()
+            report("The app did not render",
+                   f"No app view appeared within {WAKE_BUDGET}s of opening {APP_URL}/, and "
+                   f"its health check {health} at the start of the run. Check {STATUS_PAGE} "
+                   f"for an incident, then reboot the app from its menu on {DASHBOARD}.")
             return 1
 
         print(f"{at()} app view rendered in {frame.url[:100]}")
@@ -193,6 +321,10 @@ def main() -> int:
             print(f"{at()} FAILED: app view has no composer")
             print("  app frame text:", repr(frame.inner_text("body")[:300]))
             browser.close()
+            report("The app rendered without its composer",
+                   "The app view appeared but never drew the question box, which is what a "
+                   f"boot that died halfway looks like. Read its logs under Manage app on "
+                   f"{DASHBOARD}.")
             return 1
 
         print(f"{at()} composer {composer.get_attribute('placeholder')!r}")

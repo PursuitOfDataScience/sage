@@ -74,10 +74,22 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install the browser
+      # Playwright alone. The browser it drives is the Chrome every GitHub Ubuntu image
+      # already ships, which the probe finds, so a normal run downloads one Python package
+      # and then the app. This step used to be `playwright install --with-deps chromium`,
+      # whose `--with-deps` half sends apt to Ubuntu's mirrors for nine font packages the
+      # probe never uses: on 2026-11-11 the runner could not resolve the mirror for ten
+      # minutes and the run went red here, without the app being looked at. Retried,
+      # because the same kind of blip can reach PyPI.
+      - name: Install Playwright
         run: |
-          python -m pip install --quiet playwright
-          python -m playwright install --with-deps chromium
+          for attempt in 1 2 3; do
+            python -m pip install --quiet --disable-pip-version-check playwright && exit 0
+            echo "pip install failed, attempt $attempt of 3"
+            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 30)); fi
+          done
+          echo "::error title=The runner could not install Playwright::PyPI did not answer the runner in three attempts, so the app was not visited. That is the runner, not the app: the next scheduled run tries again, and one missed run still leaves eight hours before the app would sleep."
+          exit 1
 
       # Every layer of state reading lives in the probe, so there is one account of what
       # was found and it is the same one whether this runs here or by hand.
