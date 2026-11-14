@@ -77,6 +77,14 @@ Beagle3 users, in addition to shared partitions, have access to Beagle3 partitio
       | `gpu`       | 5     | 48   | gold-6248r | 4     | v100     | 192 GB       | midway3-[0277-0281] |
       | `gpu`       | 5     | 48   | gold-6248r | 4     | rtx6000  | 192 GB       | midway3-[0282-0286] |
 
+      !!! note "GPU node Memory/node column: system RAM, not GPU VRAM"
+          The Memory/node column shows physically installed **system RAM** (requestable via
+          `--mem`), not GPU VRAM (accessed by requesting GPUs via `--gres=gpu:N`). For `gpu`
+          partition nodes, the maximum requestable via `--mem` is also lower than the
+          hardware total due to OS and SLURM overhead: **375 G** for the A100 node
+          and **180 G** for V100 and RTX6000 nodes. Requesting the full hardware
+          amount (384 GB / 192 GB) will cause job submission to fail.
+
 === "Beagle3 - Dedicated"
 
       | Partition | # of Nodes  | # of Cores/node | CPU Type  | # of GPUs/node | GPU Type |  Memory/node | Nodelist |
@@ -122,7 +130,7 @@ rcchelp qos
     | Partition | Max Nodes/User | Max CPUs/User | Max Jobs/User | Max Wall Time |
     |-----------|--------------------|-------------------|-------------------|---------------|
     | `caslake` | 100                | 4800              | 1000              | 36 H          |
-    | `gpu`     | None               | None              | 12                | 36 H          |
+    | `gpu`     | 4                  | 192               | 12                | 36 H          |
     | `bigmem`  | 96                 | 192               | 10                | 36 H          |
     | `amd`     | 64                 | 128               | 200               | 36 H          |
 
@@ -132,6 +140,7 @@ rcchelp qos
     |-----------|----------------|---------------|-------------------|---------------|
     | `beagle3` | 8            | 256           | 12                | 48 H          |
     | `beagle3-long`| 8       | 128           | 12                | 96 H          |
+    | `beagle3-bigmem`| 2     | 64            | 12                | 48 H          |
 
 === "MidwaySSD QoS - Dedicated"
 

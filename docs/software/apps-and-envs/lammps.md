@@ -18,10 +18,12 @@ There are several LAMMPS modules on Midway2 and Midway3 that you can check via `
 ===+ "Midway3"
     ```
     ---------------------------- /software/modulefiles -----------------------------
-    lammps/17Apr2024  lammps/20Sep2021-gpu       lammps/23Jun2022      lammps/24Mar2022      lammps/29Aug2024  
-    lammps/20Sep2021  lammps/21Nov2023(default)  lammps/23Jun2022-gpu  lammps/24Mar2022-gpu  lammps/29Oct2020 
+    lammps/17Apr2024           lammps/22Jul2025      lammps/24Mar2022-gpu  
+    lammps/20Sep2021           lammps/23Jun2022      lammps/29Aug2024      
+    lammps/20Sep2021-gpu       lammps/23Jun2022-gpu  lammps/29Oct2020      
+    lammps/21Nov2023(default)  lammps/24Mar2022
     ```
-The `gpu` suffix indicates that this module support GPU acceleration and should run on a GPU node.
+The `gpu` suffix indicates that this module supports GPU acceleration and should run on a GPU node.
 You can then show the dependency of individual modules, for example, on Midway3 if you do
 ```
 module show lammps/21Nov2023
@@ -50,7 +52,7 @@ There are several LAMMPS binaries in the folder `/software/lammps-21Nov2023-el8-
 
 ## Example job scripts
 
-An example batch script to run LAMMPS is given as below
+An example batch script to run LAMMPS is given below
 ```
 #!/bin/bash
 #SBATCH --job-name=lmp-bench
@@ -73,7 +75,7 @@ n=$(( ntasks_per_node * numnodes ))
 mpirun -np $n lmp_cpu -in in.txt
 ```
 
-The following script illustrates how to run the LAMMPS binary built with the GPU package `lmp_gpu`
+The following script illustrates how to run the LAMMPS binary built with the GPU package `lmp_gpu`.
 
 ```
 #!/bin/bash
@@ -131,14 +133,14 @@ Since LAMMPS is under active development, it might be beneficial for you to buil
 Below is an example to illustrate how you build LAMMPS from source using the Intel oneAPI toolchain with GPU support for A100 GPUs on Midway3/Beagle3.
 
 ```
-module load oneapi/2023.1 mkl/2023.1 cmake 3.26
+module load oneapi/2023.1 mkl/2023.1 cmake/3.26
 git clone https://github.com/lammps/lammps.git
 cd lammps
 git checkout tags/stable_29Aug2024 -b stable_29Aug2024
 mkdir build
 cd build
 cmake -C ../cmake/presets/basic.cmake \
-      -D PKG_CLASS2=on -D PKG_AMOBEA=on -D PKG_ASPHERE=on -D PKG_REPLICA=on -DPKG_FEP=on \
+      -D PKG_CLASS2=on -D PKG_AMOEBA=on -D PKG_ASPHERE=on -D PKG_REPLICA=on -DPKG_FEP=on \
       -D PKG_GPU=on -D GPU_API=cuda -D GPU_ARCH=sm_80 -D BUILD_MPI=yes -D BUILD_OMP=on \
       -D PKG_KOKKOS=on -D Kokkos_ARCH_PASCAL60=off -D Kokkos_ARCH_NATIVE=yes \
       -D Kokkos_ARCH_AMPERE80=ON -D Kokkos_ENABLE_CUDA=yes -D Kokkos_ENABLE_OPENMP=yes \
@@ -148,59 +150,5 @@ cmake -C ../cmake/presets/basic.cmake \
 make -j4
 ```
 
-Note the GPU architecture (more specifically, compute capability) is defined for the KOKKOS package `Kokkos_ARCH_AMPERE80=ON`. The GPU package is by default compiled into to support a wide range of GPU architectures including `sm_80`.
+Note the GPU architecture (more specifically, compute capability) is defined for the KOKKOS package `Kokkos_ARCH_AMPERE80=ON`. The GPU package is by default compiled to support a wide range of GPU architectures including `sm_80`.
 
-### LAMMPS jobs example
-
-Next, let us run the same calculations in the batch mode. First, create a text file with `nano` or `vi` on the login node, namely, `batch_job_python.txt`
-
-```
-#!/bin/bash
-#SBATCH --job-name=job-info
-#SBATCH --account=[pi-account]
-#SBATCH --partition=caslake
-#SBATCH --time=00:30:00
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-cd /project/[pi-folder]/[your-cnetid]/
-source my-venv/bin/activate
-python simple.py
-```
-
-Next, submit the job to Slurm
-```
-sbatch batch_job_python.txt
-```
-
-Check your submitted job in the queue with
-
-```
-squeue -u $USER
-```
-
-Next, to test a run with LAMMPS in the batch mode, create another text file with `nano` or `vi` on the login node, namely, `batch_job_lammps.txt`
-
-```
-#!/bin/bash
-#SBATCH --job-name=job-info
-#SBATCH --account=[pi-account]
-#SBATCH --partition=caslake
-#SBATCH --time=00:30:00
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=8
-cd /project/[pi-folder]/[your-cnetid]/lammps/examples
-module load mpich/3.4.3+gcc-10.2.0 mkl/2023.1
-ulimit -l unlimited
-n=$(( SLURM_NNODES * SLURM_NTASKS_PER_NODE ))
-mpirun -np $n /project/[pi-folder]/[your-cnetid]/lammps/build/lmp -in melt/in.melt
-```
-
-After saving the file (Ctrl+X with `nano`, `:x` with `vi`), you will submit the script to Slurm:
-
-```
-sbatch batch_job_lammps.txt
-```
-
-As you can see, you can submit more than one jobs at a time. The more resource you request (number of nodes, number of tasks per node, memory per node, walltime and so on), the longer the jobs are pending.  Your usage history also affects how soon your jobs get running.  See [Running Jobs on Midway](../../slurm/main.md) for detailed documentation on how to monitor the submitted jobs.
-
-You can check the generated output `output.pdf` and `log.lammps` in the corresponding directories.

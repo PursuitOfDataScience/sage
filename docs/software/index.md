@@ -49,6 +49,7 @@ This guide contains instructions for some commonly used applications and environ
 * [MeshLab](../software/apps-and-envs/meshlab.md)
 * [MATLAB](../software/apps-and-envs/matlab.md)    
 * [Mathematica](../software/apps-and-envs/mathematica.md)
+* [MetaBAT2](../software/apps-and-envs/metabat2.md)
 * [NAMD](../software/apps-and-envs/namd.md)
 * [NWChem](../software/apps-and-envs/nwchem.md)
 * [OpenMM](../software/apps-and-envs/openmm.md)

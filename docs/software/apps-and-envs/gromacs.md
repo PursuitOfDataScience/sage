@@ -21,41 +21,41 @@ There are several GROMACS modules on Midway2 and Midway3 that you can check via 
 ===+ "Midway3"
     ```
     ---------------------------- /software/modulefiles -----------------------------
-    gromacs/2020.4(default)  gromacs/2021.5  gromacs/2022.4  gromacs/2022.4-colvars 
+    gromacs/2020.4  gromacs/2021.5  gromacs/2022.4(default)  gromacs/2022.4-colvars  gromacs/2025.1  gromacs/2025.3
 
     ```
 You can then show the dependency of individual modules, for example,
 ```
-module show gromacs/2021.5
+module show gromacs/2022.4
 ```
 which gives on Midway3
 ```
 -------------------------------------------------------------------
-/software/modulefiles/gromacs/2021.5:
+/software/modulefiles/gromacs/2022.4:
 
-module-whatis   {setup gromacs 2021.5 compiled with the system compiler}
+module-whatis   {setup gromacs 2022.4 compiled with the system compiler}
 conflict        gromacs
-module          load gcc/7.4.0 openmpi/4.1.2+gcc-7.4.0 cuda/11.2 plumed/2.7.3
-prepend-path    PATH /software/gromacs-2021.5-el8-x86_64/bin
-prepend-path    LD_LIBRARY_PATH /software/gromacs-2021.5-el8-x86_64/lib64
-prepend-path    LIBRARY_PATH /software/gromacs-2021.5-el8-x86_64/lib64
-prepend-path    PKG_CONFIG_PATH /software/gromacs-2021.5-el8-x86_64/lib64/pkgconfig
-prepend-path    CPATH /software/gromacs-2021.5-el8-x86_64/include
-prepend-path    MANPATH /software/gromacs-2021.5-el8-x86_64/share/man
+module          load intelmpi/2021.5+intel-2022.0 mkl/2020.up1 python/anaconda-2021.05 cuda/11.5 plumed/2.8.1
+prepend-path    PATH /software/gromacs-2022.4-el8-x86_64/bin
+prepend-path    LD_LIBRARY_PATH /software/gromacs-2022.4-el8-x86_64/lib64
+prepend-path    LIBRARY_PATH /software/gromacs-2022.4-el8-x86_64/lib64
+prepend-path    PKG_CONFIG_PATH /software/gromacs-2022.4-el8-x86_64/lib64/pkgconfig
+prepend-path    CPATH /software/gromacs-2022.4-el8-x86_64/include
+prepend-path    MANPATH /software/gromacs-2022.4-el8-x86_64/share/man
 ```
 
-In this case you can see this module was compiled with `openmpi/4.1.2+gcc-7.4.0`, `cuda/11.2` and `plumed/2.7.3`. As a result, this version supports GPU acceleration and should be used on GPU nodes.
+In this case you can see this module was compiled with `intelmpi/2021.5+intel-2022.0`, `cuda/11.5` and `plumed/2.8.1`. As a result, this version supports GPU acceleration and should be used on GPU nodes.
 
 ???+ note
     GROMACS is under active development. You are encouraged to build the latest stable version from [source code](https://github.com/gromacs/gromacs) in your own space using the provided [compilers](../compilers.md).
 
-The GROMACS documentation contain useful information for improving performance of your specific calculations:
+The GROMACS documentation contains useful information for improving performance of your specific calculations:
 
-https://manual.gromacs.org/documentation/current/user-guide/mdrun-performance.html
+[GROMACS mdrun performance guide](https://manual.gromacs.org/documentation/current/user-guide/mdrun-performance.html)
 
 ## Example job script
 
-An example batch script to run GROMACS for Midway3 is given as below
+An example batch script to run GROMACS for Midway3 is given below
 ```
 #!/bin/bash
 #SBATCH --job-name=gmx-bench
@@ -67,11 +67,11 @@ An example batch script to run GROMACS for Midway3 is given as below
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=32
 
-module load gromacs/2021.5
+module load gromacs/2022.4
 
 cd $SLURM_SUBMIT_DIR
 
-export GMX_PATH=/software/gromacs-2021.5-el8-x86_64/bin
+export GMX_PATH=/software/gromacs-2022.4-el8-x86_64/bin
 source $GMX_PATH/GMXRC
 
 ntasks_per_node=$SLURM_NTASKS_PER_NODE
