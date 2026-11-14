@@ -222,7 +222,27 @@ scancel --user=<CNetID>
 ```
 
 ### Monitoring running jobs
-You can monitor your job by connecting to the compute node it runs on via `SSH` and using the `htop` command.
+
+#### With `slurmwatch`
+
+[`slurmwatch`](https://github.com/PursuitOfDataScience/slurmwatch) shows the live CPU, memory, and GPU usage of a running job — counting only *your* processes — as a terminal dashboard, so you can see at a glance whether the job is using the resources you requested. It is available as a module on Midway3:
+
+```
+module load slurmwatch
+slurmwatch <jobID>      # watch a specific job
+slurmwatch              # or auto-discover your running job
+```
+
+Run from a login node, `slurmwatch` attaches to the compute node your job is on automatically (no manual `ssh` needed) and updates a few times per second. Press `c`, `m`, or `g` for a full-screen CPU / memory / GPU view, and `q` to quit. Unlike `htop`, it isolates your job's own processes and also reports GPU utilization and VRAM, which is useful on the GPU partitions.
+
+!!! tip
+    For an interactive session, run `slurmwatch` in a second pane on the compute node (e.g. with `tmux`) so it watches your work without getting in the way — see [Interactive jobs](./sinteractive.md#monitoring-an-interactive-session).
+
+See the [slurmwatch README](https://github.com/PursuitOfDataScience/slurmwatch#readme) for the full set of keys and options.
+
+#### With `SSH` and `htop`
+
+Alternatively, you can monitor your job by connecting to the compute node it runs on via `SSH` and using the `htop` command.
 
 To do this, run the following to see your running jobs and which compute nodes your jobs are running on:
 ```

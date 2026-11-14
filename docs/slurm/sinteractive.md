@@ -132,6 +132,18 @@ mpirun -np 8 /project/[pi-folder]/[your-cnetid]/lammps/build/lmp -in melt/in.mel
 
 The run will produce the LAMMPS screen output and a file named `log.lammps` in the current folder.
 
+### Monitoring an interactive session
+
+While your session is running, you can watch its CPU, memory, and GPU usage live with [`slurmwatch`](https://github.com/PursuitOfDataScience/slurmwatch). Because an interactive session uses a single shell, run it in a second pane on the **same compute node** (for example, with `tmux`) so it watches your work without getting in the way:
+
+```
+module load slurmwatch
+tmux            # open a second pane, then:
+slurmwatch      # in one pane; run your program in the other
+```
+
+It watches the whole job, so it keeps reporting as you run one program, edit your code, and run another — there is no need to restart it between runs. Running it on the node reads usage directly and adds no extra Slurm step, so it will not interfere with your `srun`/`mpirun` launches. See [Monitoring running jobs](./sbatch.md#monitoring-running-jobs) for more.
+
 To terminate the interactive session, run
 
 ```
