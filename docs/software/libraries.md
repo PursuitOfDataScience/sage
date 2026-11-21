@@ -1,11 +1,12 @@
 # Libraries
 
 There are several commonly used libraries that are available as modules on Midway2 and Midway3.
-After loading the module into your environment, you can find several environment variables and paths are added:
+After loading a module into your environment, you can see which environment variables and paths it adds with:
+
 ```
 module show [module-name]
 ```
-These added paths can be used in your Makefile or in the build configuration with cmake.
+These paths can be used in your Makefile or in the build configuration with CMake.
 
 ## GSL
 
@@ -30,7 +31,7 @@ which sets up the paths and environment variables for the libraries.
 ```
 module load mkl
 ```
-which sets up the paths and environment variables for the libraries. The MKL libraries support core math functions include BLAS, LAPACK, ScaLAPACK, sparse solvers, fast Fourier transforms, and vector math.
+which sets up the paths and environment variables for the libraries. The MKL libraries provide core math functions, including BLAS, LAPACK, ScaLAPACK, sparse solvers, fast Fourier transforms, and vector math.
 
 ## NVIDIA HPC SDK
 

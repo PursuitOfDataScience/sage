@@ -19,7 +19,7 @@ There are several OpenMM modules on Midway3 that you can check via `module avail
     OpenMM is under active development. You are encouraged to build the latest stable version from [source code](https://github.com/openmm/openmm) in your own space using the provided [compilers](../compilers.md).
 
 ???+ note
-    You can also install OpenMM into your conda environment. See http://docs.openmm.org/7.0.0/userguide/application.html for more information
+    You can also install OpenMM into your conda environment. See the [OpenMM User Guide](https://docs.openmm.org/latest/userguide/application.html) for more information.
     ```
     module load python/miniforge-25.3.0
     conda create -n your-env python=3.8
@@ -27,14 +27,13 @@ There are several OpenMM modules on Midway3 that you can check via `module avail
     conda install -c conda-forge openmm cudatoolkit=11.5
     ```
 
-The OpenMM documentation contain useful information for improving performance of your specific calculations:
-
-https://openmm.org/documentation
+The [OpenMM documentation](https://docs.openmm.org/) contains useful information for improving the performance of your specific calculations.
 
 
-## Example job script
+## Example job scripts
 
-The following is an example batch script for running OpenMM on Midway3.
+The following is an example batch script for running OpenMM on Midway3:
+
 ```
 #!/bin/bash
 #SBATCH --job-name=openmm-bench
@@ -52,9 +51,9 @@ cd $SLURM_SUBMIT_DIR
 
 python run_openmm.py
 ```
-where `run_openmm.py` is a python script that sets up the system.
+where `run_openmm.py` is a Python script that sets up the system.
 
-Example python scripts can be found at https://github.com/openmm/openmm/blob/master/examples/. Below is an example script that reads in a protein PDB structure, selects a force field, defines a system, specifies a time integrator, performs energy minimization, sets up the output log and snapshots and finally runs the MD simulation. You can use this script as `run_openmm.py` in the job script above.
+Example Python scripts can be found in the [OpenMM GitHub repository](https://github.com/openmm/openmm/blob/master/examples/). Below is an example script that reads in a protein PDB structure, selects a force field, defines a system, specifies a time integrator, performs energy minimization, sets up the output log and snapshots, and finally runs the MD simulation. You can use this script as `run_openmm.py` in the job script above.
 
 ```
 from openmm.app import *
@@ -68,7 +67,7 @@ system = forcefield.createSystem(pdb.topology, nonbondedMethod=PME, nonbondedCut
 integrator = LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 0.004*picoseconds)
 
 # Select a platform for GPU acceleration: 
-# CUDA backend might fail due to an incompatible version of the GPU driver on the compute nodes than the OpenMM compiled PTX
+# The CUDA backend might fail if the GPU driver on the compute nodes is incompatible with the PTX that OpenMM was compiled with
 platform_name = ''
 try:
     platform_name = 'CUDA'
@@ -91,3 +90,9 @@ simulation.reporters.append(StateDataReporter(stdout, 1000, step=True, potential
 simulation.step(10000)
 ```
 
+## Getting help
+
+- Official documentation: [OpenMM documentation](https://docs.openmm.org/){:target='_blank'} and [OpenMM examples](https://github.com/openmm/openmm/tree/master/examples){:target='_blank'}
+- Built-in help: `python -m openmm.testInstallation` to check the available platforms
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.

@@ -3,24 +3,24 @@
 !!! warning "Midway2 only"
     Please note that HTTP-based data sharing is currently supported on Midway2 only.
 
-RCC provides web access to data on their storage system via public_html directories in users’ home directories.
+RCC provides web access to data on its storage system via `public_html` directories in users’ home directories.
 
 | Local path                                   | Corresponding URL                                         |
 |----------------------------------------------|-----------------------------------------------------------|
 | /home/[your_CNetID]/public_html/research.dat | http://users.rcc.uchicago.edu/~[your_CNetID]/research.dat |
 
 Ensure your home directory and `public_html` have the execute [permissions](access_control.md). If the folder `public_html` does not exist, create it. 
-Optionally, ensure public_html has read permissions if you would like to allow indexing.
+Optionally, give `public_html` read permission if you would like to allow directory listing.
 
 You may set these permissions using the following commands:
 ```
 chmod o+x $HOME
 mkdir -p $HOME/public_html
 chmod o+x $HOME/public_html
-// optional; if you would like to allow directory listing.
+# optional; if you would like to allow directory listing
 chmod o+r $HOME/public_html
 ```
-Files in public_html must also be readable by the web user, "other", but should not be made executable.
+Files in `public_html` must also be readable by the web user, "other", but should not be made executable.
 
 You may set read permissions for web users/"other" using the following command:
 ```

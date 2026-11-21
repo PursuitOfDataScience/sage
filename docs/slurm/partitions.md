@@ -3,7 +3,8 @@ Midway compute nodes are organized into "partitions", collections of compute nod
 
 ## How Do I Get a Full List of Partitions?
 
-To get a full list of partitions available On Midway2 or Midway3, log in to the system and type in the terminal:
+To get a full list of partitions available on Midway2 or Midway3, log in to the system and type in the terminal:
+
 ```
 sinfo -o "%20P %5D %14F %4c %8G %8z %26f %N"
 ```
@@ -16,18 +17,23 @@ The typical output will include:
 | `NODES(A/I/O/T)` | Number of nodes by state in the format "allocated/idle/other/total" |
 | `S:C:T`          | Number of sockets, cores, and threads                               |
 
-If a user wants to submit their job to the particular compute node, this can be requested by adding the Slurm flag `--nodelist=<compute_node_ID>`. Compute nodes that differ in available features can be allocated by setting an additional constraint `--constraint=<compute_node_feature>`; for example, `--constraint=v100` will allocate the job to the compute node with NVIDIA V100 GPUs. 
+If a user wants to submit their job to a particular compute node, this can be requested by adding the Slurm flag `--nodelist=<compute_node_ID>`. Compute nodes with specific features can be requested by setting an additional constraint `--constraint=<compute_node_feature>`; for example, `--constraint=v100` will allocate the job to a compute node with NVIDIA V100 GPUs. 
 
 You can also check the state of nodes in a given partition, for example, `caslake`, by running the following command: 
+
 ```
 nodestatus caslake
 ```
 
-## What Partitions I Can Use?
-To submit jobs to a partition, ensure that your account is accepted by the partition. Begin by determining the accounts you belong to. Then set the variable ACCOUNT to the account you would like to check (usually in the format pi-<PI_CNetID>), and then retrieve the list of partitions using:
+## What Partitions Can I Use?
+To submit jobs to a partition, ensure that your account is accepted by the partition. Begin by determining the accounts you belong to:
+
 ```
 groups
 ```
+
+Then set the variable `ACCOUNT` to the account you would like to check (usually in the format `pi-<PI_CNetID>`), and retrieve the list of partitions using:
+
 
 === "Midway2"
     ```
@@ -36,7 +42,7 @@ groups
     ```
     sacctmgr list assoc account=$ACCOUNT -n format=Partition | sort -u
     ```
-===+ "Midway3, Midway-AMD, MidwaySSD, Beagle3"
+===+ "Midway3, Midway3-AMD, MidwaySSD, Beagle3"
     ```
     export ACCOUNT=<account_name>
     ```
@@ -46,9 +52,10 @@ groups
 
 ## Configurations
 All Midway users can submit jobs to any of the shared partitions. 
-Beagle3 users, in addition to shared partitions, have access to Beagle3 partitions too. 
+Beagle3 users have access to the Beagle3 partitions in addition to the shared partitions. 
 
 **Parameters are shown per node**.
+
 === "Midway2 - Shared"
 
       |   Partition  | # of Nodes | # of Cores/node | CPU Type  | # of GPUs/node | GPU Type | Memory/node | <div style="width:158px">Nodelist</div> |
@@ -72,7 +79,7 @@ Beagle3 users, in addition to shared partitions, have access to Beagle3 partitio
       | `bigmem`    | 1     | 48   | gold-6248r | None  | None     | 768 GB       | midway3-0317|
       | `bigmem`    | 1     | 48   | gold-6248r | None  | None     | 1536 GB      | midway3-0318|
       | `amd-hm`    | 1     | 128  | epyc-7702  | None  | None     | 2048 GB      | midway3-0541|
-      | `amd`       | 40    | 128  | epyc-7702  | None  | None     | 256 GB       | midway3-0[501-539,549]
+      | `amd`       | 40    | 128  | epyc-7702  | None  | None     | 256 GB       | midway3-0[501-539,549] |
       | `gpu`       | 1     | 48   | gold-6248r | 4     | a100     | 384 GB       | midway3-0294|
       | `gpu`       | 5     | 48   | gold-6248r | 4     | v100     | 192 GB       | midway3-[0277-0281] |
       | `gpu`       | 5     | 48   | gold-6248r | 4     | rtx6000  | 192 GB       | midway3-[0282-0286] |
@@ -81,7 +88,7 @@ Beagle3 users, in addition to shared partitions, have access to Beagle3 partitio
           The Memory/node column shows physically installed **system RAM** (requestable via
           `--mem`), not GPU VRAM (accessed by requesting GPUs via `--gres=gpu:N`). For `gpu`
           partition nodes, the maximum requestable via `--mem` is also lower than the
-          hardware total due to OS and SLURM overhead: **375 G** for the A100 node
+          hardware total due to OS and Slurm overhead: **375 G** for the A100 node
           and **180 G** for V100 and RTX6000 nodes. Requesting the full hardware
           amount (384 GB / 192 GB) will cause job submission to fail.
 
@@ -111,7 +118,8 @@ Beagle3 users, in addition to shared partitions, have access to Beagle3 partitio
 
 ## <a name="shared-partition-qos"></a> Partition QoS
 
-This table details the job limits of each partition, set via a Quality of Service (QoS) accessible via 
+This table details the job limits of each partition, set via a Quality of Service (QoS) that you can view with
+
 ```
 rcchelp qos
 ```
@@ -136,6 +144,7 @@ rcchelp qos
 
 
 === "Beagle3 QoS - Dedicated"
+
     | Partition | Max Nodes/User | Max CPUs/User | Max Jobs/User | Max Wall Time |
     |-----------|----------------|---------------|-------------------|---------------|
     | `beagle3` | 8            | 256           | 12                | 48 H          |
@@ -161,10 +170,11 @@ rcchelp qos
 You may apply for a special allocation if your research requires a temporary exception to a particular limit. Special allocations are evaluated on an individual basis and may or may not be granted.
 
 ## Private Partitions (CPP)
-These partitions are typically associated with a PI or group of PIs. They can be shared with other PIs or researchers across the University of Chicago and with external collaborators with a Midway account. 
+These partitions are typically associated with a PI or a group of PIs. They can be shared with other PIs or researchers across the University of Chicago and with external collaborators who have a Midway account. 
 
 * General Users: Check with your PI for more information. 
-* PIs: Private partitions can be purchased via [Cluster Partnership Program](https://rcc.uchicago.edu/support-and-services/cluster-partnership-program){:target="_blank"} to accommodate the needs of your research group. QOS can be tuned at any time by submitting a request.
+* PIs: Private partitions can be purchased via the [Cluster Partnership Program](https://rcc.uchicago.edu/support-and-services/cluster-partnership-program){:target="_blank"} to accommodate the needs of your research group. QoS can be tuned at any time by submitting a request.
+
 
 !!! note
     QoS for private and institutional partitions can be changed upon the owner's request. 

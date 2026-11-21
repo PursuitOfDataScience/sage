@@ -6,7 +6,7 @@
 The KICP has exclusive access to a number of compute nodes associated with the RCC
 Midway cluster.  KICP users access those nodes through the same login nodes and
 interfaces as the primary cluster, making it trivial to move computational work
-between the two sets of resources. Most of the documentation available on this site is applicable to KICP members and the KICP nodes, however there are some specific differences which are described here.
+between the two sets of resources. Most of the documentation available on this site is applicable to KICP members and the KICP nodes; however, there are some specific differences, which are described here.
 
 Email sent to [kicp@rcc.uchicago.edu](mailto:kicp@rcc.uchicago.edu){:target='_blank'} will be assigned a trouble ticket and reviewed
 by the RCC Help Desk.  Please don’t hesitate to ask questions if
@@ -14,10 +14,10 @@ you encounter any issues, or have any requests for software installation.
 
 ## Get an account
 
-Please complete the RCC [User Account Request](https://rcc.uchicago.edu/general-user-account-request){:target='_blank'} form to request an account and put KICP as
+Please complete the RCC [User Account Request](https://rcc.uchicago.edu/accounts-allocations/general-user-account-request){:target='_blank'} form to request an account and put KICP as
 the PI (note: this request will be reviewed for KICP membership).  Please clearly state your
 connection to the KICP, particularly if you are not a local or senior member.  If you are
-requesting access for someone not at the University of Chicago (i.e. someone who doesn’t have
+requesting access for someone not at the University of Chicago (i.e., someone who doesn’t have
 a CNetID), the account creation process will involve creating a CNetID.
 
 To access the rest of the Midway cluster you will need to be added to a different account
@@ -30,29 +30,29 @@ As a shared resource, Midway uses a batch queueing system to allocate nodes to i
 and their jobs.  Midway uses the [Slurm](http://slurm.schedmd.com){:target='_blank'} batch queuing system, which is similar to the possibly
 more familiar PBS batch system.
 
-Please see the Midway2 and Midway3 HPC Systems section of this User Guide for information on using Midway to perform
-computational tasks, typically by submitting batch jobs. The [Slurm](http://slurm.schedmd.com){:target='_blank'} commands, reiterated below, can be used as described in that documentation, however KICP users may need to point to one of the
-two KICP partitions, kicp and kicp-ht, and select the kicp account.
+Please see the [Computing](../slurm/main.md) section of this User Guide for information on using Midway to perform
+computational tasks, typically by submitting batch jobs. The [Slurm](http://slurm.schedmd.com){:target='_blank'} commands, reiterated below, can be used as described in that documentation; however, KICP users may need to point to one of the
+two KICP partitions, `kicp` and `kicp-ht`, and select the `kicp` account.
 
-**NOTE**: Specifying –account=kicp and –partition=kicp is generally optional for users who belong to
-the KICP group and no other, however specifying them is generally good practice.
+**NOTE**: Specifying `--account=kicp` and `--partition=kicp` is generally optional for users who belong to
+the KICP group and no other; however, specifying them is good practice.
 
 | Useful Commands        | Description                                                   |
 |------------------------|---------------------------------------------------------------|
-| sbatch -p kicp -a kicp | Submit a job to the Slurm scheduling system.                  |
-| sinteractive -p kicp   | Run an interactive job on a KICP compute node                 |
+| sbatch -p kicp -A kicp | Submit a job to the Slurm scheduling system.                  |
+| sinteractive -p kicp   | Run an interactive job on a KICP compute node.                |
 | squeue -p kicp         | List the submitted and running jobs in the KICP partition.    |
-| squeue -u $USER        | List the current users’ own submitted and running jobs.       |
+| squeue -u $USER        | List the current user’s own submitted and running jobs.       |
 | sinfo -p kicp          | List the number of available and allocated KICP nodes.        |
-| scancel job_id         | Cancel the job identified by the given job_id (e.g. 3636950). |
-| scancel -u $USER       | Cancel all jobs submitted by the current user                 |
+| scancel job_id         | Cancel the job identified by the given job_id (e.g., 3636950). |
+| scancel -u $USER       | Cancel all jobs submitted by the current user.                |
 
 
 There are many ways to submit a batch job, depending on what that job requires (number of
-processors, number of nodes, etc). Slurm will automatically start your job in the directory
-from which it was submitted.  To submit a job, create a batch script, say my_job.sh and submit
-with the command sbatch my_job.sh.  The following is a list of commonly used sbatch commands.  A
-more complete list can be found in the sbatch man page.
+processors, number of nodes, etc.). Slurm will automatically start your job in the directory
+from which it was submitted. To submit a job, create a batch script, say `my_job.sh`, and submit
+it with the command `sbatch my_job.sh`. A complete list of `sbatch` options can be found in the
+`sbatch` man page.
 
 The following is a good example batch script:
 
@@ -77,12 +77,12 @@ echo $SLURM_JOB_ID starting execution `date` on `hostname`
 
 # the commands to run your job
 # example: mpirun ./my_task
-# Note: slurm will automatically tell MPI how many tasks and tasks per node to use
+# Note: Slurm will automatically tell MPI how many tasks and tasks per node to use
 ```
 
 ### KICP Queues
 
-KICP has the access to the following queues (partition in Slurm terminology):
+KICP has access to the following queues (partitions in Slurm terminology):
 
 | Partition | Wallclock limit | Job limits                     |
 |-----------|-----------------|--------------------------------|
@@ -91,16 +91,16 @@ KICP has the access to the following queues (partition in Slurm terminology):
 | kicp-long | 100h            | 128 cores/queue, 64 cores/user |
 
 
-access to kicp-long requires special authorization.
+Access to `kicp-long` requires special authorization.
 
 If you are running jobs with significant I/O or communication between nodes (typically MPI jobs),
-then you should use the the tightly-coupled, infiniband nodes accessed through the kicp and kicp-long
+then you should use the tightly coupled InfiniBand nodes accessed through the `kicp` and `kicp-long`
 partitions. Purely serial or embarrassingly parallel jobs with a large calculation to I/O ratio (say MCMC
-likelihood sampling) should use the high-throughput nodes in the kicp-ht queue.  The limits for kicp-ht
+likelihood sampling) should use the high-throughput nodes in the `kicp-ht` queue. The limits for `kicp-ht`
 were relaxed to encourage use.  If users start to conflict, they may be restricted to prevent
 a single user from dominating those nodes.
 
-Midway also includes two large memory (256GB) and four GPU enabled nodes, as well as a significantly larger
+Midway also includes two large-memory (256 GB) and four GPU-enabled nodes, as well as a significantly larger
 set of nodes that are shared with the rest of the University.  Accessing these resources requires a separate
 allocation.  Please contact the RCC for more details.
 
@@ -110,54 +110,54 @@ Your home directory has a 30G quota,
 and should be used for small files and codes.
 
 KICP has a 50TB allocation in `/project/kicp/`, and each user is initially given a 1TB quota and their
-own subdirectory (`/project/kicp/$USER)`. If you require more space, please let the RCC know and
+own subdirectory (`/project/kicp/$USER`). If you require more space, please let the RCC know and
 your quota may be increased on a case-by-case basis.
 
-New project space is no longer allocated under /project but under /project2.
+New project space is no longer allocated under `/project` but under `/project2`.
 
 Both home and project space are backed up hourly
 to disk, and daily to tape.
 
-Finally, there is a high-performance filesystem mounted on /scratch/midway2 which should be used during runs and
-has a 5TB quota. This
-directory is not backed up and should not be used for long-term storage. In future, files older than a to be
-determined age may be removed automatically, so please practice good data management.
+Finally, there is a high-performance filesystem mounted on `/scratch/midway2`, which should be used during runs and
+has a 5 TB quota. This
+directory is not backed up and should not be used for long-term storage. In the future, files older than a
+yet-to-be-determined age may be removed automatically, so please practice good data management.
 
 ### Snapshots and Backups
 
 We all inadvertently delete or overwrite files from time to time.  Snapshots are automated backups that
 are accessible through a separate path.  Snapshots of a user’s home directory can be found in
-`/snapshots/\*/home/*cnetid*/` where the subdirectories refer to the frequency and time of
-the backup, e.g. daily-2012-10-04.06h15 or hourly-2012-10-09.11h00.
+`/snapshots/*/home/<cnetid>/`, where the subdirectories refer to the frequency and time of
+the backup, e.g., `daily-2012-10-04.06h15` or `hourly-2012-10-09.11h00`.
 
 ## Software
 
-Many common astrophysical codes and libraries have been installed or built on Midway. Other common astrophysics packages require configuration at compilation that prevent them from being installed system-side. Look here for program specific compilation flags, installation instructions, etc for these packages.
+Many common astrophysical codes and libraries have been installed or built on Midway. Other common astrophysics packages require configuration at compilation that prevents them from being installed system-wide. Look here for program-specific compilation flags, installation instructions, etc. for these packages.
 Please contact the RCC if you notice any problems with any of the software or instructions.
 
 ### IDL
 
-IDL is installed on Midway, however the RCC is unable to provide licenses to the entire community. Users who have their own licenses or license servers may configure them to be able to use IDL on Midway’s login and compute nodes. Contact RCC for more details.
+IDL is installed on Midway; however, the RCC is unable to provide licenses to the entire community. Users who have their own licenses or license servers may configure them to be able to use IDL on Midway’s login and compute nodes. Contact RCC for more details.
 
 ### CosmoMC
 
 CosmoMC is a Markov-Chain Monte-Carlo (MCMC) code which is integrated with the theoretical power spectrum code CAMB.  Since
-it is often modified by users, we don’t install a system-wide version, however we have verified that the following parameters
+it is often modified by users, we don’t install a system-wide version; however, we have verified that the following parameters
 give good performance (Warning: under construction, don’t use these instructions without first talking to the RCC).
 
-Specific installation instructions for a non-mpi build using the intel compiler and the intel math kernel library mkl 10.3
-(note, these differ slightly from those provided by the CosmoMC readme ):
+Specific installation instructions for a non-MPI build using the Intel compiler and the Intel Math Kernel Library (MKL) 10.3
+(note: these differ slightly from those provided by the CosmoMC readme):
 
 * Download CosmoMC from cosmologist.info and untar on Midway
 
 
-* Load the modules appropriate for the compiler you intend to use.  In this case a non-mpi build with the intel compiler: `module load intel/12.1 cfitsio/3+intel-12.1 mkl/10.3`
+* Load the modules appropriate for the compiler you intend to use.  In this case, a non-MPI build with the Intel compiler: `module load intel/12.1 cfitsio/3+intel-12.1 mkl/10.3`
 
 
 * Edit the CosmoMC Makefile located in the source subdirectory
 
 The WMAP7 likelihood code and data are already configured and installed on Midway in the `/project/kicp/opt/WMAP/` directory.
-The stock v4 and v4p1 versions from Lambda  are installed, as is a patched version of v4 with special optimizations from
+The stock v4 and v4p1 versions from LAMBDA are installed, as is a patched version of v4 with special optimizations from
 Cora Dvorkin & Wayne Hu.  Select the version you wish to use and change the WMAP variable to point to the full directory, e.g.
 `WMAP = /project/kicp/opt/WMAP/likelihood_v4p1`.
 
@@ -178,17 +178,16 @@ LAPACKL = $(MKLROOT)/lib/intel64/libmkl_lapack95_lp64.a \
 
 * Run make
 
-Note, this section is under construction.  Updated build instructions for a variety of compilers and mpi support will come soon.
+Note, this section is under construction.  Updated build instructions for a variety of compilers and MPI support will come soon.
 
 ### ART
 
-ART has default compilation flags for Midway.  Set the environment variable PLATFORM to midway. This platform file will automatically detect
+ART has default compilation flags for Midway. Set the environment variable `PLATFORM` to `midway`. This platform file will automatically detect
 the MPI environment and compiler option you are using and configure the code accordingly.
 
 ### RAMSES
 
-Ramses is a cosmological hydrodynamic adaptive mesh refinement code originally written by Romain Teyssier.  It is public, and can be
-downloaded .  Oscar Agertz has compiled and run Ramses on Midway and reports good performance with the following makefile configuration:
+Ramses is a cosmological hydrodynamic adaptive mesh refinement code originally written by Romain Teyssier.  It is publicly available. Oscar Agertz has compiled and run Ramses on Midway and reports good performance with the following makefile configuration:
 
 ```bash
 F90 = mpif90 -O3
@@ -200,7 +199,7 @@ LIBS = $(LIBMPI)
 
 ### Gadget
 
-This refers to the public version of Gadget 2.0.7. The following Makefile configuration should work under all combination of compilers, MPI libraries, and Gadget options (including HDF5 support):
+This refers to the public version of Gadget 2.0.7. The following Makefile configuration should work under all combinations of compilers, MPI libraries, and Gadget options (including HDF5 support):
 
 ```bash
 CC = mpicc
@@ -210,7 +209,7 @@ HDF5INCL = -DH5_USE_16_API
 HDF5LIB = -lhdf5
 ```
 
-The code requires that modules are loaded for fftw2, gsl, mpi, and an optional hdf5.  Make sure to load compiler and MPI library specific versions of the modules as necessary.  Some examples are given below:
+The code requires that modules are loaded for fftw2, gsl, MPI, and optionally hdf5. Make sure to load compiler- and MPI-library-specific versions of the modules as necessary.  Some examples are given below:
 
 
 * Intel compiler + Intel MPI (note, loading intelmpi will automatically load intel/12.1):
@@ -263,14 +262,14 @@ consider the following:
 * the cost in developer time needed for a given solution
 
 As a semi-realistic example, this tutorial will use the CLASS
-code to compute the non-linear matter power specturm for a range
+code to compute the non-linear matter power spectrum for a range
 of the neutrino parameter N_eff.
 
 ### CLASS and classy
 
 [CLASS](http://class-code.net/){:target='_blank'} [[1104.2932](http://arxiv.org/abs/1104.2932){:target='_blank'}] is a Boltzmann code similar
 to CMBFAST, CAMB, and others. It can be used to compute a number of large-scale
-structure and CMB observables and since it is designed to perform calculations
+structure and CMB observables, and since it is designed to perform calculations
 within MCMC-type likelihood analyses, it is a good option for these exercises.
 
 To install **CLASS** and its Python wrapper, **classy**, use the
@@ -283,7 +282,7 @@ cd class_public
 make
 ```
 
-**NOTE**: This will install the Class python wrappers in your .local directory
+**NOTE**: This will install the CLASS Python wrappers in your `.local` directory
 while remembering where you compiled CLASS. Make sure you delete them
 both after completing the exercises.
 
@@ -345,7 +344,7 @@ if __name__ == "__main__":
     print "done"
 ```
 
-Run this code without any input parameters to generate the following png figure
+Run this code without any input parameters to generate a PNG figure (`pk.png`)
 from the resulting output files.
 
 
@@ -353,16 +352,16 @@ from the resulting output files.
 
 Implementing your own parallel scheme is useful when the tasks are not completely
 independent, or represent only a part of a larger, non-trivial workflow. Calculations
-that rely on large pre-calculated tables or have costly initilization may also benefit
+that rely on large pre-calculated tables or have costly initialization may also benefit
 from an explicit scheme, as those costs can be amortized over a larger number of tasks.
 
 ### Multiprocessing
 
-Smaller numbers of tasks can be divided amongst workers on a single node. In high
-level languages like Python, or in lower level languages using threading language
+Smaller numbers of tasks can be divided among workers on a single node. In high-level
+languages like Python, or in lower-level languages using threading language
 constructs such as OpenMP, this can be accomplished with little more effort than a
 serial loop. This example also demonstrates using Python as the script interpreter
-for a Slurm batch script, however note that since Slurm copies and executes batch
+for a Slurm batch script; however, note that since Slurm copies and executes batch
 scripts from a private directory, it is necessary to manually add the runtime
 directory to the Python search path.
 
@@ -401,7 +400,7 @@ p.map(work, range(100))
 
 ### MPI
 
-Process and threaded level parallelism is limited to a single machine.
+Process- and thread-level parallelism is limited to a single machine. MPI allows tasks to be distributed across multiple nodes:
 
 ```python
 #!/bin/env python
@@ -440,14 +439,14 @@ module load mpi4py/1.3-2014q3+intelmpi-4.0
 mpirun python mpi_pk.py
 ```
 
-In this case we are only using MPI as a mechanism to remotely launch tasks on distributed
-nodes. All processes must start and end at the same time, which can lead to waste
+In this case, we are only using MPI as a mechanism to remotely launch tasks on distributed
+nodes. All processes must start and end at the same time, which can lead to a waste
 of resources if some job steps take longer than others.
 
 #### Job Scheduler
 
 Most of this workshop will focus on using various features of Midway’s batch scheduler,
-[Slurm](http://slurm.schedmd.com){:target='_blank'} as its sole purpose is to help organize batch job submission.
+[Slurm](http://slurm.schedmd.com){:target='_blank'}, as its sole purpose is to help organize batch job submission.
 
 ### Slurm task per job
 
@@ -474,14 +473,14 @@ for i in {0..10}; do export i; sbatch job.sbatch; done
 python pk.py $i 100
 ```
 
-**NOTE**: It can be difficult to monitor and jobs submitted in this way. Be sure to use a unique
-job-name so you can identify a particular job group with commands like **squeue** and **scancel**,
-e.g. `scancel -n class`
+**NOTE**: It can be difficult to monitor jobs submitted in this way. Be sure to use a unique
+job name so you can identify a particular job group with commands like **squeue** and **scancel**,
+e.g., `scancel -n class`.
 
 ### GNU Parallel
 
 <a href='http://www.gnu.org/software/parallel/' target='_blank'>GNU Parallel</a> is a tool for executing tasks in parallel, typically on a single machine. When coupled with the <a href='http://slurm.schedmd.com' target='_blank'>Slurm</a> command **srun**, **parallel** becomes a powerful way
-of distributing a set of tasks amongst a number of workers. This is particularly useful when
+of distributing a set of tasks among a number of workers. This is particularly useful when
 the number of tasks is significantly larger than the number of available workers (Slurm’s
 `--ntasks`).
 
@@ -518,13 +517,13 @@ $parallel "$srun python pk.py {1} 100 > logs/parallel_{1}.log" ::: {0..99}
 
 ```
 
-This job is submitted as with any [Slurm](http://slurm.schedmd.com){:target='_blank'} batch job
+This job is submitted as with any [Slurm](http://slurm.schedmd.com){:target='_blank'} batch job:
 
 ```bash
 $ sbatch parallel.sbatch
 ```
 
-and will appear as a single job in the queue, assigned as many nodes/cores as was requested:
+and will appear as a single job in the queue, assigned as many nodes/cores as were requested:
 
 ```bash
 $ squeue -u $USER -p kicp
@@ -544,13 +543,13 @@ Seq Host    Starttime   Runtime Send    Receive Exitval Signal  Command
 4   :   1422211598.138  6.464   0   0   0   0   srun --exclusive -N1 -n1 python pk.py 3 100 > logs/runtask.3
 ```
 
-In our case we requested the output from each work step be directed to a file **logs/runtask.{1}**,
-allowing us to perform further diagnostics if necessary. The parallel option `--resume` creates a file
-**parallel.log** which allows GNU Parallel to resume a job that has been stopped due to failure or by hitting
-a walltime limit before all tasks have been completed. If you need to rerun a GNU Parallel job, be sure
-to delete **parallel.log** or it will think it has already finished!
+In our case, we requested that the output from each work step be directed to a file **logs/parallel_{1}.log**,
+allowing us to perform further diagnostics if necessary. The parallel option `--joblog` creates the file
+**logs/runtask.log**, which, combined with `--resume`, allows GNU Parallel to resume a job that has been stopped due to failure or by hitting
+a wall time limit before all tasks have been completed. If you need to rerun a GNU Parallel job from scratch, be sure
+to delete **logs/runtask.log**, or it will think it has already finished!
 
-**NOTE**: More information may found in the RCC documentation section [Parallel batch jobs](../slurm/sbatch.md#parallel-batch-jobs).
+**NOTE**: More information can be found in the RCC documentation section [Parallel batch jobs](../slurm/sbatch.md#parallel-batch-jobs).
 
 ### Slurm Job Array
 
@@ -581,21 +580,21 @@ is a copy of the master script, with an environment variable called `SLURM_ARRAY
 set to the index of the array task. As with the GNU Parallel example, we simply pass the
 value of that environment variable into our program to perform that piece of work.
 
-Each array job will enter the queue and run when resources are available for it, as if we had
-submitted each job manually (this is merely a highly-convenient shortcut).
+Each array task will enter the queue and run when resources are available for it, as if we had
+submitted each job manually (this is merely a highly convenient shortcut).
 
-Array job indices do not need to be a linear range, and can be specified in a number of ways.  For example:
+Array job indices do not need to be a linear range and can be specified in a number of ways. For example:
 
 ```default
 A job array with index values of 1, 2, 5, 19, 27:
 #SBATCH --array=1,2,5,19,27
 
-A job array with index values between 1 and 7 with a step size of 2 (i.e. 1, 3, 5, 7):
+A job array with index values between 1 and 7 with a step size of 2 (i.e., 1, 3, 5, 7):
 #SBATCH --array=1-7:2
 ```
 
 The `%A_%a` construct in the output and error file names is used to generate unique output and error files
-based on the master job ID (%A) and the array-tasks ID (%a).  In this fashion, each array-task will be able to
+based on the master job ID (`%A`) and the array task ID (`%a`). In this fashion, each array task will be able to
 write to its own output and error files.
 
 When we submit a job array, we will see the master process, as well as any submitted, running or otherwise
@@ -618,7 +617,7 @@ $ squeue
 ```
 
 We can cancel all array tasks associated with the master job ID as before, or cancel any subset of them using
-the naming convention `%A_%a`
+the naming convention `%A_%a`:
 
 ```bash
 # cancel job steps 10-100
@@ -634,7 +633,7 @@ What happens if we try to submit a job with, say, `--array=0-1000`?
 sbatch: error: Batch job submission failed: Job violates accounting/QOS policy (job submit limit, user's size and/or time limits)
 ```
 
-The number of jobs a user may have submitted (not running!) at any given time is limited, in order to
+The number of jobs a user may have submitted (not running!) at any given time is limited in order to
 avoid overloading the scheduler and to ensure users cannot accidentally swamp the machines with malformed
 job submissions. To see how many jobs can be run or submitted for a given partition+QOS, use the following
 command:
@@ -648,7 +647,8 @@ MaxJobsPU MaxSubmitPU
 
 The ability to submit array jobs which are larger than `MaxSubmitPU` is coming in a newer
 version of [Slurm](http://slurm.schedmd.com){:target='_blank'}. Until then, each job should handle more than one piece of work, or the GNU Parallel
-solution should be used. For more information, see the RCC documentation section [Job arrays](../slurm/sbatch.md#Job-arrays).
+solution should be used. For more information, see the RCC documentation section [Job arrays](../slurm/sbatch.md#job-arrays).
+
 
 #### Workflow Tools
 

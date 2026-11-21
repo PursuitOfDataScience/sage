@@ -25,7 +25,7 @@ After logging in, you will see the Open OnDemand dashboard (Figure 2). This is y
 
 The entries in the top bar menu include:
 
-* **Apps**: Show the commonly used apps.
+* **Apps**: Shows the commonly used apps.
 
 * **Files**: Manage files and folders in your home directory and other accessible storage locations on Midway. You can upload, download, copy, move, rename, and delete files and folders.
 
@@ -42,7 +42,7 @@ The entries in the top bar menu include:
       ![OOD Job Composer showing job details and script contents](images/job_composer_job_details.png)
       <div class="caption">Figure 5: OOD Job Composer showing job details and script contents</div>
 
-* **Clusters**: Access shell (terminal) access to the Midway3 cluster directly from your browser.
+* **Clusters**: Get shell (terminal) access to the Midway3 cluster directly from your browser.
 
 * **Interactive Apps**: Launch interactive graphical applications or server-based applications like Jupyter Notebooks, RStudio Server, and full Linux Desktop environments.
 
@@ -51,7 +51,7 @@ The entries in the top bar menu include:
 
 1.  **Manage Files:** Use the Files app to upload data, organize directories, and edit scripts.
 2.  **Submit Jobs:** Request resources to run the interactive applications, either by filling in the app form or by using the Job Composer app.
-3.  **Launch Interactive Apps:** Start a Jupyter Notebook, RStudio Server, or a full Linux desktop session in a new tab on your web browser on the compute node. You can close the tab, and resume the session by clicking the button ``Launch [AppName]`` or ``Connect to [ServerName]`` in the Job card.
+3.  **Launch Interactive Apps:** Start a Jupyter Notebook, RStudio Server, or a full Linux desktop session on the compute node in a new tab of your web browser. You can close the tab and resume the session by clicking the button ``Launch [AppName]`` or ``Connect to [ServerName]`` in the Job card.
 4.  **Monitor and Manage:** Track your jobs and sessions, and clean up resources when finished. Manage your research projects, potentially including data and job organization.
 
 ## Using Interactive Apps
@@ -78,7 +78,7 @@ One of the most powerful features of Open OnDemand is the ability to launch inte
     <div class="caption">Figure 7: Job form to request resources for running the app</div>
 5.  Once you have filled out the form, click ``Launch``.
 6.  Your job will be submitted to the Slurm scheduler. You will see its status in the "My Interactive Sessions" section of the dashboard.
-7.  When the job starts and resources are allocated, which may take some time depending on the cluster load and your recent usage history, a Job card (Figure 8) will appear with the ``Host`` field showing the compute node where your session is running on. Click on the button ``Connect`` or ``Launch`` to open your interactive session in a new browser tab.
+7.  When the job starts and resources are allocated, which may take some time depending on the cluster load and your recent usage history, a Job card (Figure 8) will appear with the ``Host`` field showing the compute node where your session is running. Click on the button ``Connect`` or ``Launch`` to open your interactive session in a new browser tab.
     ![Job Card](images/job_card.png)
     <div class="caption">Figure 8: Job card showing the running app with Host and Session ID with a link to the location where the log files of the session are stored.</div>
 8.  When you are finished with your session, explicitly **close the application and then delete your interactive session** from the "My Interactive Sessions" page to free up resources.

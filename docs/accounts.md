@@ -3,7 +3,7 @@
 Discovering the world of high-performance computing at RCC is as easy as pie! We've streamlined the account application process into two main categories: Principal Investigator (PI) accounts and General User accounts. If you're a course instructor, we've got you covered with the option to apply for an Education account.
 
 <p align="center">
-<img src="../../img/rcc_workflow.png" width="650" />
+<img src="../img/rcc_workflow.png" width="650" />
 </p> 
 
 ## Principal Investigator (PI) Accounts
@@ -65,7 +65,7 @@ Embrace multiple affiliations! Both general users and PIs can join multiple pi-a
 
 ### What groups am I a member of?
 
-To explore your group memberships, log into any Midway ecosystems login nodes through `SSH` and type `groups`.
+To explore your group memberships, log in to any Midway login node through `SSH` and type `groups`.
 
 ## Leaving UChicago 
 ### Will I still have access to my RCC account after leaving the University?
@@ -80,7 +80,8 @@ If you've left the university and can't log in, contact our Help Desk to request
 
 Once your project is complete, it's essential to ensure smooth handover and file management. Follow these steps:
 
-1. **Grant Group Access**: Allow your group members access to your files using the following SSH command:
+1. **Grant Group Access**: Give your group members access to your files using the following command:
+
 
     ```bash
     chmod 2771 -R <your_folders>

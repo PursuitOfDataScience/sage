@@ -1,20 +1,22 @@
 # Jupyter
 
-Jupyter Notebook is a popular tool for Python users that provides interactive, web-based computing. JupyterLab is its next-generation IDE-like counterpart, offering more advanced features for data science, scientific computing, computational journalism, and machine learning. Its modular interface lets you create and run multiple documents in separate tabs within the same window.
+[Jupyter Notebook](https://jupyter.org/) is a popular tool for Python users that provides interactive, web-based computing. JupyterLab is its next-generation IDE-like counterpart, offering more advanced features for data science, scientific computing, computational journalism, and machine learning. Its modular interface lets you create and run multiple documents in separate tabs within the same window.
+
+Keywords: `Jupyter Notebook`, `JupyterLab`, `Python`, `interactive computing`, `SSH tunnel`
 
 For lightweight work, you can launch Jupyter on a login node and access its interface from your local machine while all computation runs on Midway. Note that login node resources are shared among all users, and no dedicated hardware such as large RAM or GPUs is available. For heavy computation, request resources through an interactive or batch job before launching Jupyter.
 
 ## Jupyter on Login Nodes
 ### IDE
-If you connect to Midway from an IDE such as VSCode using its Remote-SSH extension, you can open and run Jupyter notebooks directly in the editor without starting a server or setting up a tunnel. Open a `.ipynb` file, click **Select Kernel**, and choose the Python environment you prepared in Step 1 of the [Terminal](#terminal) section. The environment must include `ipykernel`. The notebook kernel runs on the login node you are connected to, so the same resource limits apply.
+If you connect to Midway from an IDE such as VS Code using its Remote-SSH extension, you can open and run Jupyter notebooks directly in the editor without starting a server or setting up a tunnel. Open a `.ipynb` file, click **Select Kernel**, and choose the Python environment you prepared in Step 1 of the [Terminal](#terminal) section. The environment must include `ipykernel`. The notebook kernel runs on the login node you are connected to, so the same resource limits apply.
 
 !!! note
-    The Jupyter extension must be installed on the remote host, even if it is already installed in your local IDE. Extensions installed locally do not run on Midway. In VSCode, open the Extensions view while connected to Midway, find **Jupyter**, and click **Install in SSH: midway3...**.
+    The Jupyter extension must be installed on the remote host, even if it is already installed in your local IDE. Extensions installed locally do not run on Midway. In VS Code, open the Extensions view while connected to Midway, find **Jupyter**, and click **Install in SSH: midway3...**.
 
 ### Terminal
 Connect to a Midway login node, then follow these steps:
 
-**Step 1**: Load a Python module and activate a Python virtual environment that has the `ipykernel` package installed. If you have not created one yet, follow the steps in the Python article of this manual.
+**Step 1**: Load a Python module and activate a Python virtual environment that has the `ipykernel` package installed. If you have not created one yet, follow the steps on the [Python](python.md) page.
 
 **Step 2**: Launch the Jupyter server. Set the `HOST_IP` and `PORT_NUM` variables. `HOST_IP` is the IP address of the login node, and `PORT_NUM` is a free port that Jupyter will listen on:
 
@@ -62,14 +64,14 @@ You do not need a batch script, an SSH tunnel, or a token URL. Open OnDemand han
 ### Terminal 
 When Jupyter runs on a compute node, it returns an on-campus URL (`10.50.x.y`) rather than an external address (`128.135.x.y`). An SSH tunnel is required to reach it from outside the cluster network.
 
-**Step 1**: Write a batch script, `jupyter_on_compute.sh`, replacing `[pi-account]` with the PI account to charge for SUs and adjusting the requested resources as needed. On Midway2, change the `CLUSTER` variable to `midway2.rcc.uchicago.edu` and update the Python module name accordingly. Make sure the activated environment includes `ipykernel` and its dependencies.
+**Step 1**: Write a batch script, `jupyter_on_compute.sh`, replacing `[cnetid]` in `pi-[cnetid]` with your PI's CNetID (the account charged for SUs) and adjusting the requested resources as needed. On Midway2, change the `CLUSTER` variable to `midway2.rcc.uchicago.edu` and update the Python module name accordingly. Make sure the activated environment includes `ipykernel` and its dependencies.
 
 ```
 #!/bin/bash
 #SBATCH --job-name=jupy-job
 #SBATCH --output=jupy-%J.out
 #SBATCH --error=jupy-%J.err
-#SBATCH --account=[pi-account]
+#SBATCH --account=pi-[cnetid]
 #SBATCH --time=04:00:00
 #SBATCH --partition=caslake
 #SBATCH --nodes=1
@@ -77,7 +79,7 @@ When Jupyter runs on a compute node, it returns an on-campus URL (`10.50.x.y`) r
 #SBATCH --mem=4GB
 
 module load python/miniforge-25.3.0
-source activate base
+conda activate base
 
 cd $SLURM_SUBMIT_DIR
 
@@ -101,7 +103,7 @@ squeue --format="%.18i %.9P %c %.30j %.8u %.8T %.10M %.9l %.6D %R" --me
 
 Once the job is running, open `jupy-[JobID].out` to find the SSH tunnel command printed by the script.
 
-**Step 3**: Set up an SSH tunnel from your local machine to the compute node. Open `jupy-[JobID].out`, copy the tunnel command, then run it in a local terminal (PowerShell, MobaXterm, Terminus, etc.). It will look like this, with the port number and node name filled in by the job:
+**Step 3**: Set up an SSH tunnel from your local machine to the compute node. Open `jupy-[JobID].out`, copy the tunnel command, then run it in a local terminal (PowerShell, MobaXterm, Termius, etc.). It will look like this, with the port number and node name filled in by the job:
 
 ```
 ssh -N -L 52915:midway3-0008:52915 cnetid@midway3.rcc.uchicago.edu
@@ -112,6 +114,13 @@ You will be prompted for your password and two-factor authentication. Once authe
 **Step 4**: Connect to the Jupyter server. Open `jupy-[JobID].err` and copy the URL starting with `http://127.0.0.1:.../?token=...`. Paste it into your browser's address bar. Some Jupyter extensions may generate error messages in this file because the air-gapped compute nodes cannot access the internet.
 
 !!! note
-    If you are viewing the `.err` file in VSCode with automatic port forwarding enabled, do not click the link. Clicking it will fail because VSCode forwards ports from the login node, not from the compute node where Jupyter is running. Either disable automatic port forwarding in VSCode settings (`"remote.autoForwardPorts": false`) or copy and paste the URL manually.
+    If you are viewing the `.err` file in VS Code with automatic port forwarding enabled, do not click the link. Clicking it will fail because VS Code forwards ports from the login node, not from the compute node where Jupyter is running. Either disable automatic port forwarding in VS Code settings (`"remote.autoForwardPorts": false`) or copy and paste the URL manually.
 
-**Step 5**: To stop Jupyter, run `scancel [JobID]`. Closing the tunnel terminal only drops your local connection; the Jupyter server continues running on the compute node until the job is cancelled.
+**Step 5**: To stop Jupyter, run `scancel [JobID]`. Closing the tunnel terminal only drops your local connection; the Jupyter server continues running on the compute node until the job is canceled.
+
+## Getting help
+
+- Official documentation: [Jupyter documentation](https://docs.jupyter.org/){:target='_blank'} and [JupyterLab documentation](https://jupyterlab.readthedocs.io/){:target='_blank'}
+- Built-in help: `jupyter lab --help`
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.

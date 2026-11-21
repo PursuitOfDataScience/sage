@@ -3,13 +3,13 @@
 
 ## ThinLinc client 
 
-When logging into the ThinLinc app, click `end existing session`. This will terminate other open sessions. 
+When logging in to the ThinLinc app, check `End existing session`. This will terminate other open sessions. 
 
 ## Check your account quota
 
-If you have too many files in your home directory on Midway clusters with an `expired quota` flag, then ThinLinc cannot write its cache files upon login, which can result in having trouble with login through ThinLinc. To check your account `quota` or, in other words, the status of how much space files in your home directory are taking and how many files you have, log into `Midway3` (or `Midway3-AMD` or `MidwaySSD` or `Beagle3`) through SSH and then type in `quota` and then press enter if there is an `expired` on any of your home directories. 
+If your home directory on a Midway cluster exceeds its quota (indicated by an `expired` flag), ThinLinc cannot write its cache files upon login, which can prevent you from logging in through ThinLinc. To check your account quota, that is, how much space the files in your home directory take and how many files you have, log in to `Midway3` (or `Midway3-AMD`, `MidwaySSD`, or `Beagle3`) through SSH, type `quota`, and press Enter. Then check whether any of your home directories shows `expired`. 
 
-An example output of `quota` command: 
+An example output of the `quota` command: 
 
 ```
 ---------------------------------------------------------------------------
@@ -36,11 +36,11 @@ pi-drpepper      blocks (group)      317.06T    500.49T    501.49T     none
 ---------------------------------------------------------------------------
 ```
 
-In this example, the `expired` flag on `Midway2 home` means the user has too many files. After removing or moving some of the files from `Midway2 home` to `scratch/midway2` or `project2` directories, the issue will be resolved after our system reviews the accounts' quota again in a few hours. 
+In this example, the `expired` flag on `Midway2 home` means the user has too many files. After removing or moving some of the files from `Midway2 home` to `scratch/midway2` or `project2` directories, the issue will be resolved once our system rechecks account quotas, within a few hours. 
 
 ## Cleaning cache files and closing unfinished sessions
 
-Sometimes, ThinLinc leaves some cache files from previous sessions that can cause issues. To close the unfinished sessions, log into the cluster through SSH and run the following command: 
+Sometimes, ThinLinc leaves behind cache files from previous sessions that can cause issues. To close the unfinished sessions, log into the cluster through SSH and run the following command: 
 
 ```
 kill -9 `ps -ef|grep thin|grep $USER|awk '{print $2}'|paste -d " " -s`
@@ -64,7 +64,7 @@ Then remove the cache files:
 rm -rf .cache/* .config/* .dbus/*
 ```
 
-And also, `.local/share` files: 
+Also remove the `.local/share` files: 
 
 ```
 cd .local/share
@@ -75,30 +75,31 @@ Then:
 rm -rf gnome-* nautilus
 ```
 
-If the issue persists, let us know by contacting our helpdesk. 
+If the issue persists, let us know by contacting our [Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}. 
 
 ## Conflict with `conda` files 
-Log into the Midway cluster through SSH and then open `~/.bashrc` file. 
+Log in to the Midway cluster through SSH and then open your `~/.bashrc` file. 
 
 ``` 
 vim ~/.bashrc
 ```
 
 
-If there is anything related to the conda environment, please delete that. This would be any line in between:
+If there is anything related to the conda environment, please delete it. This includes every line between
 
 ```
 # >>> conda initialize >>>
-Hide quoted text
 # !! Contents within this block are managed by 'conda init' !!
-............
-and
-unset __conda_setup
-Show quoted text
-
 ```
 
-Sometime it appears as: 
+and
+
+```
+# <<< conda initialize <<<
+```
+
+Sometimes it appears as: 
+
 
 ```
 __conda_setup="$('/software/python-anaconda-2020.02-el7-x86_64/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"

@@ -1,4 +1,9 @@
-# Python 
+# Python
+
+Python is available on Midway through several distributions provided as modules. This page describes how to choose a distribution and manage packages and environments.
+
+Keywords: `Python`, `conda`, `mamba`, `virtual environments`, `uv`, `pip`
+
 ## Distributions
 
 Different versions of Python on Midway are offered as modules. Choosing the right Python distribution is essential for reproducibility, ease of use, and compatibility with Midway resources. The table below summarizes the main options and when to use each.
@@ -15,7 +20,7 @@ Different versions of Python on Midway are offered as modules. Choosing the righ
     - **Use Anaconda only if required** for teaching, legacy workflows, or compatibility needs. For research, prefer Standard Python or Miniforge.
 
 !!! warning "Important: Anaconda Licensing and Inode Usage Issues"
-    **Anaconda has implemented commercial license restrictions** for organizations with over 200 employees, affecting many academic institutions. Additionally, a full Anaconda installation can exceed 3GB in size and create over 100,000 small files, which quickly exhausts inode quotas. On Midway clusters, home directories typically have strict inode quotas (around 30,000), and a single Anaconda installation can consume most or all of this quota, preventing you from creating additional files.
+    **Anaconda has implemented commercial license restrictions** for organizations with over 200 employees, affecting many academic institutions. Additionally, a full Anaconda installation can exceed 3GB in size and create over 100,000 small files, which quickly exhausts inode quotas. On Midway clusters, home directories have strict file-count (inode) quotas (300,000 files soft limit; see [Quotas](../../storage/main.md#quotas)), and a single Anaconda installation can consume a large share of this quota, preventing you from creating additional files.
 
 **To see available versions:**
 ```bash
@@ -34,9 +39,10 @@ module load python/miniforge-25.3.0  # Miniforge (conda/mamba)
 
 !!! note "Why Miniforge over Anaconda?"
     Miniforge is strongly preferred over Anaconda for research computing on Midway clusters for several reasons:
+
     - **No license restrictions for any use**, unlike Anaconda's commercial restrictions
-    - **Significantly fewer files and inodes** - Anaconda installations can exceed 3GB and create over 100,000 small files
-    - **Smaller disk footprint** - Requires less storage space in your quota
+    - **Significantly fewer files and inodes**: Anaconda installations can exceed 3GB and create over 100,000 small files
+    - **Smaller disk footprint**: Requires less storage space in your quota
     - **Faster package installation** with Mamba support
     - **Uses conda-forge by default** for more up-to-date scientific packages
     - **Better performance on HPC environments** with lower overhead
@@ -47,7 +53,7 @@ module load python/miniforge-25.3.0  # Miniforge (conda/mamba)
     1. Install environments in `/scratch/midway3/$USER/conda_envs` rather than your home directory
     2. Run `conda clean --all` regularly to remove unused package caches
     3. Limit the number of environments you create and maintain
-    4. Use `df -i` to check your current inode usage
+    4. Use `quota` to check your current file count (inode) usage
     5. Consider Python virtual environments (venv) for smaller projects
 
 ## Cache
@@ -85,7 +91,7 @@ Options to control the cache:
      module load python/miniforge-25.3.0
      ```
    - Recommendation: Use project or scratch; do not keep caches in your home directory.
-   - To Clean Unused Packages:
+   - To clean unused packages:
     ```bash
     mamba clean --all  # Remove unused package cache
     # or
@@ -123,18 +129,18 @@ uv pip install numpy pandas
       ```bash
       export UV_NO_CACHE=1
       ```
-    - Note: `UV_NO_CACHE` is an official uv environment variable and does not require a modulefile. See: https://docs.astral.sh/uv/reference/environment/#uv_no_cache
+    - Note: `UV_NO_CACHE` is an official uv environment variable and does not require a modulefile. See the [uv documentation](https://docs.astral.sh/uv/reference/environment/#uv_no_cache).
 
 !!! warning "Compiled packages on Midway2"
     On Midway2, packages with native extensions (e.g., NumPy/SciPy) may require a newer GCC toolchain (e.g., errors like "NumPy requires GCC >= 9.3"). If you encounter this, either load an appropriate GCC module before installing, or prefer installing these packages via conda/mamba environments instead of `uv pip`.
 
 ---
 
-##  Environments
+## Environments
 ### Private
-Suppose that you would like to install numpy, matplotlib and pandas for your calculations. You should first create an environment in your own space and install these packages into this environment.
+Suppose that you would like to install NumPy, Matplotlib, and pandas for your calculations. You should first create an environment in your own space and install these packages into this environment.
 
-Since Python environments might contain many files and/or take a lot space, it is recommended that you create your environments somewhere outside your home folder such as `/project` or `/scratch`. Suppose that your PI has a space under `/project/[pi-folder]` and you have a folder under that location.
+Since Python environments might contain many files and/or take up a lot of space, it is recommended that you create your environments somewhere outside your home folder such as `/project` or `/scratch`. Suppose that your PI has a space under `/project/[pi-folder]` and you have a folder under that location.
 
 ```
 cd /project/[pi-folder]/[your-cnetid]
@@ -143,7 +149,7 @@ source ./my-venv/bin/activate
 pip install matplotlib numpy pandas
 ```
 
-Note that the base environment of the default `python` module already has many popular packages installed, including the above 3 packages. You can also create an environment and install packages with `conda` or `mamba`.
+Note that the base environment of the default `python` module already has many popular packages installed, including the above three packages. You can also create an environment and install packages with `conda` or `mamba`.
 
 === "Midway2"
     Store environments in project space, not home directory:
@@ -174,9 +180,11 @@ Note that the base environment of the default `python` module already has many p
     uv venv myenv
     source /project/PI_NAME/USER/envs/myenv/bin/activate
     ```
+
 Alternatively, you can use `export CONDA_ENVS_PATH=/project/PI_NAME/USER/envs:$CONDA_ENVS_PATH` to let conda know where to search for your virtual environment. 
 
-To backup an environment to a YAML file:
+Once your environment is set up the way you want, especially if it is in your scratch space, you may want to back it up to a YAML file (after activating the environment):
+
 ```bash
 # Minimal spec (portable): only packages you explicitly installed
 conda env export --from-history > environment.yml
@@ -186,7 +194,8 @@ conda env export > environment-full.yml
 uv pip freeze > requirements.txt
 ```
 
-To recreate from a YAML file:
+To recreate the environment from a YAML file:
+
 ```bash
 # Using minimal spec (resolver may choose newer builds)
 conda env create --prefix=/path/to/new/environment -f environment.yml
@@ -194,31 +203,28 @@ conda env create --prefix=/path/to/new/environment -f environment.yml
 # Using full lockfile (recreate exact builds when available)
 conda env create --prefix=/path/to/new/environment -f environment-full.yml
 ```
-Once your environment is set up how you want, especially if it is in your scratch space, you may want
-to create a backup of the environment into a YAML file. You do that after activating the environment
-with `conda env export > environment.yml`. That YAML file can then be used to recreate the environment
-with `conda env create --prefix=/path/to/new/environment -f environment.yml`.
 
 !!! note
     Anaconda may sometimes cause issues with ThinLinc. If you are experiencing frequent, spontaneous disconnections from ThinLinc, remove any sections involving "conda" or "anaconda" from the file `~/.bashrc` (in your home directory).
 
 ### Shared
 Once you load a Python distribution, you can list all available public environments with:
+
 ```bash
 conda env list  
 ```
 To activate an environment, run:
+
 ```
 source activate <ENV NAME>
 ```
 where `<ENV NAME>` is the name of the environment for a public environment,
-or the full path to the environment, if you are using a personal one. You can deactivate an environment
+or the full path to the environment if you are using a personal one. You can deactivate an environment
 with:
- ```
- conda deactivate
- ```
 
-!!! danger
+```
+conda deactivate
+```
 
 !!! tip "Why use `source activate` instead of `conda activate` (or `mamba activate`)?"
     **`conda activate`/`mamba activate` require `conda init`**, which edits your shell startup files (e.g., `~/.bashrc`, `~/.bash_profile`). Those edits can interfere with the module environment, non-interactive shells (batch jobs), and remote desktop sessions, and generally degrade the user experience on Midway. Using `source activate` (with the full env path or a symlinked name) avoids modifying startup files and works reliably across login, batch, and ThinLinc sessions.
@@ -226,8 +232,8 @@ with:
 !!! danger "Do not run `conda init`"
     Never run `conda init` on Midway. It modifies your shell startup scripts and can break module behavior, non-interactive shells, and ThinLinc sessions. Use `source activate` instead of `conda activate`.
 
-With each Anaconda distribution, we have a small selection of widely used environments. Many, such as
-Tensorflow or DeepLabCut should be loaded through their modules (i.e., `module load tensorflow`), which automate the loading of other
+With each Anaconda distribution, we provide a small selection of widely used environments. Many, such as
+TensorFlow or DeepLabCut, should be loaded through their modules (i.e., `module load tensorflow`), which automate the loading of other
 relevant libraries that are available as modules.
 
 The `python/miniforge-25.3.0` module comes with several pre-configured domain-specific environments. Each environment is optimized for a specific research domain. Here’s a quick comparison:
@@ -241,7 +247,9 @@ The `python/miniforge-25.3.0` module comes with several pre-configured domain-sp
 | hpc         | `source activate hpc`  | Parallel/distributed computing   | mpi4py, dask, dask-jobqueue, joblib, ipyparallel, numpy, pandas                            |
 
 All environments include:
+
 - Python 3.x
+
 - Mamba for fast package management
 - Pip for additional package installation
 - Common development tools
@@ -249,9 +257,9 @@ All environments include:
 !!! tip "Choosing your environment"
     Select the environment that matches your research domain to get started quickly. You can always install extra packages or create a custom environment based on these templates.
 
+## Getting help
 
-
-
-
-
-
+- Official documentation: [Python documentation](https://docs.python.org/3/){:target='_blank'} and [conda documentation](https://docs.conda.io/){:target='_blank'} and [uv documentation](https://docs.astral.sh/uv/){:target='_blank'}
+- Built-in help: `python -m pip --help`, `conda --help`, and `uv --help`
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.

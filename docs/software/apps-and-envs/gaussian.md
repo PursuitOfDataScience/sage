@@ -1,6 +1,8 @@
 # Gaussian
 
-<a href='https://gaussian.com/gaussian16/' target='_blank'>Gaussian</a> is a general-purpose computational chemistry software package with focus on electronic structure modeling. Gaussian is developed and licensed by Gaussian, Inc.
+<a href='https://gaussian.com/gaussian16/' target='_blank'>Gaussian</a> is a general-purpose computational chemistry software package with a focus on electronic structure modeling. Gaussian is developed and licensed by Gaussian, Inc.
+
+Keywords: `quantum chemistry`, `chemistry`, `electronic structure`, `DFT`
 
 ## Getting access
 
@@ -15,6 +17,8 @@ longdesc='TXT'/>
 
 **Step 2** To access Gaussian, you must be a member of the RCC's `gaussian` Unix group. You can check if you are already a member of the `gaussian` group by running `groups` in the terminal while connected to a Midway cluster login node. To join the `gaussian` group, submit a <a href='https://rcc.uchicago.edu/accounts-allocations/general-user-account-request' target='_blank'>General User Account Request</a> with "Gaussian" as the Principal Investigator account name. (Note that even PIs submit a General User Account Request to get access to Gaussian. This is different from Step 1, where PIs submit a PI Account Request to become an RCC user.)
 
+## Available modules
+
 Once you are a member of the `gaussian` group, you will be able to run Gaussian programs. To check what versions of Gaussian are currently available on the Midway clusters, use SSH to log into Midway2 or Midway3 and run this command in your terminal:
 
 ```
@@ -25,7 +29,9 @@ The versions of Gaussian on Midway2 and Midway3 may be different; please check b
 
 You can run Gaussian jobs in an [`sinteractive` session](../../slurm/sinteractive.md), meaning you connect live to a compute node, or by using an [`sbatch` script](../../slurm/sbatch.md) to send your job to a compute node. (Gaussian jobs only run on compute nodes, not login nodes.) See below for examples of each of these workflows.
 
-## Example Gaussian job with `sinteractive`
+## Example job scripts
+
+### Interactive job with `sinteractive`
 You can start an `sinteractive` session on Midway3 by running this command in your terminal. Don't forget to replace `pi-drpepper` with your account (typically your PI's CNetID).
 
 ```
@@ -46,7 +52,7 @@ $ g16 < your-input.com > your-output.out
 
 If you need to make more complex specifications, use an `sbatch` file (see below) to submit your job to the RCC's [Slurm workload manager](../../slurm/main.md), which will run the job on a compute node for you.
 
-## Example Gaussian job with `sbatch`
+### Batch job with `sbatch`
 
 Here is an example input file, `water.com`:
 
@@ -70,7 +76,7 @@ Here is an example `sbatch` file, `water.sbatch`, that runs `water.com`:
 #SBATCH --job-name=example_sbatch_gaussian
 #SBATCH --partition=caslake
 #SBATCH --time=00:30:00
-#SBATCH --account=rcc-staff # replace this with your PI account 
+#SBATCH --account=pi-[cnetid] # replace this with your PI account 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -94,8 +100,8 @@ echo "Requested memory per GPU: $SLURM_MEM_PER_GPU" >> $SLURM_JOB_ID.txt
 Gaussian can consume a lot of memory, so include these additional flags in your `sbatch` file if you are running a large job:
 
 ```
-#SBATCH –exclusive # The job allocation can not share nodes with other running jobs 
-#SBATCH –mem=0 # Use the maximum available memory on the node
+#SBATCH --exclusive # The job allocation cannot share nodes with other running jobs 
+#SBATCH --mem=0 # Use the maximum available memory on the node
 ```
 
 You can submit this example job by running this command in your terminal:
@@ -104,37 +110,17 @@ You can submit this example job by running this command in your terminal:
 sbatch water.sbatch
 ```
 
-For calculations that involve multiple steps (such as geometry optimization, single-point calculation, frequency analysis), it is recommended to generate and update <a href='https://gaussian.com/man/' target='_blank'>checkpoints</a> during individual steps (via the `%Chk` command). The checkpoint of the preceding steps will be loaded for the following steps (via the `%OldChk` command). This way, if the job crashes or is terminated due to time limit, you can resubmit the job at the suitable step to continue the calculation. For more details and guidelines, please refer to the <a href='https://gaussian.com/man/' target='_blank'>Gaussian documentation</a>.
+For calculations that involve multiple steps (such as geometry optimization, single-point calculation, frequency analysis), it is recommended to generate and update <a href='https://gaussian.com/man/' target='_blank'>checkpoints</a> during individual steps (via the `%Chk` command). The checkpoint of the preceding steps will be loaded for the following steps (via the `%OldChk` command). This way, if the job crashes or is terminated due to the time limit, you can resubmit the job at the suitable step to continue the calculation. For more details and guidelines, please refer to the <a href='https://gaussian.com/man/' target='_blank'>Gaussian documentation</a>.
 
-## Input and output
-
-GaussianView is a graphical interface used with Gaussian. It aids in the creation of Gaussian input files, enables the user to run Gaussian calculations from a graphical interface without the need for using a command line instruction, and helps in the interpretation of Gaussian output. Users can use it to plot properties, animate vibrations, or visualize computed spectra.
-
-You can use GaussianView on Midway2 with:
-
-```
-module load gaussian/09RevB.01
-```
-
-However, GaussianView is not currently available for any of the versions of Gaussian on Midway3.
-
-To use GaussianView, you will need to run and X server on your computer and enable [X11 forwarding](../../connection/ssh/main.md) when you log into the cluster. Otherwise, users need to open a ThinLinc session to open the GaussianView GUI.
-
-Other options to prepare the molecular structure used in the input files include software packages such as <a href='https://avogadro.cc/' target='_blank'>Avogadro</a>, a molecule editor and visualizer. Avogadro is also available on Midway2.
-
-Alternatively, users can use <a href='https://molview.org/' target='_blank'>MolView</a> (a web-based application), or <a href='https://www.chemcraftprog.com/' target='_blank'>ChemCraft</a> (a cross-platform application). After generating the molecular structure from these packages, users put the atom coordinates into  the Gaussian input file, or use another tool to assemble a proper input file.
-
-Gaussian output can be visualized using Avogadro, VMD or OVITO. Users can check the installed versions of these software packages on Midway2 and Midway3 via the `module avail` command.
-
-
-### GPU support
+### GPU job
 On Midway3, the module `gaussian/16RevC.02` supports GPU acceleration with NVIDIA Tesla A100 GPUs. To run Gaussian with GPU support, please refer to the <a href='https://gaussian.com/gpu/'>Gaussian</a> documentation.
 
 An example of the job script to use GPU is given below.
 
 ```
 #!/bin/bash
-#SBATCH --account=rcc-staff   # replace this with your PI account 
+#SBATCH --account=pi-[cnetid]   # replace this with your PI account 
+
 #SBATCH -t 02:00:00
 #SBATCH --nodes=1
 #SBATCH --partition=gpu
@@ -163,7 +149,7 @@ echo $MP_BLIST
 g16 < input.txt > output.txt
 ```
 
-This job script requests 1 node, 1 task per node, 8 CPU cores for multithreading, and 32 GB RAM. It also request 1 GPU on the node.
+This job script requests 1 node, 1 task per node, 8 CPU cores for multithreading, and 32 GB RAM. It also requests 1 GPU on the node.
 
 The input file `input.txt` should contain the following settings:
 
@@ -173,21 +159,31 @@ The input file `input.txt` should contain the following settings:
 %mem=32GB
 ```
 
-to indicate that the CPU cores with indices from 0 through 7 will be used for the calculation, and the GPU 0 will be driven by CPU core 0.
+to indicate that the CPU cores with indices from 0 through 7 will be used for the calculation, and GPU 0 will be driven by CPU core 0.
 
-## Additional resources
-HPC Wiki: <a href='https://hpc-wiki.info/hpc/Gaussian'>Gaussian</a>  
-Central Washington University: <a href='https://kb.ndsu.edu/135576' target='_blank'>Running Gaussian on Linux</a>  
-North Dakota State University: <a href='https://www.youtube.com/watch?v=Zh4tbqVCHWg'>Running Gaussian 16 on CCAST Clusters</a>   
+## Input and output
 
+GaussianView is a graphical interface used with Gaussian. It aids in the creation of Gaussian input files, enables the user to run Gaussian calculations from a graphical interface without the need for command-line instructions, and helps in the interpretation of Gaussian output. Users can use it to plot properties, animate vibrations, or visualize computed spectra.
 
+You can use GaussianView on Midway2 with:
 
+```
+module load gaussian/09RevB.01
+```
 
+However, GaussianView is not currently available for any of the versions of Gaussian on Midway3.
 
+To use GaussianView, you will need to run an X server on your computer and enable [X11 forwarding](../../connection/ssh/main.md) when you log into the cluster. Otherwise, users need to open a [ThinLinc](../../connection/thinlinc/main.md) session to open the GaussianView GUI.
 
+Other options to prepare the molecular structure used in the input files include software packages such as <a href='https://avogadro.cc/' target='_blank'>Avogadro</a>, a molecule editor and visualizer. Avogadro is also available on Midway2.
 
+Alternatively, users can use <a href='https://molview.org/' target='_blank'>MolView</a> (a web-based application), or <a href='https://www.chemcraftprog.com/' target='_blank'>ChemCraft</a> (a cross-platform application). After generating the molecular structure from these packages, users can put the atom coordinates into the Gaussian input file or use another tool to assemble a proper input file.
 
+Gaussian output can be visualized using Avogadro, VMD or OVITO. Users can check the installed versions of these software packages on Midway2 and Midway3 via the `module avail` command.
 
+## Getting help
 
-
-
+- Official documentation: [Gaussian 16 manual](https://gaussian.com/man/){:target='_blank'} and [Gaussian GPU usage](https://gaussian.com/gpu/){:target='_blank'}
+- Other resources: [HPC Wiki: Gaussian](https://hpc-wiki.info/hpc/Gaussian){:target='_blank'}, [NDSU: Running Gaussian on Linux](https://kb.ndsu.edu/135576){:target='_blank'}, and [NDSU: Running Gaussian 16 on CCAST Clusters (video)](https://www.youtube.com/watch?v=Zh4tbqVCHWg){:target='_blank'}
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.

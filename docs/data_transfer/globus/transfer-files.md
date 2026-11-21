@@ -1,6 +1,6 @@
 # Transfer Files with Globus
 
-**Globus** is a robust file-sharing and transfer service. Globus calls a collection of files an endpoint. The RCC has several Globus endpoints. This guide explains how to make your computer a Globus endpoint and transfer files between Globus endpoints. Put another way, this guide explains how to move files between your local system (i.e., your computer, lab computers, etc.) and the RCC's Midway 2 and 3 ecosystems. 
+**Globus** is a robust file-sharing and transfer service. Globus calls a collection of files an endpoint. The RCC has several Globus endpoints. This guide explains how to make your computer a Globus endpoint and transfer files between Globus endpoints. Put another way, this guide explains how to move files between your local system (i.e., your computer, lab computers, etc.) and the RCC's Midway2 and Midway3 ecosystems. 
 
 Note that this guide focuses on transferring files through the <a href='https://globus.rcc.uchicago.edu/' target='_blank'>Globus web app</a>. Advanced users can access additional functionality by using the
 <a href='https://docs.globus.org/cli/' target='_blank'>Globus command line interface (CLI)</a>, a standalone app that you can install on your computer and then use to access Globus.
@@ -9,7 +9,7 @@ Note that this guide focuses on transferring files through the <a href='https://
 
 Follow the instructions in the <a href='https://docs.globus.org/globus-connect-personal/install/' target='_blank'>Globus documentation</a> to install Globus Connect Personal and make your computer a Globus endpoint (also called a collection). When Globus Connect Personal asks you to authenticate (Step 4), log in with your UChicago CNetID. 
 
-Once your computer is a Globus endpoint, you will be able to access files stored on your local system, as well as files stored in the RCC's ecosystems, from <a href='https://globus.rcc.uchicago.edu/' target='_blank'>globus.rcc.uchicago.edu</a>. To access your locally stored files, click the "File Manager" in the toolbar on the left of your screen and type the name you gave your personal endpoint into the collection search bar: 
+Once your computer is a Globus endpoint, you will be able to access files stored on your local system, as well as files stored in the RCC's ecosystems, from <a href='https://globus.rcc.uchicago.edu/' target='_blank'>globus.rcc.uchicago.edu</a>. To access your locally stored files, click "File Manager" in the toolbar on the left of your screen and type the name you gave your personal endpoint into the collection search bar: 
 
 <p align='center'>
 <img src='/img/globus/personal-endpoint.png'
@@ -55,12 +55,12 @@ width='650'
 alt='"Schedule Start" option set to 12/15/2023 1:30 PM.'/>
 </p>
 
-Use the "Repeat" option at the bottom of the menu to schedule a recurring file transfer. Specify how frequently you would like the transfer to occur and, optionally when you would like the transfer to stop. For example, you could schedule a transfer to happen every other day for a year:
+Use the "Repeat" option at the bottom of the menu to schedule a recurring file transfer. Specify how frequently you would like the transfer to occur and, optionally, when you would like the transfer to stop. For example, you could schedule a transfer to happen every other day for a year:
 
 <p align='center'>
 <img src='/img/globus/recurring-transfer.png'
 width='650'
-alt='A recurring file transfer. "Repeat" is set today, "every" is set to 2 days, and the end is set to by date 12/15/2024, 01:30 PM.'/>
+alt='A recurring file transfer. "Repeat" is set to "days", "every" is set to 2 days, and the end is set to by date 12/15/2024, 01:30 PM.'/>
 </p>
 
 ## Globus Flows
@@ -68,9 +68,10 @@ You can also transfer files (<a href='https://docs.globus.org/api/flows/hosted-a
 
 **Think of a flow like a function:** you run a flow when you want something to happen on Globus, just like you call a function when you want something to happen in your code. Globus offers <a href='https://docs.globus.org/api/flows/#getting_started' target='_blank'>two ready-made flows</a>:
 
-* The **Move (Copy and Delete)** flow copies data between collections then deletes the original data from the source collection.
+* The **Move (Copy and Delete)** flow copies data between collections and then deletes the original data from the source collection.
 
-* The **Two-Stage Transfer** flow copies data between two collections using a third collection as an intermediate location, which can be useful for meeting security and compliance requirements
+* The **Two-Stage Transfer** flow copies data between two collections using a third collection as an intermediate location, which can be useful for meeting security and compliance requirements.
+
 
 You can also run flows other Globus users have created, just like you can call functions from different libraries, or create custom flows, just like you can define your own functions.
 

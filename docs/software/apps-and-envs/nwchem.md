@@ -1,8 +1,8 @@
 # NWChem
 
-[NWChem](https://www.nwchem-sw.org/) is an open source software package for performing high-performance computational chemistry calculations. The software contains tools that are scalable both in their ability to efficiently treat large scientific problems, and in their use of available computing resources from high-performance parallel supercomputers to conventional workstation clusters.
+[NWChem](https://www.nwchem-sw.org/) is an open-source software package for performing high-performance computational chemistry calculations. The software contains tools that are scalable both in their ability to efficiently treat large scientific problems, and in their use of available computing resources from high-performance parallel supercomputers to conventional workstation clusters.
 
-Check out the NWChem documentation for more information: https://nwchemgit.github.io/index.html
+Check out the [NWChem documentation](https://nwchemgit.github.io/index.html) for more information.
 
 Keywords: `quantum chemistry`, `chemistry`
 
@@ -31,9 +31,10 @@ prepend-path    LIBRARY_PATH /software/nwchem-7.2.2-el8-x86_64/lib
 ```
 
 
-## Example job script
+## Example job scripts
 
-An example batch script to run NWChem for Midway3 is given as below
+An example batch script to run NWChem on Midway3 is given below:
+
 ```
 #!/bin/bash
 #SBATCH --job-name=nwchem-bench
@@ -56,7 +57,8 @@ n=$(( ppn * nodes ))
 mpirun -n $n nwchem input.nw
 ```
 
-An example input file `input.nw` can be as follows:
+An example input file `input.nw` is as follows:
+
 ```
 start h2o 
 title "Water in 6-31g basis set" 
@@ -73,14 +75,14 @@ end
 task scf
 ```
 
-## Build NWChem from source
+## Build from source
 
-Since NWChem is under active development, it might be beneficial for you to build NWChem from source to get the new features, improvements, and bugfixes. 
+Since NWChem is under active development, it might be beneficial for you to build NWChem from source to get the latest features, improvements, and bug fixes. 
 
-Below is an example to illustrate how you build NWChem from source using the Intel oneAPI toolchain on Midway3/Beagle3.
+Below is an example to illustrate how to build NWChem from source using the Intel oneAPI toolchain on Midway3/Beagle3.
 
 ```
-module load oneapi/2023.1 mkl/2023.1 python/anaconda-2021.5 cmake 3.26
+module load oneapi/2023.1 mkl/2023.1 python/anaconda-2021.5 cmake/3.26
 cd /your/own/space
 git clone https://github.com/nwchemgit/nwchem.git
 cd nwchem
@@ -105,3 +107,10 @@ export FC=mpiifort
 make nwchem_config
 make
 ```
+
+## Getting help
+
+- Official documentation: [NWChem documentation](https://nwchemgit.github.io/){:target='_blank'}
+- Built-in help: `module help nwchem/7.2.2`
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.

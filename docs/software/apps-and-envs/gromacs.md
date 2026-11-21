@@ -24,11 +24,15 @@ There are several GROMACS modules on Midway2 and Midway3 that you can check via 
     gromacs/2020.4  gromacs/2021.5  gromacs/2022.4(default)  gromacs/2022.4-colvars  gromacs/2025.1  gromacs/2025.3
 
     ```
-You can then show the dependency of individual modules, for example,
+
+You can then show the dependencies of individual modules, for example:
+
 ```
 module show gromacs/2022.4
 ```
-which gives on Midway3
+
+which gives the following on Midway3:
+
 ```
 -------------------------------------------------------------------
 /software/modulefiles/gromacs/2022.4:
@@ -44,19 +48,21 @@ prepend-path    CPATH /software/gromacs-2022.4-el8-x86_64/include
 prepend-path    MANPATH /software/gromacs-2022.4-el8-x86_64/share/man
 ```
 
-In this case you can see this module was compiled with `intelmpi/2021.5+intel-2022.0`, `cuda/11.5` and `plumed/2.8.1`. As a result, this version supports GPU acceleration and should be used on GPU nodes.
+In this case, you can see this module was compiled with `intelmpi/2021.5+intel-2022.0`, `cuda/11.5` and `plumed/2.8.1`. As a result, this version supports GPU acceleration and should be used on GPU nodes.
 
 ???+ note
     GROMACS is under active development. You are encouraged to build the latest stable version from [source code](https://github.com/gromacs/gromacs) in your own space using the provided [compilers](../compilers.md).
 
-The GROMACS documentation contains useful information for improving performance of your specific calculations:
+The GROMACS documentation contains useful information for improving the performance of your specific calculations:
 
 [GROMACS mdrun performance guide](https://manual.gromacs.org/documentation/current/user-guide/mdrun-performance.html)
 
-## Example job script
+## Example job scripts
 
-An example batch script to run GROMACS for Midway3 is given below
+An example batch script to run GROMACS on Midway3 is given below:
+
 ```
+
 #!/bin/bash
 #SBATCH --job-name=gmx-bench
 #SBATCH --account=pi-[cnetid]
@@ -105,3 +111,9 @@ sbatch gromacs-plumed.sbatch
 The submission scripts can be modified to suit your needs
 --->
 
+## Getting help
+
+- Official documentation: [GROMACS documentation](https://manual.gromacs.org/current/){:target='_blank'} and [GROMACS mdrun performance guide](https://manual.gromacs.org/documentation/current/user-guide/mdrun-performance.html){:target='_blank'}
+- Built-in help: `gmx_mpi help commands` and `gmx_mpi mdrun -h`
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.

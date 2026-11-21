@@ -7,7 +7,8 @@ Users can install R or Python packages through the internal web proxy. Once auth
 module load proxy
 proxy 2h
 ```
-The proxy command will prompt for authentication. Users can also specify a time limit to avoid repeated authentication prompts.
+
+The `proxy` command will prompt for authentication. Users can also specify a time limit to avoid repeated authentication prompts.
 
 ## Spack Package Manager
 Spack is an HPC package manager that can be used to build scientific software with complex dependency chains.
@@ -15,7 +16,7 @@ Spack is an HPC package manager that can be used to build scientific software wi
 ```
 module load spack                           # activate Spack
 module use /software/spack-modules          # add Spack modules to MODULEPATH
-module avail                                # see available spack modules next to the system modules
+module avail                                # see available Spack modules next to the system modules
 module load gdal                            # load GDAL and all its dependencies
 ```
 

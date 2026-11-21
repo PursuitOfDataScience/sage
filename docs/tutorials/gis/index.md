@@ -19,7 +19,7 @@ RCC supports a variety of GIS software platforms optimized for HPC environments:
 | Python (geospatial libraries) | Versatile programming language with robust GIS support |
 | Orfeo Toolbox (OTB) | Advanced remote sensing toolbox |
 | SAGA GIS | System for Automated Geoscientific Analyses |
-| STATA | Statistical software with spatial econometrics capabilities |
+| Stata | Statistical software with spatial econometrics capabilities |
 | SAS | Analytics software suite with geospatial procedures |
 | MATLAB | Numerical computing environment with mapping toolbox |
 
@@ -57,8 +57,8 @@ CyberGIS combines cyberinfrastructure capabilities with GIS to tackle computatio
 
 ## Accessing GIS on HPC
 
-1. **Request an RCC account** if you don't already have one
-2. **Connect to the RCC cluster** via SSH or our user-friendly web portal
+1. **[Request an RCC account](../../accounts.md)** if you don't already have one
+2. **Connect to the RCC cluster** via [SSH](../../connection/ssh/main.md) or our user-friendly web portal, [Open OnDemand](../../connection/open_ondemand/open_ondemand.md)
 3. **Load GIS modules** using the `module load` command (e.g., `module load qgis-ltr`)
 4. **Execute your GIS workflows** through batch jobs or interactive sessions
 
@@ -73,7 +73,7 @@ CyberGIS combines cyberinfrastructure capabilities with GIS to tackle computatio
 - Access to shared geospatial datasets on RCC storage systems.
 - Tools for efficient data transfer and management of large geospatial files.
 - Integration with RCC's data management policies and best practices.
-- Geocoding services available at [geocoder.rcc.uchicago.edu](https://geocoder.rcc.uchicago.edu) and [instructions](./geocoding.md).
+- Geocoding services are available at [geocoder.rcc.uchicago.edu](https://geocoder.rcc.uchicago.edu) (see the [instructions](./geocoding.md)).
 
 ## Research Examples
 
@@ -95,12 +95,6 @@ As part of the University of Chicago's commitment to GIS education, RCC-GIS prov
 
 ## Contact RCC-GIS Staff
 
-If you have questions about how GIS can enhance your research or need assistance on how to begin, reach out to the RCC-GIS team for customized support suited to your requirements and expertise. The RCC-GIS promotes interdisciplinary research and education, assisting UChicago users in incorporating GIS techniques and software across various fields.
-
-Sources
-[1] [gis.rcc.uchicago.edu](https://gis.rcc.uchicago.edu)
-
+If you have questions about how GIS can enhance your research or need assistance getting started, reach out to the RCC-GIS team for customized support suited to your requirements and expertise. The RCC-GIS promotes interdisciplinary research and education, assisting UChicago users in incorporating GIS techniques and software across various fields.
 
 For more information on general RCC-GIS services, visit our [main GIS portal](https://gis.rcc.uchicago.edu).
-
-[def]: ./geocoding.md

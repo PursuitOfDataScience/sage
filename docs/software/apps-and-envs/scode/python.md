@@ -40,7 +40,7 @@ These extensions provide essential support for Python development and interactiv
 * [`ms-python.python`](https://marketplace.visualstudio.com/items?itemName=ms-python.python) adds language features like IntelliSense, linting, debugging, and environment management for Python.
 * [`ms-toolsai.jupyter`](https://marketplace.visualstudio.com/items?itemName=ms-toolsai.jupyter) enables support for running Jupyter notebooks within the editor, including code execution and rich outputs.
 
-More extensions be found on the [VS Code Extension Marketplace](https://marketplace.visualstudio.com/vscode).
+More extensions can be found on the [VS Code Extension Marketplace](https://marketplace.visualstudio.com/vscode).
 
 Extensions are cached in `~/.scode/envs/stable/<env>/extensions/` by default, so subsequent sessions will start with the extensions you have previously installed.
 
@@ -50,7 +50,7 @@ Make sure to periodically run `scode ext update` to keep your extensions up to d
 
 ## 2  Environment Setup & Tips
 
-Jupyter kernels started within VS Code Web inherits the shell environment of the VS Code Server. So it is recommended to have the Python environment configured before starting the VS Code server with `scode`.
+Jupyter kernels started within VS Code Web inherit the shell environment of the VS Code Server, so it is recommended to have the Python environment configured before starting the VS Code server with `scode`.
 
 Two reliable patterns keep Python (and friends like CUDA or Java) on the PATH for both VS Code integrated terminals and Jupyter kernels:
 
@@ -84,11 +84,11 @@ This runs **just before** the VS Code Server starts, ensuring both the server a
 
 !!! question "Why so early?"
 
-    Jupyter kernels are spawned as subprocesses of the VS Code server. If you load modules **after** the server starts, kernels *won’t* inherit them. We have to restart the server (the whole job) to pick up changes.
+    Jupyter kernels are spawned as subprocesses of the VS Code server. If you load modules **after** the server starts, kernels *won’t* inherit them. You have to restart the server (the whole job) to pick up changes.
 
 ---
 
-## 3  Choosing An Interpreter (and How VS Code Finds Them)
+## 3  Choosing an Interpreter (and How VS Code Finds Them)
 
 According to Microsoft’s [search order](https://code.visualstudio.com/docs/python/environments#_where-the-extension-looks-for-environments), the Python extension probes these locations **on the server host**:
 
@@ -121,7 +121,7 @@ Changes to your shell environment (e.g., your `~/.bashrc`) are picked up by **ne
 | **Change you made**                                   | **What to do...**                             |
 | ----------------------------------------------------- | ------------------------------------------------------------- |
 | Edited `~/.bashrc` or added `module load …` lines     | Run `source ~/.bashrc`, or reopen a terminal tab to get the updated environment         |
-| Created a new venv/Conda env *inside the running job* | Activate it in the terminal (e.g. `source venv/bin/activate`) |
+| Created a new venv/Conda env *inside the running job* | Activate it in the terminal (e.g., `source venv/bin/activate`) |
 | Installed new Python packages into the active env     | Ready to use immediately                                      |
 
 ### 4.2  Jupyter Notebooks
@@ -146,7 +146,8 @@ Notebook kernels are spawned by the VS Code Server process and inherit its env
 
 2. **Notebook kernel stuck on “Starting”?**
 
-    * The env might miss `ipykernel`; run `python -m pip install ipykernel`.
+    * The env might be missing `ipykernel`; run `python -m pip install ipykernel`.
+
     * Double‑check that the env’s `python` is executable on the compute node.
 
 3. **Modules (e.g., CUDA) missing inside notebook but present in terminal?**

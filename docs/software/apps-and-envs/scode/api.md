@@ -15,8 +15,8 @@ scode <command> [subcommand] [options]
 ## Global Architecture
 
 - All VS Code environments and installations are managed under `~/.scode`.
-- `scode` uses SLURM (`sbatch`, `squeue`, `scancel`) to launch and manage VS Code Server jobs internally.
-- Extensions are stored in environments under `~/.scode/envs`. A `default` environment is automatically created and activated when running commands that requires an active environment.
+- `scode` uses Slurm (`sbatch`, `squeue`, `scancel`) to launch and manage VS Code Server jobs internally.
+- Extensions are stored in environments under `~/.scode/envs`. A `default` environment is automatically created and activated when running commands that require an active environment.
 
 ---
 
@@ -24,7 +24,7 @@ scode <command> [subcommand] [options]
 
 ### **`serve-web` / `serve`**
 
-Launch a web-based VS Code Server using SLURM.
+Launch a web-based VS Code Server using Slurm.
 
 ```bash
 scode serve-web [--version <version>] [--env <env>] [--port <port>]
@@ -40,7 +40,7 @@ scode serve-web [--version <version>] [--env <env>] [--port <port>]
 - `--setup-command`: Command to run before starting the VS Code server. This can be used to set up the environment, install dependencies, or perform any necessary pre-launch tasks. For example, `--setup-command "module load python/anaconda-2023.09"`.
 - `--setup-script`: Path to a custom setup script to run before starting the VS Code server.
 - `--sbatch-file`: Path to a custom SBATCH script file to use instead of the default. The SBATCH directives in this file will be used to configure the job submission, and the commands in the file will be executed before starting the VS Code server.
-- `--local`: Skip sbatch submission and launch the server directly as a subprocess in the current shell. Primarily intended for running inside compute nodes already allocated (e.g. via [Open OnDemand](../../../connection/open_ondemand/open_ondemand.md)). Also useful for debugging VS Code server behavior on login nodes or within `sinteractive` sessions.
+- `--local`: Skip sbatch submission and launch the server directly as a subprocess in the current shell. Primarily intended for running on already-allocated compute nodes (e.g., via [Open OnDemand](../../../connection/open_ondemand/open_ondemand.md)). Also useful for debugging VS Code server behavior on login nodes or within `sinteractive` sessions.
 - `--`: All remaining arguments after the `--` separator are passed directly to `sbatch`
 
 **Example:**

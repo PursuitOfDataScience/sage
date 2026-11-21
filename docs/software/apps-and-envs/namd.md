@@ -1,6 +1,6 @@
-# [NAMD](http://www.ks.uiuc.edu/Research/namd/)
+# NAMD
 
-[NAMD](http://www.ks.uiuc.edu/Research/namd/)  is a parallel molecular dynamics code designed for high-performance simulation of large biomolecular systems.
+[NAMD](https://www.ks.uiuc.edu/Research/namd/) is a parallel molecular dynamics code designed for high-performance simulation of large biomolecular systems.
 
 Keywords: `biology`, `physics`, `chemistry`, `molecular dynamics`
 
@@ -29,11 +29,14 @@ There are several NAMD modules on Midway2 and Midway3 that you can check via `mo
     namd/3.0b5-netlrts-smp-cuda
     namd/3.0b5-verbs-smp-cuda
     ```
-The `multi` suffix indicates that the module can run across multiple nodes. The `cuda-11.5` indicates that the module support GPU acceleration via CUDA. You can then show the dependency of individual modules, for example, on Midway3 if you do
+
+The `multi` suffix indicates that the module can run across multiple nodes. The `cuda-11.5` suffix indicates that the module supports GPU acceleration via CUDA. You can then show the dependencies of individual modules. For example, on Midway3, if you run
+
 ```
 module show namd/2.14+intel-2022.0+multi
 ```
 you will get
+
 ```
 -------------------------------------------------------------------
 /software/modulefiles/namd/2.14+intel-2022.0+multi:
@@ -47,11 +50,12 @@ setenv          NAMD_HOME /software/namd-2.14-el8-x86_64+intel-2022.0/bin-multi
 setenv          CONV_RSH ssh
 ```
 
-In this case you can see this module was compiled with `intelmpi/2021.5+intel-2022.0`. 
+In this case, you can see this module was compiled with `intelmpi/2021.5+intel-2022.0`. 
 
 ## Example job scripts
 
-An example batch script to run NAMD 2.14 for Midway3 with multiple nodes and GPU acceleration is given as below
+An example batch script to run NAMD 2.14 on Midway3 with multiple nodes and GPU acceleration is given below:
+
 ```
 #!/bin/bash
 #SBATCH --job-name="test-namd"
@@ -76,7 +80,7 @@ CPUSPERPE=$SLURM_CPUS_PER_TASK
 mpirun -np $P $NAMD_HOME/namd2 +ppn $CPUSPERPE +pemap 1,3,5,7 +commap 0,2,4,6 +devices 0,1 +ignoresharing +isomalloc_sync input.namd
 ```
 
-The following script shows how to run NAMD 2.14 for a replica exchange simulation for 2 replicas, each on a node, using 1 GPU.
+The following script shows how to run NAMD 2.14 for a replica exchange simulation with 2 replicas, each on its own node using 1 GPU.
 
 ```
 #!/bin/bash
@@ -106,7 +110,7 @@ mkdir -p output
 mpirun -np $P $NAMD_HOME/namd2 +ppn $PPN +replicas 2 apoa1.namd +stdout output/%d/mysum.%d.log
 ```
 
-The following script shows how to run NAMD 3.0, which is a single-node, multithreading, GPU resident version.
+The following script shows how to run NAMD 3.0, which is a single-node, multithreaded, GPU-resident version.
 
 ```
 #!/bin/bash
@@ -129,7 +133,8 @@ P=$(( $PPN * $SLURM_NNODES ))
 $NAMD_HOME/namd3 +p $PPN +devices 0,1 --CUDASOAIntegrate on +setcpuaffinity input.namd
 ```
 
-The following script shows how to run NAMD 3.0 for a replica exchange simulation on a single node, for 2 replicas each on a GPU.
+The following script shows how to run NAMD 3.0 for a replica exchange simulation on a single node, with 2 replicas, each on its own GPU.
+
 
 ```
 #!/bin/bash
@@ -189,3 +194,10 @@ The script can be submitted with this command:
 sbatch namd.sbatch
 ```
 --->
+
+## Getting help
+
+- Official documentation: [NAMD documentation](https://www.ks.uiuc.edu/Research/namd/documentation.html){:target='_blank'}
+- Built-in help: `module help <namd-module>`
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.

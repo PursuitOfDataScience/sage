@@ -1,14 +1,19 @@
-[R](https://cran.r-project.org) is a powerful tool for quantitative research and data analysis across various fields. This document describes how to use R on the Midway clusters.
+# R and RStudio
+
+This page describes how to use [R](https://cran.r-project.org) on the Midway clusters.
+
+Keywords: `R`, `RStudio`, `statistics`, `data analysis`, `renv`
 
 ## Table of Contents
 - [Introduction](#introduction)
-- [Available R Modules](#available-r-modules)
+- [Available modules](#available-modules)
 - [Using R for High-Performance Computing (HPC)](#using-r-for-high-performance-computing-hpc)
 - [Installing R Packages](#installing-r-packages)
 - [Using the renv Package for Reproducibility](#using-the-renv)
 - [Best Practices](#best-practices)
 - [FAQ](#faq)
 - [Troubleshooting](#troubleshooting)
+- [Getting help](#getting-help)
 
 ---
 
@@ -17,7 +22,7 @@ R is a powerful tool for quantitative research and data analysis across a variet
 
 ---
 
-## Available R Modules
+## Available modules
 
 To see the list of available R modules:
 ```bash
@@ -29,7 +34,7 @@ To check available RStudio IDE modules:
 module avail rstudio
 ```
 
-When using RStudio, it is recommended to connect to the RCC cluster via ThinLinc for a smoother experience.
+When using RStudio, it is recommended to connect to the RCC cluster via [ThinLinc](../../connection/thinlinc/main.md) or use RStudio Server through [Open OnDemand](../../connection/open_ondemand/open_ondemand.md) for a smoother experience.
 
 ---
 
@@ -57,9 +62,11 @@ When using RStudio, it is recommended to connect to the RCC cluster via ThinLinc
         - `R/4.4.2+gcc-13.2.0` is built with GCC 13.2.0. Use this version if your R library requires a newer GCC toolchain (for example, the `arrow` package or other modern C++-dependent libraries).
 
     **Geospatial Meta-Module:**
+
     - There is a meta-module for geospatial applications: `gis/R-4.2.1`. Loading this module will automatically load `R/4.2.1` along with all required geospatial libraries (`GDAL`, `GEOS`, `PROJ`, `SQLite`, `udunits`) for spatial data analysis. This is the recommended setup for users working with spatial or GIS data on Midway3.
 
     **AMD Node Module:**
+
     - On Midway3 AMD nodes, there is a special module `R/4.3.2 (default)` built with the AMD Optimizing C/C++ Compiler (`aocc-4.1`). This module is found under `/software/modulefiles-amd` and is optimized for AMD hardware. Use this version for best performance on AMD compute nodes.
 
 === "Midway2"
@@ -106,7 +113,8 @@ Midway3 Environment:
 - **Dependencies**: GDAL 3.3.3, udunits 2.2, GEOS 3.9.1, GCC 10.2.0, SQLite 3.36.0
 - **R Versions**: 4.2.1 and 4.3.1
 
-Before using or installing `sf` on Midway3, load the necessary modules:
+Before using or installing `sf`, load the necessary modules:
+
 === "Midway2"
     ```bash
     module load gdal/2.4.1 udunits/2.2 R/4.2.0
@@ -120,12 +128,13 @@ Before using or installing `sf` on Midway3, load the necessary modules:
 
 ## Using R for High-Performance Computing (HPC)
 
-You can run R scripts in batch mode using SLURM. Example job script:
+You can run R scripts in batch mode using Slurm. Example job script:
+
 ```bash
 #!/bin/bash
 #SBATCH --job-name=my_r_job
-#SBATCH --account=[your-accountname]
-#SBATCH --partition=compute
+#SBATCH --account=pi-[cnetid]
+#SBATCH --partition=caslake
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
@@ -140,12 +149,12 @@ Rscript my_script.R
 
     The `Rmpi` package is **not pre-installed** in system R modules. You must install it in your own R user library, and Rmpi must be compiled against the **same MPI implementation and version** you will use at runtime.
 
-    **Example SLURM Batch Script for Rmpi Job:**
+    **Example Slurm Batch Script for Rmpi Job:**
     ```bash
     #!/bin/bash
     #SBATCH --job-name=my_rmpi_job
-    #SBATCH --account=[your-accountname]
-    #SBATCH --partition=compute
+    #SBATCH --account=pi-[cnetid]
+    #SBATCH --partition=caslake
     #SBATCH --nodes=1
     #SBATCH --ntasks=4
     #SBATCH --cpus-per-task=1
@@ -157,6 +166,7 @@ Rscript my_script.R
     ```
 
     **Step-by-step instructions:**
+
     1. **Load R and OpenMPI modules _before_ installing Rmpi:**
         ```bash
         module load R/4.3.1 openmpi/5.0.2  # Example: use any available OpenMPI version
@@ -237,7 +247,7 @@ install.packages(c("package1", "package2"))
 
 ## Using the `renv` R Package to Create a Personal R Project Environment {#using-the-renv}
 
-The `renv` package in R helps manage project-specific libraries, ensuring consistent package versions across projects. Here’s a step-by-step guide to set up and use `renv` for your project located at `/project/pi-cnetid/rproject/` on the Midway cluster.
+The `renv` package in R helps manage project-specific libraries, ensuring consistent package versions across projects. Here’s a step-by-step guide to setting up and using `renv` for your project located at `/project/pi-cnetid/rproject/` on the Midway cluster.
 
 #### Step 1: Load Necessary Modules
 
@@ -352,7 +362,7 @@ By following these steps, you can set up and manage a project-specific R environ
 ## Best Practices
 
 ### R modules
-- Uses centrally maintained, optimized, and regularly updated R installations provided by HPC admins.
+- Use centrally maintained, optimized, and regularly updated R installations provided by RCC.
 - Usually highly optimized (OpenBLAS).
 - Integrates with system-wide libraries and supports `renv` for reproducibility.
 - Recommended for most HPC users, especially for performance-critical or collaborative work.
@@ -387,7 +397,7 @@ By following these steps, you can set up and manage a project-specific R environ
    Sys.getenv("R_LIBS_USER")
    ```
 
-3. How can I list the installed packages:
+3. How can I list the installed packages?
    ```R
    installed.packages()
    ```
@@ -402,16 +412,18 @@ By following these steps, you can set up and manage a project-specific R environ
    remove.packages("packageName")
    ```
 
-6. How do I delete all R packages and start over?
-   ```bash
-   rm -rf ~/R ~/.R ~/.rstudio* ~/.Rhistory ~/.Rprofile ~/.RData
-   ```
-
 ## Troubleshooting
 
 | Issue          | Solution                       | 
 |------------------------|------------------------------------------|
-| Package installation fails due to missing system libraries | Load the necessary modules (e.g., `module load hdf5 netcdf`) before starting R     |
-| R cannot find installed packages            | Check your `.libPaths()` in R and ensure you are using the correct environment/module               | 
-| R job runs slowly            | Use the system R module for optimized BLAS/LAPACK performance. Avoid Conda R for heavy computations unless necessary   |
+| Package installation fails due to missing system libraries | Load the necessary modules (e.g., `module load hdf5 netcdf`) before starting R.     |
+| R cannot find installed packages            | Check your `.libPaths()` in R and ensure you are using the correct environment/module.               | 
+| R job runs slowly            | Use the system R module for optimized BLAS/LAPACK performance. Avoid Conda R for heavy computations unless necessary.   |
 | Permissions or disk quota exceeded        | Check your disk space with `quota` and clean up files if needed.               |
+
+## Getting help
+
+- Official documentation: [R manuals](https://cran.r-project.org/manuals.html){:target='_blank'} and [renv documentation](https://rstudio.github.io/renv/){:target='_blank'}
+- Built-in help: `?function_name` or `help("function_name")` within R
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.

@@ -1,7 +1,7 @@
 
 # ThinLinc - Remote desktop 
 ## Connecting with ThinLinc
-ThinLinc is a remote desktop server used to connect to RCC clusters and obtain a remote graphical user interface (GUI). We recommend using ThinLinc to use software that requires a GUI. Remember, ThinLinc is much less stable than SSH. 
+ThinLinc is a remote desktop server used to connect to RCC clusters and obtain a remote graphical user interface (GUI). We recommend ThinLinc for running software that requires a GUI. On slow or unstable network connections, ThinLinc may lag or disconnect; your session persists on the server, so you can reconnect to it.
 
 There are two methods to access ThinLinc on RCC clusters:
 1. Through a web browser
@@ -18,7 +18,7 @@ Point your web browser to the following web address:
 
 === "Midway2"
     ```
-    https://midway2.rcc.uchicago.edu.
+    https://midway2.rcc.uchicago.edu
     ```
     You will land on this page:
     <p align="center">
@@ -27,7 +27,7 @@ Point your web browser to the following web address:
 
 ===+ "Midway3"
     ```
-    https://midway3.rcc.uchicago.edu.
+    https://midway3.rcc.uchicago.edu
     ```
     You will land on this page:
     <p align="center">
@@ -50,7 +50,7 @@ Point your web browser to the following web address:
 
 Proceed to log in with your CNetID and password.
 
-Duo two-factor authentication will request you select from the 2FA options to authenticate.
+Duo two-factor authentication will ask you to select one of the 2FA options to authenticate.
 
 
 ### Accessing ThinLinc through the client (app)
@@ -119,7 +119,7 @@ Open the ThinLinc client (app) and use the following information to set up your 
     Password: CNetID password
     ```
 
-The default setting for the ThinLinc client opens a fullscreen window that fills “all monitors.” If you prefer to work with ThinLinc from its own window, click `Options` from the initial login interface and then Screen to adjust your settings. The following is an example of a setup that places the ThinLinc client in its own window: 
+The default setting for the ThinLinc client opens a fullscreen window that fills “all monitors.” If you prefer to work with ThinLinc from its own window, click `Options` from the initial login interface and then `Screen` to adjust your settings. The following is an example of a setup that places the ThinLinc client in its own window: 
 
 <p align="center">
 <img src="/img/thinlinc/thinlinc-fig-000.png" width="415" />
@@ -131,7 +131,7 @@ Optional: You are also able to export local resources via ThinLinc. To do so, cl
 <img src="/img/thinlinc/thinlinc-fig-001.png" width="415" />
 </p>
 
-After clicking the `Connect` button, Duo two-factor authentication will request you select from the 2FA options to authenticate.
+After clicking the `Connect` button, Duo two-factor authentication will ask you to select one of the 2FA options to authenticate.
 
 <p align="center">
 <img src="/img/thinlinc/thinlinc-fig-002.png" width="300" />
@@ -156,7 +156,7 @@ After clicking the `Connect` button, Duo two-factor authentication will request 
 	</p>	
 
 
-===+ "MidwaySSD"
+=== "MidwaySSD"
 	Upon successfully logging in via ThinLinc, you will be connected to a login node and presented with a desktop interface. 
 	 <p align="center">
     <img src="/img/thinlinc/midwayssd-thinlinc-03.png" width="600" />

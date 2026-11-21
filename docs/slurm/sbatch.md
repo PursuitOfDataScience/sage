@@ -1,6 +1,6 @@
 # Batch jobs
 
-The `sbatch` command requests computing resources for non-interactive batch jobs. Rather than requesting resources from the command line, users typically write an `.sbatch` script to request resources for a job and then submit that job to be run on a cluster. A batch job doesn’t require the user to be logged in after submission and ends when either:
+The `sbatch` command requests computing resources for non-interactive batch jobs. Rather than requesting resources from the command line, users typically write an `.sbatch` script to request resources for a job and then submit that job to be run on a cluster. A batch job doesn’t require the user to be logged in after submission and ends when one of the following occurs:
 
 1. The program finishes running, 
 2. The job's maximum time is reached, 
@@ -13,7 +13,7 @@ In an `.sbatch` script, all Slurm parameters are declared with `#SBATCH` followe
 
 Each time you run a script, Slurm gives that particular run a job ID. This sample script creates a .txt file with the job ID as the filename and writes information about the job run to the file. It does this by referencing some of the <a href='https://slurm.schedmd.com/sbatch.html#SECTION_OUTPUT-ENVIRONMENT-VARIABLES' target='_blank'>environment variables</a> Slurm sets when it runs the job.
 
-To set up the sample script, first connect to Midway. Next, create a `job-info.sbatch` file and copy this code into it. Replace `pi-drpepper` in the  `--account=` flag with your group and `jdoe` in the `--mail-user=` flag with your CNet ID. You can also change the `--mail-type=` flag if you don’t want to receive email notifications every step of the way.
+To set up the sample script, first connect to Midway. Next, create a `job-info.sbatch` file and copy this code into it. Replace `pi-drpepper` in the  `--account=` flag with your group and `jdoe` in the `--mail-user=` flag with your CNetID. You can also change the `--mail-type=` flag if you don’t want to receive email notifications every step of the way.
 
 
 ===+ "Midway3"
@@ -31,8 +31,8 @@ To set up the sample script, first connect to Midway. Next, create a `job-info.s
     #SBATCH --nodes=4
     #SBATCH --ntasks-per-node=14
 
-    #SBATCH --mail-type=ALL  # Email notification options: ALL, BEGIN, END, FAIL, ALL, NONE
-    #SBATCH --mail-user=jdoe@rcc.uchicago.edu  # Replace jdoe with your CNET and be sure to include "@rcc"
+    #SBATCH --mail-type=ALL  # Email notification options: NONE, BEGIN, END, FAIL, ALL
+    #SBATCH --mail-user=jdoe@rcc.uchicago.edu  # Replace jdoe with your CNetID and be sure to include "@rcc"
 
     touch $SLURM_JOB_ID.txt
     echo "Job ID: $SLURM_JOB_ID" >> $SLURM_JOB_ID.txt
@@ -59,8 +59,8 @@ To set up the sample script, first connect to Midway. Next, create a `job-info.s
     #SBATCH --nodes=1
     #SBATCH --ntasks-per-node=8
 
-    #SBATCH --mail-type=ALL  # Email notification options: ALL, BEGIN, END, FAIL, ALL, NONE
-    #SBATCH --mail-user=jdoe@rcc.uchicago.edu  # Replace jdoe with your CNET and be sure to include "@rcc"
+    #SBATCH --mail-type=ALL  # Email notification options: NONE, BEGIN, END, FAIL, ALL
+    #SBATCH --mail-user=jdoe@rcc.uchicago.edu  # Replace jdoe with your CNetID and be sure to include "@rcc"
 
     touch $SLURM_JOB_ID.txt
     echo "Job ID: $SLURM_JOB_ID" >> $SLURM_JOB_ID.txt
@@ -77,27 +77,30 @@ Here is an explanation of what each of these parameters means:
 
 |  <div style="width:300px">Option</div>      | Description |
 | ----------- | ----------- |
-| `--job-name=my_run`     | Assigns name `job-info` to the job.       |
-| `--output=my_run.out`   | Writes console output to file `job-info.out`.        |
-| `--error=my_run.err`    | Writes error messages to file `job-info.err`.        |
-| `--account=pi-drpepper`    | Charges the job to the account `pi-drpepper`     |
+| `--job-name=job-info`     | Assigns the name `job-info` to the job.       |
+| `--output=job-info.out`   | Writes console output to the file `job-info.out`.        |
+| `--error=job-info.err`    | Writes error messages to the file `job-info.err`.        |
+| `--account=pi-drpepper`    | Charges the job to the account `pi-drpepper`.     |
 | `--partition=caslake`   | Requests compute nodes from the caslake partition on the Midway3 cluster. |
-| `--time=1-03:30:00`       | Reserves the computing resources for 1 day, 3 hours, and 30 minutes max (actual time may be shorter if your run completes before this time wall).  | 
-| `--nodes=4`             | Requests 4 compute nodes (computers) |
+| `--time=1-03:30:00`       | Reserves the computing resources for 1 day, 3 hours, and 30 minutes max (actual time may be shorter if your run completes before this time limit).  | 
+| `--nodes=4`             | Requests 4 compute nodes (computers). |
 | `--ntasks-per-node=14`  | Requests 14 cores (CPUs) per node, for a total of 14 * 4 = 56 cores. |
 | `--mem-per-cpu=2000`    | Requests 2000 MB (2 GB) of memory (RAM) per core, for a total of 2 * 14 = 28 GB per node. |
-|`--mail-type=ALL`| Mail events (NONE, BEGIN, END, FAIL, ALL) |
-|`--mail-user=jdoe@rcc.uchicago.edu`| Add `rcc.` to your email. |
+|`--mail-type=ALL`| Mail events (NONE, BEGIN, END, FAIL, ALL). |
+|`--mail-user=jdoe@rcc.uchicago.edu`| Email address for notifications; note the `rcc.` in the domain. |
 
-In this example, we use `sbatch` commands to request 4 compute nodes with 14 CPUs each. This means we are requesting a total of 56 CPUs to our program. The `touch` command creates a file and the `echo` commands write information about the job run to that file.
+In this example, we use `sbatch` commands to request 4 compute nodes with 14 CPUs each. This means we are requesting a total of 56 CPUs for our program. The `touch` command creates a file and the `echo` commands write information about the job run to that file.
 
 ### Submitting a `.sbatch` script
 
-Continuing the example above, suppose that the sbatch script is saved in the current directory into a file called `job.sbatch`. This script is submitted to the cluster using the following command:
+Continuing the example above, suppose that the sbatch script is saved in the current directory in a file called `job-info.sbatch`. This script is submitted to the cluster using the following command:
+
 ```
-sbatch ./job.sbatch
+sbatch ./job-info.sbatch
 ```
+
 or more generally:
+
 ```
 sbatch ./<your_sbatch_file>
 ```
@@ -105,10 +108,10 @@ sbatch ./<your_sbatch_file>
 You can find more example `.sbatch` submission scripts in the [RCC Slurm workshop materials](https://github.com/rcc-uchicago/SLURM_WORKSHOP){:target='_blank'}.
 
 ## Managing jobs
-Slurm job scheduler provides several command-line tools for checking on the status of your jobs and for managing them.
+The Slurm job scheduler provides several command-line tools for checking on the status of your jobs and for managing them.
 
 ### Checking job status
-Use the `squeue` (Slurm queue) command to check on the status of jobs. Running `squeue` with no flags will show the full queue (all pending and running jobs.)
+Use the `squeue` (Slurm queue) command to check on the status of jobs. Running `squeue` with no flags will show the full queue (all pending and running jobs).
 
 To view only the jobs that you have submitted, use the `--user` flag: 
 ```
@@ -119,7 +122,7 @@ For example:
 squeue --user=jdoe
 ```
 
-!!! Note: `0:00` jobs
+!!! note "`0:00` jobs"
     Any job with `0:00` in the TIME column is still waiting in the queue. 
 
 To get information about all jobs that are waiting to run on the `gpu` partition, enter:
@@ -134,21 +137,21 @@ squeue --state=RUNNING --partition=gpu --user=<CNetID>
 
 To get the estimated start time (if available) of your submitted jobs, use
 ```
-squeue -user $USER  --start
+squeue --user=$USER --start
 ```
 or
 ```
 scontrol show job [jobID] | grep StartTime
 ```
 
-To get what jobs are running on a specific node, like `midway3-0213`
+To see which jobs are running on a specific node, like `midway3-0213`, use
 ```
 squeue -w midway3-0213
 ```
 
 #### `squeue` status and reason codes
 
-The `squeue` command details a variety of information on an active job’s status with state and reason codes. 
+The `squeue` command reports an active job’s status with state and reason codes. 
 
 The following tables outline a variety of job states and reason codes you may encounter when using `squeue` to check on your jobs.
 
@@ -160,7 +163,7 @@ The following tables outline a variety of job states and reason codes you may en
 | COMPLETING	| `CG`	| The job is finished, but some processes are still active.              |
 | FAILED	    | `F`	| The job terminated with a non-zero exit code and failed to execute.    |
 | PENDING	    | `PD`	| The job needs resource allocation. It will eventually run.    |
-| PENDING	    | `CF`	| The job is being configured. The resources are allocated but are waiting for them to become ready for use. |
+| CONFIGURING	| `CF`	| The job has been allocated resources but is waiting for them to become ready for use. |
 | PREEMPTED	    | `PR`	| The job was terminated because of preemption by another job.           |
 | RUNNING	    | `R`	| The job is currently allocated to a node and is running.               |
 | SUSPENDED	    | `S`	| A running job has been stopped with its cores released to other jobs.  |
@@ -177,15 +180,15 @@ A full list of these Job State codes can be found in [Slurm’s documentation](h
 | `AssociationNodeLimit`   | All nodes assigned to your job’s specified association are in use; the job will run eventually. |
 | `Dependency`	           | This job is waiting for a dependent job to complete and will run afterward.                     |
 | `InvalidAccount`	       | The job’s account is invalid. Cancel the job and rerun with the correct account.                |
-| `InvalidQoS`             | The job’s QoS is invalid. Cancel the job and rerun with the correct account.                    |
+| `InvalidQoS`             | The job’s QoS is invalid. Cancel the job and rerun with the correct QoS.                        |
 | `PartitionCpuLimit`	   | All CPUs assigned to your job’s specified partition are in use; the job will run eventually.    |
 | `PartitionMaxJobsLimit`  | Maximum number of jobs for your job’s partition has been met; the job will run eventually.      |
 | `PartitionNodeLimit`	   | All nodes assigned to your job’s specified partition are in use; the job will run eventually.   |
-| `Priority`	           | One or more higher priority jobs are in queue for running. Your job will eventually run.        |
+| `Priority`	           | One or more higher-priority jobs are in the queue. Your job will eventually run.        |
 | `QOSGrpCpuLimit` 	       | All CPUs assigned to your job’s specified QoS are in use; the job will run eventually.          |
 | `QOSGrpMaxJobsLimit`	   | Maximum number of jobs for your job’s QoS has been met; the job will run eventually.            |
 | `QOSGrpNodeLimit`	       | All nodes assigned to your job’s specified QoS are in use; the job will run eventually.         |
-| `QOSMaxJobsPerUserLimit` | The number of jobs you have submitted exceeds the maximum number set by the QoS                 |
+| `QOSMaxJobsPerUserLimit` | The number of jobs you have submitted exceeds the maximum number set by the QoS.                |
 | `Resources`	           | The job is waiting for resources to become available and will eventually run.                   |
 
 
@@ -207,7 +210,7 @@ scontrol resume <job_id>
 ```
 
 
-### Canceling a submitted jobs
+### Canceling a submitted job
 To cancel a job you have submitted, use the `scancel` command. This requires you to specify the ID of the job you wish to cancel. 
 
 For example, to cancel a job with ID 8885128, do the following:
@@ -248,11 +251,11 @@ To do this, run the following to see your running jobs and which compute nodes y
 ```
 squeue --state=RUNNING --user=<CNetID>
 ```
-The last column of the output tells us which nodes are allocated for each job. You can connect to the compute node using the following command, where, for example, we are connecting to the compute node `midway2-0172`.
+The last column of the output shows which nodes are allocated to each job. You can connect to the compute node using the following command, where, for example, we are connecting to the compute node `midway2-0172`:
 ```
 ssh midway2-0172
 ```
-Then, you can view processes running on this compute node, including your job, which will be listed under your CNetID in the USER column, entering the following command: 
+Then, you can view the processes running on this compute node by entering the following command. Your job's processes will be listed under your CNetID in the USER column: 
 ```
 htop
 ``` 
@@ -261,22 +264,22 @@ htop
 
 The `sacct` command displays accounting data for all jobs and job steps in the Slurm job accounting log or Slurm database.
 
-To inquiry the resources used by a job ID (pending, running or terminated), use
+To query the resources used by a job (pending, running, or terminated), use
 ```
 sacct -j [jobID]
 ```
 
 !!! tip "Advanced tip"
-    You can customize the output of `squeue` and `sacct` by configuring your slurm environment variables:
+    You can customize the output of `squeue` and `sacct` by configuring your Slurm environment variables:
     ```bash
     export SACCT_FORMAT="jobid,partition,user,account%12,alloccpus,node%12,elapsed,totalcpu,maxRSS,ReqM"
     export SQUEUE_FORMAT="%13i %12j %10P %10u %12a %8T %9r %10l %.11L %5D %4C %8m %N"
     squeue -u cnetid
     ```
-    You can put the two export commands into a configuration bash file `set_slurm_env.sh` like [here](https://github.com/rcc-uchicago/R-large-scale/blob/master/set_slurm_env.sh){:target='_blank'}, and `source set_slurm_env.sh` before running `squeue`.
+    You can put the two export commands into a bash configuration file `set_slurm_env.sh` like [this one](https://github.com/rcc-uchicago/R-large-scale/blob/master/set_slurm_env.sh){:target='_blank'}, and `source set_slurm_env.sh` before running `squeue`.
 
-### Monitoring SUs consumed per Job
-When the job accepted by the Slurm scheduler is completed or failed, the account specified in the Slurm script is charged for SUs. A user can retrieve info on SUs consumed per job using (need to be logged in to Midway2):
+### Monitoring SUs consumed per job
+When a job accepted by the Slurm scheduler completes or fails, the account specified in the Slurm script is charged for SUs. You can retrieve information on SUs consumed per job using the following command (you need to be logged in to Midway2):
 ```
 rcchelp usage -accounts <account_name> -byjob | grep <user_cnetid>
 ```
@@ -289,11 +292,11 @@ accounts usage -accounts <account_name> -byjob | grep <user_cnetid>
 
 Below are some example submission scripts you can adapt to run your jobs on Midway. See also the materials from the [RCC Slurm workshop](https://github.com/rcc-uchicago/SLURM_WORKSHOP){:target='_blank'} for additional examples. 
 
-The [SLURM](https://slurm.schedmd.com/documentation.html){:target='_blank'} documentation is always a good reference for all the `#SBATCH` parameters below.
+The [Slurm](https://slurm.schedmd.com/documentation.html){:target='_blank'} documentation is always a good reference for all the `#SBATCH` parameters below.
 
 
-!!! note Sharing scripts with the RCC helpdesk
-    If you need help to troubleshoot a Slurm submission script, please ensure that the script is not located in your `/home` or `/scratch` directories that no one except you can access. Instead, please place your script and associated input files in a project directory and set read permission to the group owner `pi-cnetid`.
+!!! note "Sharing scripts with the RCC Help Desk"
+    If you need help troubleshooting a Slurm submission script, please make sure the script is not located in your `/home` or `/scratch` directories, which no one except you can access. Instead, place your script and associated input files in a project directory and give read permission to the group owner `pi-cnetid`.
 
 ### Simple jobs
 
@@ -309,13 +312,13 @@ The [SLURM](https://slurm.schedmd.com/documentation.html){:target='_blank'} docu
     #SBATCH --ntasks-per-node=1  # number of tasks per node
     #SBATCH --cpus-per-task=1    # number of CPU cores per task
 
-    # Load the require module(s)
+    # Load the required module(s)
     module load python
 
     # match the no. of threads with the no. of CPU cores
     export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK  
 
-    # Load the require module(s)
+    # Run your program
     python analyze.py
     ```
 
@@ -330,13 +333,13 @@ The [SLURM](https://slurm.schedmd.com/documentation.html){:target='_blank'} docu
     #SBATCH --ntasks-per-node=1  # number of tasks per node
     #SBATCH --cpus-per-task=1    # number of CPU cores per task
 
-    # Load the require module(s)
+    # Load the required module(s)
     module load python
 
     # match the no. of threads with the no. of CPU cores
     export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK  
 
-    # Load the require module(s)
+    # Run your program
     python analyze.py
     ```
 
@@ -374,8 +377,8 @@ The [SLURM](https://slurm.schedmd.com/documentation.html){:target='_blank'} docu
     #SBATCH --partition=gpu
     #SBATCH --gres=gpu:1
     # TO USE V100 specify --constraint=v100
-    # TO USE RTX600 specify --constraint=rtx6000
-    #SBATCH --constraint=v100   # constraint job runs on V100 GPU use
+    # TO USE RTX6000 specify --constraint=rtx6000
+    #SBATCH --constraint=v100   # run the job on a V100 GPU
     #SBATCH --ntasks-per-node=1 # num cores to drive each gpu
     #SBATCH --cpus-per-task=1   # set this to the desired number of threads
 
@@ -388,11 +391,11 @@ The [SLURM](https://slurm.schedmd.com/documentation.html){:target='_blank'} docu
     python training.py
     ```
 
-!!! Notes
-    * If your application supports multithreading (e.g., with OpenMP), you want to specify the number of CPU cores per task greater than 1, e.g., `#SBATCH --cpus-per-task=8`
-    * You can check the available partitions to your account via the command `rcchelp sinfo` to specify in `--partition`.
+!!! note "Notes"
+    * If your application supports multithreading (e.g., with OpenMP), you should set the number of CPU cores per task to more than 1, e.g., `#SBATCH --cpus-per-task=8`.
+    * You can check which partitions are available to your account (for use with `--partition`) via the command `rcchelp sinfo`.
     * You can concatenate more than one run in a job script.
-    * If the job submission fails, please read the error message carefully: there is information regarding invalid combinations of `partition`, `account`, or `qos` that may help you correct.
+    * If the job submission fails, please read the error message carefully: there is information regarding invalid combinations of `partition`, `account`, or `qos` that may help you correct it.
 
 ### Large-Memory Jobs
 
@@ -413,9 +416,10 @@ To submit a job to `bigmem`, include this line in your `.sbatch` script:
 ### MPI jobs
 
 Many applications use Message Passing Interface (MPI) to improve performance for distributed and parallel computing. For more information on the MPI libraries available on RCC clusters,
-run  `module avail openmpi` and `module avail intelmpi`. using more recent modules to compile your codes (e.g., `intelmpi` 2021 and later, `openmpi` 3.0 and later) is recommended. 
+run `module avail openmpi` and `module avail intelmpi`. Using more recent modules to compile your code (e.g., `intelmpi` 2021 and later, `openmpi` 3.0 and later) is recommended. 
 
-Read more about the MPI module [here](../software/compilers.md).
+Read more about the MPI modules on the [Compilers](../software/compilers.md) page.
+
 
 Below is a simple C program (`test-mpi.c`) you can test for your MPI build and the loaded MPI libraries.
 
@@ -439,7 +443,7 @@ int main(int argc, char *argv[], char *envp[]) {
 }
 ```
 
-Copy `test-mpi.c` to your home directory on Midway 2 or 3, load the default OpenMPI module, and compile the program on one of the login nodes:
+Copy `test-mpi.c` to your home directory on Midway2 or Midway3, load the default OpenMPI module, and compile the program on one of the login nodes:
 
 ```default
 module load openmpi
@@ -447,7 +451,7 @@ mpicc test-mpi.c -o mytest
 ```
 
 !!! Note
-    It is recommended to check that the version of `mpicc` is the one you wanted via `which mpicc`.
+    It is recommended to check that `mpicc` is the version you want via `which mpicc`.
 
 Then prepare a job script `test.sbatch` to submit a job to Midway to run the program:
 
@@ -520,12 +524,12 @@ Process 50 on midway2-0174.rcc.local out of 56
 Process 33 on midway2-0174.rcc.local out of 56
 ```
 
-This output shows that the computation is distributed on four different nodes, with many threads running simultaneously on the same node.
+This output shows that the computation is distributed across multiple nodes, with many processes running simultaneously on the same node.
 
 It is recommended to specify the number of tasks per node with the `--ntasks-per-node` option. For example, submitting the job like this:
 
 ```default
-sbatch --ntasks=56 --ntasks-per-node=1 hellompi.sbatch
+sbatch --ntasks=56 --ntasks-per-node=1 test.sbatch
 ```
 
 results in each task running on a different node:
@@ -544,7 +548,7 @@ Process 23 on midway2-0100.rcc.local out of 56
 If you want to minimize the number of nodes by packing as many tasks into a node as possible (which is usually good for reducing communication overhead), then do:
 
 ```default
-sbatch --nodes=2 --ntasks-per-node=28 hellompi.sbatch
+sbatch --nodes=2 --ntasks-per-node=28 test.sbatch
 ```
 <!---
 !!! Note
@@ -599,9 +603,9 @@ module load openmpi
 mpicc -fopenmp test-hybrid.c -o mytest
 ```
 
-Here, we load the default OpenMPI compiler, but it should be possible to use any available MPI compiler to compile and run this example. Note that the option `-fopenmp` must be used here to compile the program because the code includes OpenMP directives (use `-openmp` or `-qopenmp` for the Intel compiler or `-mp` for the PGI compiler).
+Here, we load the default OpenMPI module, but it should be possible to use any available MPI compiler to compile and run this example. Note that the option `-fopenmp` must be used here to compile the program because the code includes OpenMP directives (use `-openmp` or `-qopenmp` for the Intel compiler or `-mp` for the PGI compiler).
 
-Then prepare `test.sbatch` is a submission script that can be used to submit a job to Midway2 to run the `mytest` program. 
+Then prepare `test.sbatch`, a submission script that can be used to submit a job to Midway2 to run the `mytest` program: 
 
 ```bash
 #!/bin/bash
@@ -625,7 +629,7 @@ ulimit -l unlimited
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 n=$(( SLURM_NUM_NODES * SLURM_NTASKS_PER_NODE ))
-mpirun -np $n ./hellohybrid
+mpirun -np $n ./mytest
 ```
 
 The options are similar to running an MPI job, with some differences:
@@ -645,7 +649,8 @@ sbatch test.sbatch
 
 ### GPU jobs
 
-There are shared GPU nodes on both Midway2 and Midway3 where you can run GPU-enabled applications. You can check the partition `gpu2` (on `Midway2`) and `gpu` (on Midway3) to see their constituent nodes: 
+There are shared GPU nodes on both Midway2 and Midway3 where you can run GPU-enabled applications. You can check the partitions `gpu2` (on Midway2) and `gpu` (on Midway3) to see their constituent nodes: 
+
 === "Midway2"
     ```
     scontrol show partition gpu2
@@ -655,7 +660,8 @@ There are shared GPU nodes on both Midway2 and Midway3 where you can run GPU-ena
     scontrol show partition gpu
     ```
 
-and then check the features of the individual nodes, for example,
+and then check the features of the individual nodes, for example:
+
 === "Midway2"
     ```
     scontrol show node midway2-gpu02
@@ -664,9 +670,10 @@ and then check the features of the individual nodes, for example,
     ```
     scontrol show node midway3-0278
     ```
-which shows NVIDIA Tesla K80, Tesla V100 or Quadro RTX6000 GPUs.
 
-To submit a job to one of the GPU nodes, you must specify the correct partition and the number of GPUs in the `.sbatch` scripts, for example, for job scripts on Midway2:
+which shows NVIDIA Tesla K80, Tesla V100, or Quadro RTX6000 GPUs.
+
+To submit a job to one of the GPU nodes, you must specify the correct partition and the number of GPUs in the `.sbatch` script, for example, for job scripts on Midway2:
 
 ```bash
 #SBATCH --partition=gpu2
@@ -674,7 +681,7 @@ To submit a job to one of the GPU nodes, you must specify the correct partition 
 ```
 where `N` is the number of GPUs requested. Allowable settings for `N` range from 1 to 4, depending on the number of GPUs per node. 
 
-If your application is entirely GPU-driven, you do not need to explicitly request cores, as one CPU core will be assigned by default to act as a master to launch the GPU-based calculation. However, if your application is mixed CPU-GPU, then you will need to request the number of cores with `–ntasks` as is required by your job.
+If your application is entirely GPU-driven, you do not need to explicitly request cores, as one CPU core will be assigned by default to launch the GPU-based calculation. However, if your application is mixed CPU-GPU, then you will need to request the number of cores your job requires with `--ntasks`.
 
 === "Midway2"
 
@@ -707,8 +714,8 @@ If your application is entirely GPU-driven, you do not need to explicitly reques
     #SBATCH --partition=gpu
     #SBATCH --gres=gpu:1
     # TO USE V100 specify --constraint=v100
-    # TO USE RTX600 specify --constraint=rtx6000
-    #SBATCH --constraint=v100   # constraint job runs on V100 GPU use
+    # TO USE RTX6000 specify --constraint=rtx6000
+    #SBATCH --constraint=v100   # run the job on a V100 GPU
     #SBATCH --ntasks-per-node=1 # num cores to drive each gpu
     #SBATCH --cpus-per-task=1   # set this to the desired number of threads
 
@@ -721,11 +728,11 @@ If your application is entirely GPU-driven, you do not need to explicitly reques
     python training.py
     ```
 
-Depending on the software packages you use in the script, their dependency would be the CUDA and OpenACC modules. When you load the modules provided on Midway2 and Midway3 (e.g., `module load tensorflow`), the CUDA dependency modules will be automatically loaded (comparing the output of `module list` before and after doing `module load` command).
+Depending on the software packages you use in the script, they may depend on the CUDA or OpenACC modules. When you load the modules provided on Midway2 and Midway3 (e.g., `module load tensorflow`), the CUDA dependency modules will be loaded automatically (compare the output of `module list` before and after the `module load` command).
 
-If you build the codes using one of those CUDA modules, remember to load these modules in your script. 
+If you build your code using one of those CUDA modules, remember to load these modules in your script. 
 
-An example batch script requests GPU resources, loads the CUDA libraries, and runs the MPI application: In this case, the application `your-app` supports hybrid MPI/GPU parallelization. 
+The following example batch script requests GPU resources, loads the CUDA libraries, and runs an MPI application. In this case, the application `your-app` supports hybrid MPI/GPU parallelization. 
 
 ```bash
 #!/bin/bash
@@ -793,11 +800,11 @@ or
 #SBATCH --array=1-7:2
 ```
 
-In the example `.sbatch` script above, the `%A_%a` notation is filled in with the master job id (`%A`) and the array task id (`%a`). This is a simple way to create output files in which the file name differs for each job in the array.
+In the example `.sbatch` script above, the `%A_%a` notation is filled in with the master job ID (`%A`) and the array task ID (`%a`). This is a simple way to create output files in which the file name differs for each job in the array.
 
 The remaining options in the `.sbatch` script are the same as the options used in other, non-array settings; in this example, we are requesting that each array task be allocated 1 CPU (`--ntasks=1`) and 4 GB of memory (`--mem=4G`) on the standard compute partition (`--partition=caslake` on Midway3, `--partition=broadwl` on Midway2) for up to one hour (`--time=01:00:00`).
 
-Most partitions have limits on the number of array tasks that can run simultaneously. Consider parallel batch jobs to achieve a higher throughput.
+Most partitions have limits on the number of array tasks that can run simultaneously. Consider [parallel batch jobs](#parallel-batch-jobs) to achieve higher throughput.
 
 For more information about Slurm job arrays, refer to [the Slurm documentation on job arrays](https://slurm.schedmd.com/job_array.html){:target='_blank'}.
 
@@ -829,13 +836,13 @@ Here’s an example script, `parallel.sbatch`:
     # This specifies the options used to run GNU parallel:
     #   --delay of 0.2 prevents overloading the controlling node.
     #   -j is the number of tasks run simultaneously.
-    #   The combination of --joblog and --resume create a task log that can be used to monitor progress.
+    #   The combination of --joblog and --resume creates a task log that can be used to monitor progress.
 
     parallel="parallel --delay 0.2 -j $SLURM_NTASKS --joblog runtask.log --resume"
 
     # Run a script, runtask.sh, using GNU parallel and srun. Parallel will run the runtask script for the numbers 1 through 128. To illustrate, the first job will run like this:
 
-    # srun --exclusive -N1 -n1 ./runtask.sh arg1:1 > runtask.1
+    # srun --exclusive -N1 -n1 ./runtask.sh arg1:1 > runtask.sh.1
 
     $parallel "$srun ./runtask.sh arg1:{1} > runtask.sh.{1}" ::: {1..128}
 
@@ -865,13 +872,13 @@ Here’s an example script, `parallel.sbatch`:
     # This specifies the options used to run GNU parallel:
     #   --delay of 0.2 prevents overloading the controlling node.
     #   -j is the number of tasks run simultaneously.
-    #   The combination of --joblog and --resume create a task log that can be used to monitor progress.
+    #   The combination of --joblog and --resume creates a task log that can be used to monitor progress.
 
     parallel="parallel --delay 0.2 -j $SLURM_NTASKS --joblog runtask.log --resume"
 
     # Run a script, runtask.sh, using GNU parallel and srun. Parallel will run the runtask script for the numbers 1 through 128. To illustrate, the first job will run like this:
 
-    # srun --exclusive -N1 -n1 ./runtask.sh arg1:1 > runtask.1
+    # srun --exclusive -N1 -n1 ./runtask.sh arg1:1 > runtask.sh.1
 
     $parallel "$srun ./runtask.sh arg1:{1} > runtask.sh.{1}" ::: {1..128}
 
@@ -911,15 +918,15 @@ runtask.sh` to make `runtask.sh` executable. Then the job can be submitted to th
 sbatch parallel.sbatch
 ```
 
-When this job is completed, you should see output files with `runtask.sh.N`, where `N` is between 1 and 128. The content of the first output file (i.e., `runtask.sh.1`) should look something like this:
+When this job is completed, you should see output files named `runtask.sh.N`, where `N` is between 1 and 128. The content of the first output file (i.e., `runtask.sh.1`) should look something like this:
 
 ```default
 task arg1:1 seq:1 sleep:14s host:midway2-0002 date:Thu Jan 10 09:17:36 CST 2017
 ```
 
-Another file `runtask.log` is also created. It gives a list of the completed jobs. (Note: If the `.sbatch` is submitted again, nothing will be run until `runtask.log` is removed.)
+Another file `runtask.log` is also created. It gives a list of the completed jobs. (Note: If the `.sbatch` script is submitted again, nothing will be run until `runtask.log` is removed.)
 
-Using this same technique to run multithreaded tasks in parallel is also possible. Here is an example `.sbatch` script, `parallel-hybrid.sbatch`, that distributes multithreaded computations across two nodes:
+It is also possible to use this same technique to run multithreaded tasks in parallel. Here is an example `.sbatch` script, `parallel-hybrid.sbatch`, that distributes multithreaded computations across two nodes:
 
 === "Midway2"
     ```bash
@@ -968,8 +975,9 @@ Using this same technique to run multithreaded tasks in parallel is also possibl
     # Run the parallel command.
     $parallel "$srun ./runtask.sh arg1:{1} > runtask.sh.{1}" ::: {1..6}
     ```
+
 #### Launching concurrent processes
-Another option for setting up parallel runs is to launch background processes concurrently. This setup would be suitable for independent runs that use a single node exclusively. You can then submit multiple jobs, each on a separate node, if the total number of runs require more cores than on a single node.
+Another option for setting up parallel runs is to launch background processes concurrently. This setup is suitable for independent runs that use a single node exclusively. You can then submit multiple jobs, each on a separate node, if the total number of runs requires more cores than a single node has.
 
 === "Midway2"
     ```
@@ -1003,7 +1011,7 @@ Another option for setting up parallel runs is to launch background processes co
     wait
     ```
 
-Here, the first `mpirun` uses 8 CPU cores for eight tasks, and the second uses another 4 CPU cores to avoid oversubscription. The two "&" mean to launch the `mpirun` commands to the background, and the `wait` command ensures all the processes are complete before terminating the job.
+Here, the first `mpirun` uses 8 CPU cores for eight tasks, and the second uses another 4 CPU cores to avoid oversubscription. The trailing `&` runs each `mpirun` command in the background, and the `wait` command ensures all the processes are complete before the job terminates.
 
 A common use case is to launch multiple Python instances with the same script, each processing a set of input parameters:
 
@@ -1028,24 +1036,24 @@ wait
 
 Breakdown:
 
-1. `for idx in {0..31} do ... done`: This loop iterates 32 times, with idx taking values from 0 to 31.
+1. `for idx in {0..31} do ... done`: This loop iterates 32 times, with `idx` taking values from 0 to 31.
 
 2. `taskset -c $idx`: This command binds the execution of the following command (`python script.py ...`) to a specific CPU core, where `$idx` specifies the core number.
 
 3. `python script.py input-$idx.txt > output-$idx.txt &`: This runs the Python script with a specific input file (`input-$idx.txt`) and writes the output to a corresponding output file (`output-$idx.txt`). The `&` at the end puts each command in the background, allowing them to run in parallel.
 
-4. `wait`: This command makes the script wait until all background processes have finished before it exits
+4. `wait`: This command makes the script wait until all background processes have finished before it exits.
 
 Summary:
 
-The job script parallelizes the execution of script.py across 32 CPU cores, each processing a different input file and saving the results in corresponding output files.
+The job script parallelizes the execution of `script.py` across 32 CPU cores, each processing a different input file and saving the results in corresponding output files.
 
 
 ### Dependency jobs
 
 You can schedule jobs depending on the termination status of previously scheduled jobs. This way, you can concatenate your jobs into a pipeline or expand to more complicated dependencies.
 
-For example, `job1.sbatch` is a submission script you plan to submit a batch job:
+For example, `job1.sbatch` is a script you plan to submit as a batch job:
 
 === "Midway2"
     ```bash
@@ -1091,19 +1099,19 @@ sbatch job1.sbatch
 
 which returns the job ID, for example, `1234567`.
 
-You can then submit another job that is put on the waiting list of the queue (pending)
+You can then submit another job that waits in the queue (pending) until the first job ends:
 
 ```
-sbatch -dependency=afterany:1234567 job2.sbatch
+sbatch --dependency=afterany:1234567 job2.sbatch
 ```
 
-This command indicates that `job2.sbatch` will be put in the queue after the job ID `1234567` is terminated for any reason. The dependency option flag can be `after`, `afterany`, `afterok` and `afternotok`, which are self-explanatory.
+This command indicates that `job2.sbatch` will start only after job `1234567` terminates for any reason. The dependency type can be `after` (after the job starts), `afterany` (after it terminates for any reason), `afterok` (after it completes successfully), or `afternotok` (after it fails).
 
 For more information on job dependencies, please refer to the [Slurm documentation](https://slurm.schedmd.com/sbatch.html){:target='_blank'}.
 
 ### <a name="cron-like-jobs-midway2-legacy"></a> Cron-like jobs - Limited support on Midway2
 
-Cron-like jobs are Slurm jobs submitted to the queue with a specified schedule. These jobs persist until they are canceled or encounter an error. The Midway2 cluster has a dedicated partition, `cron`, for running cron-like jobs. Please contact our [Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'} to request submitting cron-like jobs. These jobs are subject to scheduling limits and resource requested, and will be monitored. We strongly recommend using `dependency jobs` which offer more flexibility and better resource management than using cron-like jobs.
+Cron-like jobs are Slurm jobs submitted to the queue with a specified schedule. These jobs persist until they are canceled or encounter an error. The Midway2 cluster has a dedicated partition, `cron`, for running cron-like jobs. Please contact our [Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'} to request submitting cron-like jobs. These jobs are subject to scheduling limits and the resources requested, and will be monitored. We strongly recommend using [dependency jobs](#dependency-jobs), which offer more flexibility and better resource management than using cron-like jobs.
 
 Here is an example of a batch script that internally submits a cron-like job (`cron.sbatch`):
 
@@ -1118,7 +1126,7 @@ Here is an example of a batch script that internally submits a cron-like job (`c
 #SBATCH --qos=cron
 
 # Specify a valid Cron string for the schedule. This specifies that
-# The Cron job runs once per day at 5:15a.
+# the cron job runs once per day at 5:15 a.m.
 SCHEDULE='15 5 * * *'
 
 # Here is an example of a simple command that prints the hostname and
