@@ -1,7 +1,7 @@
 # Interactive jobs
 Interactive jobs are the most intuitive way to use RCC clusters, as they allow you to interact with the program running on compute node/s (e.g., execute cells in a Jupyter Notebook) in real-time. This is great for exploratory work or troubleshooting. An interactive job will persist until you disconnect from the compute node or until you reach the maximum requested time.  
 
-To request an interactive job with default parameters, run the following command while connected to a login node:  
+To request an interactive job, run the following command while connected to a login node:  
 
 ```
 sinteractive -A [pi-account] -p [partition] -N [# of nodes] --ntasks-per-node=[# of tasks] --time=[time]
@@ -33,24 +33,24 @@ There are many additional options for the sinteractive command, including option
     ```
     sinteractive --account=pi-<PI's CNETID> --exclusive --partition=caslake --nodes=2 --time=08:00:00
     ```
-For more details about these and other useful parameters, check [Slurm `sbatch` page](./sbatch.md).
+For more details about these and other useful parameters, see the [Batch Jobs page](./sbatch.md).
 
 !!! tip
     All options in the `sbatch` command are also available for the `sinteractive` command. 
 
 ### Debug QoS 
-There is a debug QOS (Quality of Service) setup to help users quickly access some resources to debug or test their code before submitting their jobs to the main partition. The debug QoS will allow you to run one job and get up to four cores for 15 minutes without consuming SUs. To use the debug QoS, specify `--time` as 15 minutes or less. For example, to get two cores for 15 minutes, you could run:
+There is a debug QoS (Quality of Service) set up to help users quickly access some resources to debug or test their code before submitting their jobs to the main partition. The debug QoS will allow you to run one job and get up to four cores for 15 minutes without consuming SUs. To use the debug QoS, specify `--time` as 15 minutes or less. For example, to get two cores for 15 minutes, you could run:
 
 ```
 sinteractive --qos=debug --time=00:15:00 --ntasks=2 --account=pi-<PI CNETID>
 ```
-You can find out the available `qos` for your account with the command `rcchelp`
+You can find out the QoS available to your account with the `rcchelp` command:
 
 ```
 rcchelp qos
 ```
 
-Additionally, it is important to use the `--mem` or `--mem-per-cpu` options. For example, to request 8 CPU cores and 128 GB of memory on a bigmem2 node, add the following to your `.sbatch` script:
+Additionally, it is important to use the `--mem` or `--mem-per-cpu` options. For example, to request 8 CPU cores and 128 GB of memory on a Midway2 `bigmem2` node, add the following to your `.sbatch` script:
 
 ```bash
 #SBATCH --ntasks=1
@@ -58,19 +58,22 @@ Additionally, it is important to use the `--mem` or `--mem-per-cpu` options. For
 #SBATCH --mem=128G
 ```
 
-These same options can also be used to set up a sinteractive session. For example, on Midway3 to access a `bigmem` node with 1 CPU and 128 GB of memory, run: 
+These same options can also be used to set up a sinteractive session. For example, on Midway3, to access a `bigmem` node with 8 CPU cores and 128 GB of memory, run: 
 
 ```bash
 sinteractive --partition=bigmem --ntasks=1 --cpus-per-task=8 --mem=128G --account=pi-<PI CNETID>
 ```
 
 
-Once you are connected to the compute node where the interactive session is runnnig, you can load python:
+### Example: running Python and LAMMPS in an interactive session
+
+Once you are connected to the compute node where the interactive session is running, you can load Python:
+
 ```
 module load python
 ```
 
-and run `python`
+and run `python`:
 
 ```
 [your-cnetid@midway3-0xyz ] python
@@ -80,15 +83,15 @@ Type "help", "copyright", "credits" or "license" for more information.
 >>>
 ```
 
-After quitting `python`, you can activate the environment you created, and list the installed packages
+After quitting `python`, you can activate a virtual environment you have created (see [Python](../software/apps-and-envs/python.md)) and list the installed packages:
 
 ```
 source /project/[pi-folder]/[your-cnetid]/my-venv/bin/activate
 pip list
 ```
-You should see `numpy`, `matplotlib` and `pandas` installed in this environment.
+In this example, the environment has `numpy`, `matplotlib`, and `pandas` installed.
 
-Let us prepare a simple Python script, namely, `simple.py` with a text editor like `nano`, in the current folder, with the following content:
+Let us prepare a simple Python script named `simple.py` in the current folder with a text editor like `nano`, with the following content:
 
 ```
 import numpy as np
@@ -101,7 +104,7 @@ plt.ylabel("y axis caption")
 plt.plot(x,y)
 plt.savefig("output.pdf", format="pdf")
 ```
-And run it with 
+And run it with: 
 
 ```
 python simple.py
@@ -109,23 +112,26 @@ python simple.py
 
 which should produce a file `output.pdf`.
 
-Change to the input data folder
+Similarly, you can run a parallel program such as LAMMPS that you have built yourself (see [LAMMPS](../software/apps-and-envs/lammps.md)). Change to the input data folder:
+
 ```
 cd /project/[pi-folder]/[your-cnetid]/lammps/examples
 ```
 
-Load the same modules you used to build LAMMPS (except `cmake`)
+Load the same modules you used to build LAMMPS (except `cmake`):
 
 ```
 module load mpich/3.4.3+gcc-10.2.0 mkl/2023.1
 ```
 
-Relax the locked memory limit
+Relax the locked memory limit:
+
 ```
 ulimit -l unlimited
 ```
 
-Run the LAMMPS binary you built above
+Run your LAMMPS binary:
+
 ```
 mpirun -np 8 /project/[pi-folder]/[your-cnetid]/lammps/build/lmp -in melt/in.melt
 ```
@@ -144,10 +150,11 @@ slurmwatch      # in one pane; run your program in the other
 
 It watches the whole job, so it keeps reporting as you run one program, edit your code, and run another — there is no need to restart it between runs. Running it on the node reads usage directly and adds no extra Slurm step, so it will not interfere with your `srun`/`mpirun` launches. See [Monitoring running jobs](./sbatch.md#monitoring-running-jobs) for more.
 
-To terminate the interactive session, run
+To terminate the interactive session, run:
 
 ```
 exit
 ```
 
-You will get back to the login node.
+You will be returned to the login node.
+

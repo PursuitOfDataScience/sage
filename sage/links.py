@@ -13,6 +13,7 @@ import re
 from collections.abc import Iterable
 
 from .corpus import Corpus, Document
+from .normalize import closes_fence, opens_fence
 
 # One level of nesting inside the label, because `[Batch jobs [beta]](docs/…)` is a
 # link a model writes and `[^\]]+` could not match it: the target was neither resolved
@@ -572,13 +573,15 @@ def strip_bare_references(text: str, corpus: Corpus) -> str:
         return text
 
     out: list[str] = []
-    fenced = False
+    fence: str | None = None
     for line in text.split("\n"):
-        if _FENCE.match(line):
-            fenced = not fenced
+        if fence:
+            if closes_fence(line, fence):
+                fence = None
             out.append(line)
             continue
-        if fenced:
+        fence = opens_fence(line)
+        if fence:
             out.append(line)
             continue
         cleaned, removed = _clean_line(line, corpus)
@@ -1197,13 +1200,15 @@ def mark_sources(
         distinctive = {}
 
     out: list[str] = []
-    fenced = False
+    fence: str | None = None
     for line in text.splitlines():
-        if _FENCE.match(line):
-            fenced = not fenced
+        if fence:
+            if closes_fence(line, fence):
+                fence = None
             out.append(line)
             continue
-        if fenced:
+        fence = opens_fence(line)
+        if fence:
             out.append(line)
             continue
         marked = _mark_line(line, numbers)

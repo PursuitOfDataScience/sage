@@ -57,7 +57,7 @@ source ~/.bashrc # Reload the shell configuration
 
 ### Step 1.2: `~/.bashrc` Environment Setup
 
-To use `scode` and other tools effectively in VS Code Server, It is recommended to have your environment correctly initialized by modifying your `~/.bashrc`.
+To use `scode` and other tools effectively in VS Code Server, it is recommended to have your environment correctly initialized by modifying your `~/.bashrc`.
 
 ```bash
 # ~/.bashrc
@@ -65,13 +65,13 @@ export MY_VAR="HelloWorld"
 module load python/anaconda-2023.09
 ```
 
-This will ensure that necessary environment variables and system modules such as `python`, `cuda` and `java` are available in both the terminal and within VS Code extensions.
+This will ensure that necessary environment variables and system modules such as `python`, `cuda`, and `java` are available in both the terminal and within VS Code extensions.
 
 !!! tip
 
-    VS Code Server automatically sources `~/.bashrc` at startup. A properly set up `~/.bashrc` can help:
+    VS Code Server automatically sources `~/.bashrc` at startup. A properly set up `~/.bashrc` helps:
     
-    - VS Code `Python` extension to detect and use the correct `Python` versions.
+    - The VS Code `Python` extension to detect and use the correct `Python` version.
     
     - The integrated terminal to use your configured modules and environment variables.
 
@@ -79,7 +79,7 @@ This will ensure that necessary environment variables and system modules such as
 
 To take full advantage of language features in VS Code (e.g., autocompletion, linting, Jupyter notebook support), you can install the relevant extensions using `scode` before [starting the server](#step-2-launch-a-vs-code-server).
 
-For instance, for Python developments, run the following command **on the login node**:
+For instance, for Python development, run the following command **on the login node**:
 
 ```bash
 scode ext install ms-python.python ms-toolsai.jupyter
@@ -98,12 +98,12 @@ scode serve-web -- --account <pi-account> --time 01:00:00 --partition caslake --
 ```
 
 - `<pi-account>`: Replace this with the name of your Principal Investigator (PI) or course account. This account will be used to provision compute nodes in the specified partition.
-- To view the accounts you are associated with and check available allocations, use `groups`, `accounts list` and `accounts balance`. 
-- Additional slurm options can be added to the `scode serve-web` command **after the standalone `--` separator**. Refer to [Slurm User Guide](../../../slurm/sbatch.md) and [Sbatch Documentation](https://slurm.schedmd.com/sbatch.html) for more details on job submission options.
+- To view the accounts you are associated with and check available allocations, use `groups`, `accounts list`, and `accounts balance`. 
+- Additional Slurm options can be added to the `scode serve-web` command **after the standalone `--` separator**. Refer to the [Batch Jobs](../../../slurm/sbatch.md) page and the [sbatch documentation](https://slurm.schedmd.com/sbatch.html) for more details on job submission options.
 
 This command will:
 
-- Submit a SLURM job to run the VS Code Web server
+- Submit a Slurm job to run the VS Code Web server
 - Prepare the environment and server installation automatically
 - Return the job ID and logging paths
 
@@ -170,15 +170,15 @@ You may use `squeue -j 30317404` to see more information about this job, or canc
 
 In this output:
 
-- `8000` is a port **on your local machine**. All traffic to this port will be forwarded to the remote VS Code Web server with SSH tunnel. You can change this port if it is already in use.
-- `61028` is the port **on the compute node** where the VS Code Web server is running, which is randomly assigned by SCode.
-- When running `scode jobs status 30317404`, scode will automatically fill in `<yourusername>` and the ssh endpoint for you (in this example, `midway3.rcc.uchicago.edu`), so that you can directly copy and run the tunnelling command in your local terminal.
+- `8000` is a port **on your local machine**. All traffic to this port will be forwarded to the remote VS Code Web server through the SSH tunnel. You can change this port if it is already in use.
+- `61028` is the port **on the compute node** where the VS Code Web server is running, which is randomly assigned by `scode`.
+- When you run `scode jobs status 30317404`, `scode` automatically fills in `<yourusername>` and the SSH endpoint for you (in this example, `midway3.rcc.uchicago.edu`), so that you can directly copy and run the tunneling command in your local terminal.
 
 ---
 
 ## Step 4: Create an SSH Tunnel from Your Local Machine
 
-On your **local machine**, open another terminal, and run the SSH command shown in the job status output. For example:
+On your **local machine**, open another terminal and run the SSH command shown in the job status output. For example:
 
 ```bash
 ssh -L 8000:10.50.250.24:61028 <yourusername>@midway3.rcc.uchicago.edu
@@ -212,13 +212,13 @@ You will be redirected to a fully functional VS Code Web interface running on th
 When you are done:
 
 - Close the browser tab (to avoid dangling temp files in your home directory)
-- Cancel the SLURM job:
+- Cancel the Slurm job:
 
 ```bash
 scancel 30317404
 ```
 
-If not manually cancelled, the job will terminate when the time limit expires.
+If not canceled manually, the job will terminate when the time limit expires.
 
 Now you can close the SSH tunnel terminal as well.
 

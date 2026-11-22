@@ -5,14 +5,14 @@
 ### How do I submit a job to Midway?
 RCC systems use [Slurm](https://slurm.schedmd.com/documentation.html){:target='_blank'} to manage resources and job queues. To learn more, see [Running jobs on RCC clusters](../slurm/main.md).
 
-### Can I login directly to a compute node?
-You can start up an interactive session on a compute node with the ```sinteractive``` command. This command takes the same arguments as ```sbatch```. For more information about interactive jobs, see submitting [Interactive Jobs](../slurm/sinteractive.md).
+### Can I log in directly to a compute node?
+You can start up an interactive session on a compute node with the ```sinteractive``` command. This command takes the same arguments as ```sbatch```. For more information, see [Interactive Jobs](../slurm/sinteractive.md).
 
 ### How do I run jobs in parallel?
-There are many ways to configure parallel jobs. The best approach will depend on your software and resource requirements. For more information on two commonly used approaches, see [Job arrays and Parallel batch jobs](../slurm/sbatch.md#job-arrays).
+There are many ways to configure parallel jobs. The best approach will depend on your software and resource requirements. For more information on two commonly used approaches, see [Job arrays](../slurm/sbatch.md#job-arrays) and [Parallel batch jobs](../slurm/sbatch.md#parallel-batch-jobs).
 
 ### Are there any limits to running jobs on Midway?
-Run ```rcchelp qos``` on Midway to view the current "Quality of Service"--a set of parameters and constraints that includes maximum number of jobs and maximum wall time.
+Run ```rcchelp qos``` on Midway to view the current "Quality of Service" (QoS), a set of parameters and constraints that includes the maximum number of jobs and maximum wall time.
 
 ### I am a member of multiple accounts. How do I choose which allocation is charged?
 If you belong to multiple accounts, jobs will get charged to your default account unless you specify the ```--account=<account_name>``` option when you submit a job with sbatch. You may request a change in your default account by [contacting our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target="_blank"}.  
@@ -20,7 +20,7 @@ If you belong to multiple accounts, jobs will get charged to your default accoun
 ### How can I get emails when my job starts and when it finishes?
 For security reasons, sending out notification emails directly using the standard Slurm command `#SBATCH --mail-user=<CNetID>@uchicago.edu` is not allowed. As a robust alternative, we suggest using the RCC mail server to send out notification emails. Update your script with the following lines:
 ```
-#SBATCH --mail-type=ALL# Mail events (NONE, BEGIN, END, FAIL, ALL)
+#SBATCH --mail-type=ALL  # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=<CNetID>@rcc.uchicago.edu  # Where to send email
 ```
 
@@ -34,7 +34,7 @@ The RCC does not support users creating cron jobs. However, it is possible to us
 
 ## Job submission trouble
 ### Why is my job not starting?
-This could be due to a variety of factors. Running ```squeue --user=<userid>``` can will help to find the answer; see in particular the NODELIST(REASON) column in the ```squeue``` output. A job that is waiting in the queue may show one of the following labels in this column:
+This could be due to a variety of factors. Running ```squeue --user=<userid>``` will help you find the answer; see in particular the NODELIST(REASON) column in the ```squeue``` output. A job that is waiting in the queue may show one of the following labels in this column:
 
 **(Priority)**: 
 Other jobs currently have higher priority than your job.
@@ -45,36 +45,39 @@ Your job has enough priority to run, but there aren’t yet enough free resource
 **(QOSResourceLimit)**: 
 Your job exceeds the QOS limits. The QOS limits include wall time, number of jobs a user can have running at once, number of nodes a user can use at once, and so on. For example, if you are at or near the limit of number of jobs that can be run at once, your job will become eligible to run as soon as other jobs finish.
 
-Please contact RCC support if you believe that your job is not being handled correctly by the Slurm queuing system.
+Please [contact RCC support](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target="_blank"} if you believe that your job is not being handled correctly by the Slurm queuing system.
 
-!!! note "Note: If you see a large number of jobs that aren’t running when many resources are idle, it is possible that RCC staff have scheduled an upcoming maintenance window. In this case, any jobs requesting a wall time that overlaps with the maintenance window will remain in the queue until after the maintainence period is over. The RCC staff will typically notify users via email prior to performing a maintenance and after a maintenance is completed."
+!!! note
+    If you see a large number of jobs that aren’t running when many resources are idle, it is possible that RCC staff have scheduled an upcoming maintenance window. In this case, any jobs requesting a wall time that overlaps with the maintenance window will remain in the queue until the maintenance period is over. RCC staff will typically notify users via email before and after a maintenance.
 
 ### Why does my job fail after a few seconds?
 This is most likely because there is an error in your job submission script, or because the program you are trying to run is producing an error and terminating prematurely.
 
-If you need help troubleshooting the issue, please send your job submission script, as well as the error generated by your job submission script to our[Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target="_blank"}
+If you need help troubleshooting the issue, please send your job submission script, as well as the error generated by your job, to our [Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target="_blank"}.
 
 ### Why does my job fail with message “exceeded memory limit, being killed”?
-Let's understand this with an example. Let's say on the main midway2 partition, broadwl, Slurm allocates 2 GB of memory per allocated CPU by default. If your computations require more than the default amount, you should adjust the memory allocated to your job with the ```--mem``` or ```--mem-per-cpu``` flags. For example, to request 10 cores and 40 GB of memory on a broadwl node, include these options when running ```sbatch``` or ```sinteractive```: ```--ntasks=1 --cpus-per-task=10 --mem=40G```.
+Let's understand this with an example. Let's say on the main Midway2 partition, `broadwl`, Slurm allocates 2 GB of memory per allocated CPU by default. If your computations require more than the default amount, you should adjust the memory allocated to your job with the ```--mem``` or ```--mem-per-cpu``` flags. For example, to request 10 cores and 40 GB of memory on a broadwl node, include these options when running ```sbatch``` or ```sinteractive```: ```--ntasks=1 --cpus-per-task=10 --mem=40G```.
 
 ### Why does my ```sinteractive``` job fail with “Connection closed.”? 
 There are two likely explanations for this error.
 
-One possibility is that you are over the time limit. The default walltime for sinteractive is 2 hours. This can be increased by including the ```--time``` flag to your ```sinteractive``` call.
+One possibility is that you are over the time limit. The default wall time for `sinteractive` is 2 hours. This can be increased by adding the ```--time``` flag to your ```sinteractive``` call.
 
 Another possibility is that your job exceeded the memory limit. You can resolve this by requesting additional memory using ```--mem``` or ```--mem-per-cpu```.
 
-### Why does my ```sinteractive``` job fail with ```ssh: symbol lookup error: ssh: undefined symbol: EVP_KDF_ctrl, version OPENSSL_1_1_1b?``` "
+### Why does my ```sinteractive``` job fail with ```ssh: symbol lookup error: ssh: undefined symbol: EVP_KDF_ctrl, version OPENSSL_1_1_1b```?
 The error `ssh: symbol lookup error: ssh: undefined symbol: EVP_KDF_ctrl, version OPENSSL_1_1_1b` indicates
-the mismatch version of the OpenSSL used by `sinteractive` and that by the `python` module loaded in your shell environment. There are two options to resolve this issue:
+a mismatch between the version of OpenSSL used by `sinteractive` and that used by the `python` module loaded in your shell environment. There are two options to resolve this issue:
 
 1) Prepend `LD_LIBRARY_PATH` with the path to the SSH-compatible version of OpenSSL:
+
 ```
 export LD_LIBRARY_PATH=/lib64:$LD_LIBRARY_PATH
 ```
 and run `sinteractive` again.
 
 2) Unload the `python` module:
+
 ```
 module unload python
 ```
@@ -83,14 +86,15 @@ then run `sinteractive` again, and load the `python/anaconda` module within the 
 ## Technical questions
 
 ### What compilers does the RCC support?
-The RCC supports the GNU, Intel, PGI and NVidia’s CUDA compilers.
+The RCC supports the GNU, Intel, AMD (AOCC), and NVIDIA HPC SDK (includes CUDA) compilers. See [Compilers](../software/compilers.md) for details.
 
 ### Which versions of MPI does RCC support?
-The RCC maintains OpenMPI, IntelMPI, and MVAPICH2 compilers. See [MPI jobs](../slurm/sbatch.md#mpi-jobs) for more information and instructions for using these MPI frameworks.
+The RCC maintains OpenMPI, MPICH, Intel MPI, and NVIDIA HPC SDK MPI libraries. See [Compilers](../software/compilers.md#message-passing-interface-mpi) for the corresponding modules and [MPI jobs](../slurm/sbatch.md#mpi-jobs) for more information and instructions for using these MPI frameworks.
 
 ### Can RCC help me parallelize and optimize my code?
 The RCC support staff are available to consult with you or your research team to help parallelize and optimize your code for use on RCC systems. [Contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target="_blank"} to set up a consultation.
 
 ### Does RCC provide GPU computing resources?
-Yes. The RCC high-performance systems provide GPU-equipped compute nodes. For instructions on using the GPU nodes, see [GPU jobs](../slurm/sbatch.md#mpi-jobs).
+Yes. The RCC high-performance systems provide GPU-equipped compute nodes. For instructions on using the GPU nodes, see [GPU jobs](../slurm/sbatch.md#gpu-jobs).
+
 

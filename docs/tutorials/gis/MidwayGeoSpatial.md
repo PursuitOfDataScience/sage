@@ -1,18 +1,20 @@
-Here is a guide on setting up an environment for geospatial analysis on the Midway3 cluster at the University of Chicago. This guide is divided into sections that detail the steps for connecting to the cluster, and using software and containers relevant to geospatial analysis.
+# Geospatial Analysis on Midway3
+
+This guide explains how to set up an environment for geospatial analysis on the Midway3 cluster at the University of Chicago. It is divided into sections that detail the steps for connecting to the cluster and using software and containers relevant to geospatial analysis.
 
 ### Section I: Connecting to Midway Cluster
 
 #### 1. GUI-based Access
-For geovisualization, a GUI-based approach is preferred. ThinLinc is recommended due to its seamless working environment which supports features like a shared clipboard. ThinLinc can be accessed in two ways:
+For geovisualization, a GUI-based approach is preferred. [ThinLinc](../../connection/thinlinc/main.md) is recommended due to its seamless working environment, which supports features like a shared clipboard. ThinLinc can be accessed in two ways:
 
-- **ThinLinc Client**: Download and install the ThinLinc client from [ThinLinc Download Page](https://www.cendio.com/thinlinc/download). It is available for all major operating systems.
+- **ThinLinc Client**: Download and install the ThinLinc client from the [ThinLinc download page](https://www.cendio.com/thinlinc/download). It is available for all major operating systems.
 - **Web Access**: You can also access ThinLinc through a browser by navigating to `https://midway3.rcc.uchicago.edu`. This method does not require any client installation.
 
 #### 2. Command Line Access and X Forwarding
 For users who prefer or require command-line access, especially for scripting and automation:
 
 - **Using SSH with X Forwarding**:
-    - **Xshell and VcXsrv**: Xshell is preferred for academic and home use as it is free and has a smaller memory footprint compared to other tools like MobaXterm. However, it requires the installation of an X11 client such as Xming or VcXsrv.
+    - **Xshell and VcXsrv** (Windows): Xshell is free for academic and home use and has a smaller memory footprint than other tools like MobaXterm. However, it requires the installation of an X11 server such as Xming or VcXsrv.
     - Connect via SSH with X forwarding enabled:
       ```
       ssh -Y <user>@midway3.rcc.uchicago.edu
@@ -31,7 +33,7 @@ Key geospatial libraries and tools are available on Midway3, including GDAL for 
     R
     ```
 - **For Python**:
-  - Python and its libraries can be accessed via Anaconda modules, which support virtual environments:
+  - Python and its libraries can be accessed via the Python modules, which support virtual environments (see [Python](../../software/apps-and-envs/python.md)):
     ```
     module load python
     source activate <env_name>
@@ -59,6 +61,11 @@ Containers provide a reproducible environment for more complex or customized set
     singularity shell -B $HOME/code/cook -B $SCRATCH/$USER:/data otbtf_6.3.1-cpu.sif
     ```
 
-export SINGULARITY_TMPDIR="/software/src/tmp"
-export SINGULARITY_CACHEDIR="/software/src/cache"
+If you build or pull large images, redirect Singularity's temporary and cache directories away from `/tmp` (see [Apptainer & Singularity](../../software/apps-and-envs/singularity.md#known-issues)):
+
+```
+export SINGULARITY_TMPDIR=$SCRATCH/$USER/container/faketmp
+export SINGULARITY_CACHEDIR=$SCRATCH/$USER/container/fakecache
+```
+
 This guide covers the basic setup for geospatial analysis on Midway3. Depending on specific project requirements, additional configurations or software packages might be necessary.

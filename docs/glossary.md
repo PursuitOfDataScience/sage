@@ -13,25 +13,25 @@ Welcome to the RCC Glossary, your go-to guide for understanding the key terms in
 		<tr>
 			<td dir="ltr" style="text-align:center">Batch job</td>
 			<td dir="ltr">
-			<p>A job is the Slurm&rsquo;s computing unit by which resources are allocated and shared. Users create job submission scripts to ask Slurm for resources such as cores, memory, walltime, etc. Slurm puts the requests in a queue and allocates requested resources based on jobs&rsquo; priority.</p>
+			<p>A batch job is a job that runs non-interactively from a job submission script. Users create job submission scripts to ask Slurm for resources such as cores, memory, wall time, etc. Slurm puts the requests in a queue and allocates the requested resources based on the jobs&rsquo; priority.</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">Compute cluster</td>
 			<td dir="ltr">
-			<p>A group of independent computers connected via a fast network interconnect, managed by a resource manage, and act as a large parallel computer. Each node in a cluster can be a shared memory parallel computer.</p>
+			<p>A group of independent computers connected via a fast network interconnect and managed by a resource manager, acting as a large parallel computer. Each node in a cluster can be a shared memory parallel computer.</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">Compute node</td>
 			<td dir="ltr">
-			<p>A compute node is a stand-alone computer connected to other compute nodes via a fast network interconnect. A compute node is where a batch job runs and is not usually accessible directly by the users.</p>
+			<p>A compute node is a stand-alone computer connected to other compute nodes via a fast network interconnect. A compute node is where a batch job runs and is not usually directly accessible to users.</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">Core</td>
 			<td dir="ltr">
-			<p>Smallest computation unit that can run a program (used to be called a processor, still is, also called a CPU &ndash; Central Processing Unit).</p>
+			<p>The smallest computation unit that can run a program (also called a processor or a CPU &ndash; Central Processing Unit).</p>
 			</td>
 		</tr>
 		<tr>
@@ -39,47 +39,49 @@ Welcome to the RCC Glossary, your go-to guide for understanding the key terms in
 			<p style="text-align:center">Distributed memory architecture</p>
 			</td>
 			<td dir="ltr">
-			<p>Distributed memory architecture refers to a way to create a parallel computer. In this architecture, stand-alone compute nodes are connected using a fast interconnect such as Infiniband and exchange messages over the network.</p>
+			<p>Distributed memory architecture refers to a way to create a parallel computer. In this architecture, stand-alone compute nodes are connected using a fast interconnect such as InfiniBand and exchange messages over the network.</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">FLOPS</td>
 			<td dir="ltr">
-			<p>Floating point Operation Per Second (FLOPS) is a measure of computing performance in terms of number of floating operations that a CPU can perform per second. Modern CPUs are capable of doing Tera FLOPS (10^12 floating point operations per second).</p>
+			<p>Floating-point Operations Per Second (FLOPS) is a measure of computing performance in terms of the number of floating-point operations that a processor can perform per second. Modern CPUs are capable of teraFLOPS (10^12 floating-point operations per second).</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">GPU</td>
 			<td dir="ltr">
-			<p>Graphics Processing Unit (GPU) is a specialized device initially used to generate computer output. GPUs have their own memory but should be hosted in a node. Each compute node can host one or more GPUs. Modern GPUs have many simple compute cores and have been used for parallel processing.</p>
+			<p>A Graphics Processing Unit (GPU) is a specialized device originally designed to generate graphics output. GPUs have their own memory but must be hosted in a node. Each compute node can host one or more GPUs. Modern GPUs have many simple compute cores and are widely used for parallel processing.</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">HPC</td>
 			<td dir="ltr">
-			<p>High Performance Computing (HPC) refers to the practice of aggregating computing power to achieve higher performance that would not possible by using a typical computer.</p>
+			<p>High-Performance Computing (HPC) refers to the practice of aggregating computing power to achieve performance that would not be possible with a typical computer.</p>
 			</td>
 		</tr>
 		<tr>
-			<td dir="ltr" style="text-align:center">Infiniband</td>
+			<td dir="ltr" style="text-align:center">InfiniBand</td>
 			<td dir="ltr">
-			<p>A computer network standard featuring high bandwidth and low latency. The current Infiniband devices are capable of transferring data at up to 100Gbits/sec with less than a microsecond latency. As of this writing, the popular Infiniband versions are FDR (Fourteen Data Rate) with 56Gbits/sec and EDR (Enhanced Data Rate) with 100Gbits/sec.</p>
+			<p>A computer network standard featuring high bandwidth and low latency, with sub-microsecond latency. Common InfiniBand versions include FDR (Fourteen Data Rate) at 56 Gbit/s, EDR (Enhanced Data Rate) at 100 Gbit/s, and HDR (High Data Rate) at 200 Gbit/s.</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">Job</td>
-			<td>&nbsp;</td>
+			<td dir="ltr">
+			<p>A job is Slurm&rsquo;s unit of work, to which computing resources are allocated. A job can be a batch job or an interactive job.</p>
+			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">Login node</td>
 			<td dir="ltr">
-			<p>Login nodes (a.k.a. head nodes) are point of access to a parallel computer. Users usually connect to login nodes via SSH to compile and debug their code, review their results, do some simple tests, and submit their batch jobs to the parallel computer.</p>
+			<p>Login nodes (a.k.a. head nodes) are the points of access to a parallel computer. Users usually connect to login nodes via SSH to compile and debug their code, review their results, do some simple tests, and submit their batch jobs to the parallel computer.</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">Modules</td>
 			<td dir="ltr">
-			<p>An open source software management tool used in most HPC facilities. Using modules enable users to selectively pick the software that they want and add them to their environment.</p>
+			<p>An open-source software management tool used in most HPC facilities. Modules enable users to selectively pick the software that they want and add it to their environment.</p>
 			</td>
 		</tr>
 		<tr>
@@ -91,13 +93,13 @@ Welcome to the RCC Glossary, your go-to guide for understanding the key terms in
 		<tr>
 			<td dir="ltr" style="text-align:center">OpenMP</td>
 			<td dir="ltr">
-			<p>Open Multi Processing (OpenMP) is a parallel programming model designed for shared memory architecture. In this programming mode, programmers insert compiler directives in their code and the compiler generates a code that can run on more than one core.</p>
+			<p>Open Multi Processing (OpenMP) is a parallel programming model designed for shared memory architecture. In this programming model, programmers insert compiler directives in their code, and the compiler generates code that can run on more than one core.</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">Partition</td>
 			<td dir="ltr">
-			<p>A subset of a compute cluster with a common feature. For example, compute nodes with GPU could form a partition.</p>
+			<p>A subset of a compute cluster with a common feature. For example, compute nodes with GPUs could form a partition.</p>
 			</td>
 		</tr>
 		<tr>
@@ -105,39 +107,40 @@ Welcome to the RCC Glossary, your go-to guide for understanding the key terms in
 			<p style="text-align:center">Shared memory architecture</p>
 			</td>
 			<td dir="ltr">
-			<p>Shared memory architecture is a way to create a parallel computer. In this architecture, a large memory is shared among many cores and communication between cores is done via the shared memory. By introducing the multi-core CPUs, each computer is a shared-memory parallel computer.</p>
+			<p>Shared memory architecture is a way to create a parallel computer. In this architecture, a large memory is shared among many cores and communication between cores is done via the shared memory. With the introduction of multicore CPUs, every computer is now a shared-memory parallel computer.</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">Slurm</td>
 			<td dir="ltr">
-			<p>Simple Linux Utility for Resource Management (SLURM) is a software that manages high performance computing resources. SLURM coordinates running of many programs on a shared facility and makes sure that resources are used in a fair share manner.</p>
+			<p>Slurm (originally Simple Linux Utility for Resource Management) is software that manages high-performance computing resources. Slurm coordinates the running of many programs on a shared facility and makes sure that resources are shared fairly.</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">Socket</td>
 			<td dir="ltr">
-			<p>A computational unit, packaged as one and usually made of a single chip often called processor. Modern sockets carry many cores (2, 4 on most laptops, 8 to 16 on most servers).</p>
+			<p>A computational unit, packaged as one and usually made of a single chip often called a processor. Modern sockets carry many cores (typically 4 to 16 on laptops, and dozens on servers).</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr" style="text-align:center">SSH</td>
 			<td dir="ltr">
-			<p>Secure Shell (SSH) is a protocol to securely access remote computers. Based on the client-server model, multiple users with an SSH client can access to a remote computer. Some operating systems such as Linux and Mac OS have a built-in SSH client and others can use one of many publicly available clients.</p>
+			<p>Secure Shell (SSH) is a protocol to securely access remote computers. Based on the client-server model, multiple users with an SSH client can access a remote computer. Some operating systems such as Linux and macOS have a built-in SSH client, and others can use one of many publicly available clients.</p>
 			</td>
 		</tr>
 		<tr>
 			<td dir="ltr">
-			<p style="text-align:center">Tightly-coupled nodes</p>
+			<p style="text-align:center">Tightly coupled nodes</p>
 			</td>
 			<td dir="ltr">
-			<p>A set of compute nodes connected via fast Infiniband interconnect. These nodes can exchange data in a fast rate and are used to solve big problems that cannot fit in a single computer.</p>
+			<p>A set of compute nodes connected via a fast InfiniBand interconnect. These nodes can exchange data at a fast rate and are used to solve big problems that cannot fit in a single computer.</p>
 			</td>
 		</tr>
 		<tr>
-			<td dir="ltr" style="text-align:center">Walltime</td>
+			<td dir="ltr" style="text-align:center">Wall time</td>
 			<td dir="ltr">
-			<p>The time that requires a program to finish execution.</p>
+			<p>The elapsed real-world time a program takes to finish execution. In Slurm, the wall time limit (<code>--time</code>) is the maximum time a job is allowed to run.</p>
+
 			</td>
 		</tr>
 	</tbody>

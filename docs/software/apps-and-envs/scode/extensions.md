@@ -24,7 +24,7 @@ scode list
 
 ## Option 2: Porting Extensions from an Existing VS Code Installation
 
-If you already have a working VS Code installation on your local machine, you can export and re-import them to your `scode` environment.
+If you already have a working VS Code installation on your local machine, you can export its extensions and re-import them into your `scode` environment.
 
 ### Step 1: Export locally
 
@@ -57,7 +57,7 @@ code --list-extensions --show-versions > extensions.txt
 
 ### Step 2: Upload to the cluster
 
-You can manually copy the contents of `extensions.txt` to the Midway cluster using clipboard and `nano`.
+You can manually copy the contents of `extensions.txt` to the Midway cluster using the clipboard and `nano`.
 
 Alternatively, you can also use `scp` to copy the `extensions.txt` to your home directory:
 
@@ -75,13 +75,13 @@ scode ext install -f extensions.txt
 
 !!! note
 
-    It is possible to create an `extensions.txt` manually. Extensions IDs such as [`ms-python.python`](https://marketplace.visualstudio.com/items?itemName=ms-python.python) and [`ms-toolsai.jupyter`](https://marketplace.visualstudio.com/items?itemName=ms-toolsai.jupyter) can be found on the [VS Code Extension Marketplace](https://marketplace.visualstudio.com/vscode).
+    It is possible to create an `extensions.txt` manually. Extension IDs such as [`ms-python.python`](https://marketplace.visualstudio.com/items?itemName=ms-python.python) and [`ms-toolsai.jupyter`](https://marketplace.visualstudio.com/items?itemName=ms-toolsai.jupyter) can be found on the [VS Code Extension Marketplace](https://marketplace.visualstudio.com/vscode).
 
 ---
 
 ## Option 3: Install Extensions Manually via the VS Code Web UI
 
-This method is not recommended due to its complexity, but it can work as an expedient way for installing one or two extensions on the fly.
+This method is not recommended due to its complexity, but it can be an expedient way to install one or two extensions on the fly.
 
 ### Step 1: Download the Extension (`.vsix`) To Your Local Machine
 
@@ -95,7 +95,8 @@ This method is not recommended due to its complexity, but it can work as an expe
 
 ![Download VSIX from Web UI](./images/manual_download.png){: class="responsive-img rounded"}
 
-**From your local machine** (If you haven't had the Web UI set up with `scode`)
+**From your local machine** (if you haven't set up the Web UI with `scode`)
+
 
 1. Open the VS Code application **on your local machine**
 2. [Optional] Connect to the Midway cluster via SSH

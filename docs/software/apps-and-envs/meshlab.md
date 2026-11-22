@@ -82,4 +82,11 @@ Your `/home`, `/scratch`, and `/project` directories are accessible inside MeshL
 
 - MeshLab on Midway3 runs inside an [Apptainer](singularity.md) container — this is handled transparently by the module wrapper and requires no extra steps from the user.
 - For rendering with per-vertex colors, enable **Render → Color → Per Vertex** in the MeshLab menu.
-- MeshLab is an interactive tool and is not suited for batch/non-interactive SLURM jobs. Always launch it from an `sinteractive` session, not from a login node.
+- MeshLab is an interactive tool and is not suited for batch (non-interactive) Slurm jobs. Always launch it from an `sinteractive` session, not from a login node.
+
+## Getting help
+
+- Official documentation: [MeshLab website](https://www.meshlab.net/){:target='_blank'}
+- Built-in help: **Help** menu in the MeshLab interface
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.

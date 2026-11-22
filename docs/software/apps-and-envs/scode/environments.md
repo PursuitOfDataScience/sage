@@ -15,8 +15,8 @@ You can think of it as the VS Code equivalent of a Conda environment: create a
 
 In the environment path:
 
-- `<quality>` is either `stable` or `insiders` (currently, `scode` only support the `stable` version of VS Code).
-- `<name>` is the name for the scode environment, when you run a scode command that require a working `scode` environment (e.g., `scode serve` or `scode ext`), a default environment with the name `default` will be **automatically created and activated**.
+- `<quality>` is either `stable` or `insiders` (currently, `scode` only supports the `stable` version of VS Code).
+- `<name>` is the name of the `scode` environment. When you run an `scode` command that requires a working `scode` environment (e.g., `scode serve-web` or `scode ext`), a default environment named `default` will be **automatically created and activated**.
 
 The `default` environment should be sufficient for most use cases. Custom environments, however, can help isolate extension sets. They are ideal for troubleshooting conflicts or separating projects by programming languages.
 
@@ -25,7 +25,7 @@ The `default` environment should be sufficient for most use cases. Custom enviro
 ## 2  Creating your first `scode` environment
 
 ```bash
-# Create an custom `scode` env and have it activated globally
+# Create a custom `scode` env and activate it globally
 scode create myenv
 scode activate myenv
 
@@ -61,7 +61,7 @@ scode serve-web -- --account <pi-account> --time 01:00:00
 - **Purpose:** Activate and use an `scode` env globally.
 - **Behavior:**
 
-    - A plaintext file `~/.scode/env-<quality>` stores the environment  selection.
+    - A plaintext file `~/.scode/env-<quality>` stores the environment selection.
     - Subsequent `scode` commands inherit this env **unless** an explicit `--env` overrides it.
 
 ### 3.3  `scode list`
@@ -80,7 +80,7 @@ scode serve-web -- --account <pi-account> --time 01:00:00
 ### 3.4  `scode remove`
 
 - **Usage:** `scode remove <env_name>`
-- **Purpose:** Removes an `scode` env with all associated extensions and user data
+- **Purpose:** Remove an `scode` env with all associated extensions and user data.
 - **Behavior:**
     - Recursively deletes the env directory.
     - If an active environment is removed, the next available environment will be activated automatically.
@@ -89,7 +89,7 @@ scode serve-web -- --account <pi-account> --time 01:00:00
 
 ## 4  Using environments with `serve-web`
 
-Both of the following examples starts a VS Code server with the `myenv` `scode` environment.
+Both of the following examples start a VS Code server with the `myenv` `scode` environment.
 
 1. **Inline**: pass `--env <name>` every time
 
@@ -149,7 +149,7 @@ While environments and VS Code versions are decoupled, **extensions are typicall
 
 ---
 
-## 7  Troubleshooting
+## 6  Troubleshooting
 
 1. **Extensions missing after installation?**
 

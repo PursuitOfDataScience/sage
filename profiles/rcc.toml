@@ -188,6 +188,15 @@ synonyms = [
     ["partition", "queue", "qos"],
     ["scavenge", "preemptible", "preempt"],
     ["oom", "memory", "killed", "timeout"],
+    # Slurm, PBS and most readers write `walltime`; the User Guide writes "wall time",
+    # and since the 2026-11-21 refresh (upstream's typo pass rewrote the last four) it
+    # never writes the one word at all. The refusal gate treats a word the corpus has
+    # never seen as the topic it does not cover, so "what is the walltime limit on the
+    # gpu2 partition" scored 58 against its own answer and was refused anyway. Joined
+    # to `wall` rather than `time`: every indexed section that says "wall" means wall
+    # time (the scraped visualization-wall page is excluded), and "time" is on every
+    # page.
+    ["walltime", "wall"],
     # The same symptom-to-mechanism gap as the OOM group, but for the word a whole
     # *page* is filed under rather than a cause: a user writes "I get an error", "it
     # will not work", "I am having trouble", and the page that holds the answer is

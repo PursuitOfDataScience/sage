@@ -1,6 +1,6 @@
 # LAMMPS
 
-[LAMMPS](http://lammps.sandia.gov/) (Large-scale Atomic/Molecular Massively Parallel Simulator) is a classical molecular dynamics code with a focus on materials modeling.
+[LAMMPS](https://www.lammps.org/) (Large-scale Atomic/Molecular Massively Parallel Simulator) is a classical molecular dynamics code with a focus on materials modeling.
 
 Keywords: `materials science`, `physics`, `chemistry`, `molecular dynamics`
 
@@ -23,12 +23,14 @@ There are several LAMMPS modules on Midway2 and Midway3 that you can check via `
     lammps/20Sep2021-gpu       lammps/23Jun2022-gpu  lammps/29Oct2020      
     lammps/21Nov2023(default)  lammps/24Mar2022
     ```
-The `gpu` suffix indicates that this module supports GPU acceleration and should run on a GPU node.
-You can then show the dependency of individual modules, for example, on Midway3 if you do
+The `gpu` suffix indicates that the module supports GPU acceleration and should be run on a GPU node.
+You can then show the dependencies of individual modules. For example, on Midway3, if you run
+
 ```
 module show lammps/21Nov2023
 ```
 you will get
+
 ```
 -------------------------------------------------------------------
 /software/modulefiles/lammps/21Nov2023:
@@ -42,17 +44,19 @@ prepend-path    PATH /software/lammps-21Nov2023-el8-x86_64/bin
 ???+ note
     LAMMPS is under active development. You are encouraged to build the latest stable version from [source code](https://github.com/lammps/lammps) in your own space using the provided [compilers](../compilers.md).
 
-In this case you can see this module was compiled with `intelmpi/2021.5+intel-2022.0` and `mkl/2022.0`. After loading the module, you can run
+In this case, you can see this module was compiled with `intelmpi/2021.5+intel-2022.0`, `mkl/2022.0`, and `cuda/11.5`. After loading the module, you can run
+
 ```
 lmp -h
 ```
-to see the features that are supported by the executable `lmp`.
+to see the features supported by the executable `lmp`.
 
 There are several LAMMPS binaries in the folder `/software/lammps-21Nov2023-el8-x86_64/bin`. The README file therein explains the difference between the binaries and how to build LAMMPS from source.
 
 ## Example job scripts
 
-An example batch script to run LAMMPS is given below
+An example batch script to run LAMMPS is given below:
+
 ```
 #!/bin/bash
 #SBATCH --job-name=lmp-bench
@@ -75,7 +79,7 @@ n=$(( ntasks_per_node * numnodes ))
 mpirun -np $n lmp_cpu -in in.txt
 ```
 
-The following script illustrates how to run the LAMMPS binary built with the GPU package `lmp_gpu`.
+The following script illustrates how to run the LAMMPS binary built with the GPU package, `lmp_gpu`:
 
 ```
 #!/bin/bash
@@ -101,7 +105,7 @@ n=$(( ntasks_per_node * numnodes ))
 mpirun -np $n lmp_gpu -in in.txt -sf gpu -pk gpu 2
 ```
 
-The following script illustrates how to run the LAMMPS binary built with the KOKKOS package `lmp_kokkos_cuda` using 2 MPI processes on 2 CPU cores using 2 GPUs.
+The following script illustrates how to run the LAMMPS binary built with the KOKKOS package, `lmp_kokkos_cuda`, using 2 MPI processes on 2 CPU cores with 2 GPUs:
 
 ```
 #!/bin/bash
@@ -126,11 +130,12 @@ n=$(( ntasks_per_node * numnodes ))
 
 mpirun -np $n lmp_kokkos_cuda -in in.txt -k on g 2 -sf kk -pk kokkos neigh half newton on
 ```
-## Build LAMMPS from source
 
-Since LAMMPS is under active development, it might be beneficial for you to build LAMMPS from source to get the new features, improvements, and bugfixes. 
+## Build from source
 
-Below is an example to illustrate how you build LAMMPS from source using the Intel oneAPI toolchain with GPU support for A100 GPUs on Midway3/Beagle3.
+Since LAMMPS is under active development, it might be beneficial for you to build LAMMPS from source to get the latest features, improvements, and bug fixes. 
+
+Below is an example to illustrate how to build LAMMPS from source using the Intel oneAPI toolchain with GPU support for A100 GPUs on Midway3/Beagle3.
 
 ```
 module load oneapi/2023.1 mkl/2023.1 cmake/3.26
@@ -150,5 +155,11 @@ cmake -C ../cmake/presets/basic.cmake \
 make -j4
 ```
 
-Note the GPU architecture (more specifically, compute capability) is defined for the KOKKOS package `Kokkos_ARCH_AMPERE80=ON`. The GPU package is by default compiled to support a wide range of GPU architectures including `sm_80`.
+Note that the GPU architecture (more specifically, the compute capability) is defined for the KOKKOS package with `Kokkos_ARCH_AMPERE80=ON`. By default, the GPU package is compiled to support a wide range of GPU architectures, including `sm_80`.
 
+## Getting help
+
+- Official documentation: [LAMMPS documentation](https://docs.lammps.org/){:target='_blank'} and [LAMMPS forum](https://matsci.org/lammps){:target='_blank'}
+- Built-in help: `lmp -h`
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.

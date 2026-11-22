@@ -96,7 +96,8 @@ mpirun -np 8 ./ideal.exe
 mpirun -np 8 ./wrf.exe
 ```
 
-For **Midway2**, the module built-in help is self-contained and includes the full workflow and ready-to-run example commands — run:
+For **Midway2**, the module's built-in help is self-contained and includes the full workflow and ready-to-run example commands. Run:
+
 ```bash
 module help wrf/4.7.1
 module help wrf/4.1.5
@@ -201,8 +202,15 @@ grep "SUCCESS" rsl.error.0000
 
 ## Notes
 
-- **OMPI_MCA bypass**: RCC clusters require `OMPI_MCA_pml=ob1` and `OMPI_MCA_btl=sm,self` (single-node) or `sm,tcp,self` (multi-node) in all WRF SLURM scripts. This is a known OpenMPI/UCX memory-pinning limitation on these nodes.
+- **OMPI_MCA bypass**: RCC clusters require `OMPI_MCA_pml=ob1` and `OMPI_MCA_btl=sm,self` (single-node) or `sm,tcp,self` (multi-node) in all WRF Slurm scripts. This is a known OpenMPI/UCX memory-pinning limitation on these nodes.
 - **WPS table subdirectories**: `geogrid.exe` and `metgrid.exe` look for their table files in `./geogrid/GEOGRID.TBL` and `./metgrid/METGRID.TBL` respectively — not in the current directory directly.
 - **`ideal.exe` symlink trap**: Avoid using symlinks to `ideal.exe` across multiple run directories. If you recompile for a different case, all symlinked directories will silently pick up the wrong binary. Use `cp --remove-destination` instead.
 - **num_land_cat**: When using `WPS_GEOG_LOW_RES`, set `num_land_cat = 24` in `namelist.input` and avoid physics suites that expect 20 or 21 land categories (e.g., the CONUS physics suite).
 - **Lustre stat cache**: On `/scratch` (Lustre), add `sync && sleep 2` between `geogrid.exe` and `metgrid.exe` to avoid race conditions where metgrid cannot immediately see the `geo_em` file.
+
+## Getting help
+
+- Official documentation: [WRF Users page](https://www2.mmm.ucar.edu/wrf/users/){:target='_blank'} and [WRF forum](https://forum.mmm.ucar.edu/){:target='_blank'}
+- Built-in help: `module help wrf/4.7.1`
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.

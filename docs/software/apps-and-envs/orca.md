@@ -1,8 +1,8 @@
 # ORCA
 
-[ORCA](https://www.faccts.de/orca/) is a general-purpose quantum chemistry package that supports a wide variety of methods such as density functional theory, many-body perturbation and coupled cluster. ORCA is free of charge, but not open source.
+[ORCA](https://www.faccts.de/orca/) is a general-purpose quantum chemistry package that supports a wide variety of methods such as density functional theory, many-body perturbation theory, and coupled cluster. ORCA is free of charge for academic use, but not open source.
 
-Check out the ORCA manual for more information: https://www.faccts.de/docs/orca/6.0/manual/
+Check out the [ORCA manual](https://www.faccts.de/docs/orca/6.0/manual/) for more information.
 
 Keywords: `quantum chemistry`, `chemistry`
 
@@ -31,9 +31,10 @@ setenv          ORCA_DIR /software/orca-6.0.1-el8-x86_64/bin
 ```
 
 
-## Example job script
+## Example job scripts
 
-An example batch script to run ORCA for Midway3 is given as below
+An example batch script to run ORCA on Midway3 is given below:
+
 ```
 #!/bin/bash
 #SBATCH --job-name=orca-bench
@@ -53,8 +54,10 @@ cd $SLURM_SUBMIT_DIR
 $ORCA_DIR/orca input.txt > output.log
 ```
 
-Note that ORCA supports MPI parallelization with a compatible version of OpenMPI. For the given example, `orca/6.0.1` is compatible with OpenMPI 4.1.x. Here the binary `orca` will launch the 8 MPI processes as specified in the `%pal` section in the input script `input.txt`. Below is a simple input script that performs a geometry optimization calculation with the Hartree-Fock method with the DEF2-SVP basis set using 8 MPI procs.
+Note that ORCA supports MPI parallelization with a compatible version of OpenMPI. For the given example, `orca/6.0.1` is compatible with OpenMPI 4.1.x. Here, the binary `orca` will launch 8 MPI processes as specified in the `%pal` section of the input script `input.txt`. Below is a simple input script that performs a single-point Hartree-Fock calculation with the DEF2-SVP basis set using 8 MPI processes (add the `Opt` keyword for a geometry optimization).
+
 ```
+
 %pal
     nprocs 8
 end
@@ -68,3 +71,10 @@ H  -0.7920   0.0000  -0.4973
 H   0.7920   0.0000  -0.4973
 *
 ```
+
+## Getting help
+
+- Official documentation: [ORCA manual](https://www.faccts.de/docs/orca/6.0/manual/){:target='_blank'} and [ORCA forum](https://orcaforum.kofo.mpg.de/){:target='_blank'}
+- Built-in help: `module show orca/6.0.1`
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.

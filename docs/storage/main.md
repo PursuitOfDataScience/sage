@@ -1,6 +1,6 @@
 # Storage System Layout
 
-Midway2,  Midway3, and Beagle3 have a high-performance GPFS shared file system that houses private **home** directories, shared **project**, **project2**, and **beagle3** spaces, and high-performance **scratch** space. The shared and scratch directories of Midway2, Midway3, and Beagle3 are 'cross-mounted', meaning that they are accessible from system-specific login and compute nodes. However, `/home`, `/software`, and `/snapshots` are specific to each cluster and their respective login nodes.
+Midway2, Midway3, and Beagle3 have a high-performance GPFS shared file system that houses private **home** directories, shared **project**, **project2**, and **beagle3** spaces, and high-performance **scratch** space. The shared and scratch directories of Midway2, Midway3, and Beagle3 are 'cross-mounted', meaning that they are accessible from the login and compute nodes of each system. However, `/home`, `/software`, and `/snapshots` are specific to each cluster and their respective login nodes.
 
 <p align='center'>
 <img src='../../img/data_management/midway23_storage.jpeg'
@@ -9,11 +9,11 @@ alt='Diagram of the Midway2 and Midway3 computing ecosystems and their associate
 </p>
 
 !!! note "Folder Access"
-      You and you alone have access to your personal home directory (`/home/<CNetID>`), whereas everyone who is a member of your research group (`pi-<PI_CNetID>`) has access to your project folder (`/project/<PI CNetID>`).
+      You and you alone have access to your personal home directory (`/home/<CNetID>`), whereas everyone who is a member of your research group (`pi-<PI_CNetID>`) has access to your project folder (`/project/<PI_CNetID>`).
 
 ## Quotas
 
-The amount of data that can be stored in home directories, project directories, and shared scratch directories is controlled by quota. RCC enforces hard and soft limits on quotas. A soft quota can be exceeded for a short period of time, called a grace period.  The hard quota cannot be exceeded under any circumstances. 
+The amount of data that can be stored in home directories, project directories, and shared scratch directories is controlled by quotas. RCC enforces both soft and hard quota limits. A soft quota can be exceeded for a short period of time, called a grace period.  The hard quota cannot be exceeded under any circumstances. 
 
 
 === "Midway2, DaLI"
@@ -31,8 +31,8 @@ The amount of data that can be stored in home directories, project directories, 
       | Home    | `/home/$USER`            | 30 GB <br /> (or 300K files) | 35 GB <br /> (or 1M files) | Personal data  |
       | Project | `/project/<folder>`      | varies                  | varies                   | Shared data, environments  |
       | Scratch | `/scratch/midway3/$USER` | 100 GB                       | 2 TB                       | Temporary files            |
-      | Beagle 3 project | `/project/<folder>`      | varies                     | varies                   | Shared data, environments |
-      | Beagle 3 scratch | `/scratch/beagle3/$USER` | 400 GB  <br /> (or 5.1M files) | 1 TB <br /> (5.6M files) | Temporary files           |
+      | Beagle3 project | `/beagle3/<folder>`      | varies                     | varies                   | Shared data, environments |
+      | Beagle3 scratch | `/scratch/beagle3/$USER` | 400 GB  <br /> (or 5.1M files) | 1 TB <br /> (or 5.6M files) | Temporary files           |
 
 === "CDS"
       | Name    | Location | Soft Quota | Hard Quota | Suitable For |
@@ -111,7 +111,7 @@ pi-drpepper         blocks (group)       59.10T     60.00T     60.00T     none
 </details>
 
 !!! warning "Over quota?"
-      If you exceed your quota, it can lead to errors since numerous applications may become unable to function properly. See our [data management FAQ](./faq.md) for multiple strategies for getting back under quota.
+      Exceeding your quota can lead to errors, since many applications will be unable to function properly. See our [data management FAQ](./faq.md) for multiple strategies for getting back under quota.
 
 
 
@@ -119,11 +119,11 @@ pi-drpepper         blocks (group)       59.10T     60.00T     60.00T     none
 
 ### Home Space 
 
-Every user has Midway2 and Midway3 home directories `/home/$USER`. **Midway2 home directory** is accessible from Midway2 and DaLI login nodes, while **Midway3 home directory** from Midway3, Beagle3, and SSD login nodes. Home directories are generally used for storing files that do not need to be shared with others and are only accessible by their owner (mode `0700`).
+Every user has Midway2 and Midway3 home directories `/home/$USER`. The **Midway2 home directory** is accessible from the Midway2 and DaLI login nodes, while the **Midway3 home directory** is accessible from the Midway3, Beagle3, and MidwaySSD login nodes. Home directories are generally used for storing files that do not need to be shared with others and are only accessible by their owner (mode `0700`).
 
 ### Research Space
 
-New PIs are eligible to receive Midway3 startup storage for the duration of their appointment at UChicago. Every user who belongs to one or many `pi-<PI_CNetID>` groups may have access to the shared **Midway3 project directories** located at `/project/<PI_CNetID>` and/or (for old PI accounts) to the workspace **Midway2 project space** `/project2/<PI_CNetID>`. Members of a beagle3 group are additionally authorized to access **Beagle3 project space** at `/beagle3/<PI_CNetID>`. All these directories are accessible by all members of the PI's group and are generally used for storing, processing, and analyzing research data that needs to be shared by members of the group. The default group ownership is set to the PI group with read-write permissions for existing and newly created files and directories using a sticky bit (mode `2770`). Users may request access to multiple research spaces by submitting a [request](https://rcc.uchicago.edu/accounts-allocations/join-different-pi-account){:target="_blank"} to be approved by the PI.
+New PIs are eligible to receive Midway3 startup storage for the duration of their appointment at UChicago. Every user who belongs to one or more `pi-<PI_CNetID>` groups may have access to the shared **Midway3 project directories** located at `/project/<PI_CNetID>` and/or (for older PI accounts) the **Midway2 project space** `/project2/<PI_CNetID>`. Members of a beagle3 group are additionally authorized to access **Beagle3 project space** at `/beagle3/<PI_CNetID>`. All these directories are accessible by all members of the PI's group and are generally used for storing, processing, and analyzing research data that needs to be shared by members of the group. The default group ownership is set to the PI group with read-write permissions for existing and newly created files and directories using the setgid bit (mode `2770`). Users may request access to multiple research spaces by submitting a [request](https://rcc.uchicago.edu/accounts-allocations/join-different-pi-account){:target="_blank"} to be approved by the PI.
 
 ### Scratch Space
 
@@ -136,61 +136,63 @@ High-performance shared scratch spaces on Midway2 `/scratch/midway2/$USER`, Midw
 
 
 #### Local Scratch 
-There is also a scratch space that resides on the local solid-state drives of each node and can only be used for jobs that do not require distributed parallel I/O. The capacity of the local solid-state drives varies across the systems and may depend on the usage of the node if your job resource request does not give you exclusive access to a node. <br></br>
-It is recommended that users use the local scratch space if they have high throughput I/O of many small files ( size < 4 MB) for jobs that are not distributed across multiple nodes. To write files to local scratch, use environment variables `$TMPDIR` or `$SLURM_TMPDIR`, which are set to `/tmp/jobs/${SLURM_JOB_ID}` and add a line at the very end of your Slurm script to copy or move the output to the research space upon job completion. Otherwise, all temporary files will be purged once the job is completed or crashed.
+There is also a scratch space that resides on the local solid-state drives of each node and can only be used for jobs that do not require distributed parallel I/O. The capacity of the local solid-state drives varies across the systems and the space available to your job may depend on other jobs' usage if your resource request does not give you exclusive access to the node.
+
+We recommend using the local scratch space for jobs with high-throughput I/O of many small files (size < 4 MB) that are not distributed across multiple nodes. To write files to local scratch, use the environment variable `$TMPDIR` or `$SLURM_TMPDIR`, which is set to `/tmp/jobs/${SLURM_JOB_ID}`, and add a line at the very end of your Slurm script to copy or move the output to the research space upon job completion. Otherwise, all temporary files will be purged once the job completes or crashes.
+
 To check the size of the local scratch, submit an interactive job and execute the following command on the compute node:
 ```
 df -h $TMPDIR
 ```
 
 ## Cost-Effective Data Storage  
-In addition to a high-performance GPFS file system, RCC also offers **Cost-effective Data Storage (CDS)** through the [Cluster Partnership Program](https://rcc.uchicago.edu/support-and-services/cluster-partnership-program){:target='_blank'} for long-term data storage. CDS is only available from login nodes and is meant to be used as a storage for less frequently accessed data. Before performing any computation on the data stored on CDS, it first needs to be copied to a high-performance file system.
+In addition to a high-performance GPFS file system, RCC also offers **Cost-effective Data Storage (CDS)** through the [Cluster Partnership Program](https://rcc.uchicago.edu/support-and-services/cluster-partnership-program){:target='_blank'} for long-term data storage. CDS is only available from login nodes and is meant to be used as storage for less frequently accessed data. Before performing any computation on the data stored on CDS, it first needs to be copied to a high-performance file system.
 
-CDS includes multiple tiers (`/cds`, `/cds2`, `/cds3`) with the new data to be stored in `/cds3` cost-effective storage. Additionally, data can be moved from old tiers to the most recent tier using Globus. A user would need to provide the path on each endpoint, such as /cds or /cds2 on Midway2 and /cds3 on Midway3.  
+CDS includes multiple tiers (`/cds`, `/cds2`, `/cds3`); new data should be stored in `/cds3`. Data can be moved from older tiers to the most recent tier using Globus by providing the path on each endpoint, such as `/cds` or `/cds2` on Midway2 and `/cds3` on Midway3.  
 
 ## SHARED
-The University of Chicago has received funding from the National Science Foundation (NSF) under Award No 2346746, to develop SHARED, the Secure Hub for Access, Reliability, and Exchange of Data. This new storage platform will advance research through robust capabilities for data storage, accessibility, sharing and integration with national and global data federations. It will provide critical storage capacity for research and supporting data science curricula development and education. For more information please see [this reference](https://dl.acm.org/doi/10.1145/3708035.3736042).
+The University of Chicago has received funding from the National Science Foundation (NSF) under Award No. 2346746 to develop SHARED, the Secure Hub for Access, Reliability, and Exchange of Data. This new storage platform will advance research through robust capabilities for data storage, accessibility, sharing, and integration with national and global data federations. It will provide critical storage capacity for research and support data science curriculum development and education. For more information, please see [this reference](https://dl.acm.org/doi/10.1145/3708035.3736042).
 
-Designed as a cornerstone of UChicago's data lifecycle strategy, from collection and analysis to publication and archiving, SHARED will integrate with the University’s institutional repository, Knowledge@UChicago, and connect to national research networks like the Open Science Grid (OSG). The SHARED project and platform is led by the University of Chicago Library and Research Computing Center (RCC), with contributions from University IT Services, Data Science Institute, and Physical Sciences Division. The SHARED platform will be essential for enabling partner faculty to meet federal requirements for data management and sharing.
+Designed as a cornerstone of UChicago's data lifecycle strategy, from collection and analysis to publication and archiving, SHARED will integrate with the University’s institutional repository, Knowledge@UChicago, and connect to national research networks like the Open Science Grid (OSG). The SHARED project and platform are led by the University of Chicago Library and Research Computing Center (RCC), with contributions from University IT Services, Data Science Institute, and Physical Sciences Division. The SHARED platform will be essential for enabling partner faculty to meet federal requirements for data management and sharing.
 
 ### Allocations
 
-The majority of the storage available in SHARED is reserved and for the projects and research groups that are part of the grant. Each project has a directory under `/shared` and the group ownership of these directories are initially assigned to the main PIs of each project. Requests for changes of ownership, creation of new groups, or questions about permissions can be submitted to [shared@rcc.uchicago.edu](mailto:shared@rcc.uchicago.edu). 
+The majority of the storage available in SHARED is reserved for the projects and research groups that are part of the grant. Each project has a directory under `/shared`, and the group ownership of these directories is initially assigned to the main PIs of each project. Requests for changes of ownership, creation of new groups, or questions about permissions can be submitted to [shared@rcc.uchicago.edu](mailto:shared@rcc.uchicago.edu). 
 
-There are reservations of 50 TB will be reserved for educational, broader impact, and outreach activities, including open pedagogical data sets. In addition, an initial 50 TB will be reserved for open access data repositories for published research findings and the data that can be used to verify the published findings in accordance with FAIR principles. Allocation policies will be reviewed periodically by the SHARED executive committee.
+50 TB will be reserved for educational, broader impact, and outreach activities, including open pedagogical data sets. In addition, an initial 50 TB will be reserved for open access data repositories for published research findings and the data that can be used to verify the published findings in accordance with FAIR principles. Allocation policies will be reviewed periodically by the SHARED executive committee.
 
 ### Access
 
-There are different services and gateways for the members of the grant PIs to access the SHARED storage system, as listed below:
+Members of the grant PIs' groups can access the SHARED storage system through the following services and gateways:
 
-* Mount point in the Midway3 login nodes `/shared`
-* Mount point in the Midway2 and DaLI login nodes `/shared`
+* Mount point `/shared` on the Midway3 login nodes
+* Mount point `/shared` on the Midway2 and DaLI login nodes
 * [Globus](../data_transfer/globus/transfer-files.md) collection `UChicago RCC SHARED`
 * [SAMBA](../data_transfer/persistent_mapping/samba.md) share: connecting to the following server using the username `ADLOCAL\[cnetid]`
      * Windows: `\\shared-smb.rcc.uchicago.edu\shared` 
-     * MacOS: `smb://shared-smb.rcc.uchicago.edu/shared`
+     * macOS: `smb://shared-smb.rcc.uchicago.edu/shared`
 
-Project members can submit requests for additional gateway services and storage endpoints to the email [shared@rcc.uchicago.edu](mailto:shared@rcc.uchicago.edu). A member of the SHARED team will analyze the feasibility and contact the requestor for additional details.
+Project members can email requests for additional gateway services and storage endpoints to [shared@rcc.uchicago.edu](mailto:shared@rcc.uchicago.edu). A member of the SHARED team will analyze the feasibility and contact the requestor for additional details.
 
 Please note:
 
-* The `/shared` mount points in the Midway systems is available only in the login nodes and cannot be mounted in the compute nodes as the SHARED filesystem is built for resiliency, data durability and stability, and not optimized for highly parallel I/O workloads.
-* For security reasons the SAMBA share can only be accessed from the UChicago networks, i.e., campus network or cVPN.
+* The `/shared` mount points on the Midway systems are available only on the login nodes and cannot be mounted on the compute nodes, because the SHARED filesystem is built for resiliency, data durability, and stability, and is not optimized for highly parallel I/O workloads.
+* For security reasons, the SAMBA share can only be accessed from the UChicago networks, i.e., campus network or cVPN.
 
 Data can be transferred between `/shared` and other Midway filesystems using command line interface tools such as `cp`, `scp`, `rsync` and `rclone`.
 
 ### Backup
 
-There are daily and weekly snapshots of `/shared` taken automatically daily and weekly under the
-directory `/shared/.snap`. Each snapshot is timestamped and named such as:
+Daily and weekly snapshots of `/shared` are taken automatically and stored under the
+directory `/shared/.snap`. Each snapshot is timestamped and named like this:
 
 ```
 scheduled-2026-04-20-20_00_00_UTC
 ```
-S
+
 Users can find their data under the corresponding PI folders within each snapshot.
-The retention policy is to keep the last 7 daily snapshots, and the last 4 weekly snapshots.
-For further assistance, please send an email to [shared@rcc.uchicago.edu](mailto:shared@rcc.uchicago.edu) and [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target="_blank"}
+The retention policy is to keep the last 7 daily snapshots and the last 4 weekly snapshots.
+For further assistance, please send an email to [shared@rcc.uchicago.edu](mailto:shared@rcc.uchicago.edu) or [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target="_blank"}.
 
 
 ## Data Recovery and Backups
@@ -206,7 +208,8 @@ Automated snapshots for the GPFS directories (`home`, `project2`, `project`, `be
       | `/project2/<folder>`| 7 daily and 2 weekly | `/snapshots/project2/<SNAPSHOT>/project2/<folder>`|
       | `/dali/<folder>`    | 7 daily and 2 weekly | `/gpfs3/cap/.snapshots/<SNAPSHOT>`|
 
-      Note: In order to access DaLI snapshots, first you need to log into one of the DaLI compute nodes. 
+      Note: To access DaLI snapshots, you first need to log in to one of the DaLI compute nodes. 
+
 
 ===+ "Midway3, Beagle3"
       | Directory           | Snapshot kept        | Snapshot Path                                    |      

@@ -2,13 +2,13 @@
 
 Three seams, in the order a file passes through them:
 
-* **`profile.Source`** — which trees exist, what they are called, and what is in them.
-* **`readers`** — how a file in one of those trees becomes a document and its chunks.
-* **`urls`** — where that document is published, which is what a citation links to.
+* **`profile.Source`**: which trees exist, what they are called, and what is in them.
+* **`readers`**: how a file in one of those trees becomes a document and its chunks.
+* **`urls`**: where that document is published, which is what a citation links to.
 
 `build()` walks the trees and does none of that work itself. It used to: the walk
 branched on the literal source names "docs" and "web" to pick a chunker, to decide
-whether a file's own URL mattered, and to decide which exclusion rule applied — three
+whether a file's own URL mattered, and to decide which exclusion rule applied: three
 places a second corpus had to be threaded through, in a function whose job is to open
 files.
 """
@@ -101,8 +101,9 @@ def build(sources: tuple[Source, ...] | None = None) -> Corpus:
 
                 document, page_chunks = read(source, rel, raw)
                 if not page_chunks:
-                    # Surfaces upstream gaps: docs/data_transfer/cloud/rclone.md is
-                    # a 0-byte file in the User Guide, so nothing can cite it.
+                    # Surfaces upstream gaps: a 0-byte page in the User Guide (as
+                    # docs/data_transfer/cloud/rclone.md was until 2026-11-21) is a
+                    # document nothing can cite.
                     logger.warning("No indexable content in %s", document.id)
                 documents[document.id] = document
                 chunks.extend(page_chunks)

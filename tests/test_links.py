@@ -5,6 +5,9 @@ from sage.corpus import Chunk, Corpus, Document
 
 PROFILE = profile.active()
 DOCS_BASE_URL = PROFILE.source("docs").base_url
+# The separator `Chunk.label` writes between a page and its section, which answers
+# quote back. By codepoint, so the source itself carries no em-dash.
+DASH = chr(0x2014)
 
 
 def build() -> Corpus:
@@ -108,8 +111,8 @@ def test_external_and_anchor_targets_are_not_counted_as_invented():
 
 
 class TestImagesInAnAnswer:
-    """Eighteen indexed sections carry markdown images — the SDE3 connection
-    tutorial is nothing but screenshots — so a model quoting one echoes the syntax.
+    """Eighteen indexed sections carry markdown images (the SDE3 connection
+    tutorial is nothing but screenshots), so a model quoting one echoes the syntax.
 
     The link rules saw `[alt](images/avd_login.png)`, could not resolve an image path
     in a corpus of documents, and unlinked it: the reader got `!Screenshot showing AVD
@@ -139,7 +142,7 @@ class TestImagesInAnAnswer:
 
     def test_an_image_the_browser_can_fetch_is_left_alone(self):
         """Only the relative form is broken. The geocoding tutorial links four
-        absolute ones, and those render — turning them into a caption would take a
+        absolute ones, and those render: turning them into a caption would take a
         working figure away."""
         text = "![RCC-GIS geocoding](https://gis.rcc.uchicago.edu/x/summary.png)"
         assert links.fix_links(text, CORPUS) == text
@@ -153,7 +156,7 @@ class TestNestedBracketsInALabel:
     """`[Batch jobs [beta]](docs/…)` is a link a model writes.
 
     The label pattern could not match one, so the target was neither resolved nor
-    unlinked and shipped as a live relative href — which a browser resolves against
+    unlinked and shipped as a live relative href, which a browser resolves against
     the app's own host, giving the reader a 404 that looks exactly like a working
     citation. `unresolved()` could not see it either, so not even the log knew.
     """
@@ -186,7 +189,7 @@ def test_plain_prose_is_untouched():
 
 def test_every_link_in_a_real_answer_resolves(real_corpus):
     answer = (
-        "Submit with sbatch — see [Batch jobs](docs/slurm/sbatch.md) and "
+        f"Submit with sbatch {DASH} see [Batch jobs](docs/slurm/sbatch.md) and "
         "[Quotas](docs/storage/main.md#quotas)."
     )
     out = links.fix_links(answer, real_corpus)
@@ -197,7 +200,7 @@ def test_every_link_in_a_real_answer_resolves(real_corpus):
 class TestSourceFooter:
     """The answer said `Sources: A, B`; the app then drew a Sources strip saying the
     same two, three lines below. The first two cases here are the two that were
-    photographed — one list of bare titles, one of links."""
+    photographed: one list of bare titles, one of links."""
 
     @pytest.mark.parametrize(
         "footer",
@@ -276,7 +279,7 @@ class TestSourceFooter:
     def test_a_citation_that_is_the_answer_is_not_a_footer(self, answer, why):
         """The rule was "shorter than 120 characters", and under a `Citation:` label
         that ate the answer: the model printed the wording to copy into a paper and
-        the strip deleted it — from the transcript, and from the history sent
+        the strip deleted it: from the transcript, and from the history sent
         upstream, so the follow-up could not see it either."""
         assert links.strip_source_footer(answer) == answer, why
 
@@ -285,9 +288,9 @@ class TestSourceFooter:
         [
             # A full stop is how a model ends a line, and a title and a short
             # sentence look the same with one on the end. Gating on it alone kept
-            # 115 of the corpus's 572 headings as footers — a duplicate under every
+            # 115 of the corpus's 572 headings as footers: a duplicate under every
             # answer that cited a page whose name is one word.
-            "Sources: Storage System Layout — Quotas.",
+            f"Sources: Storage System Layout {DASH} Quotas.",
             "Sources: Storage.",
             "Sources: Midway3 partitions.",
             # A heading with a comma in it: split on commas first and the name the
@@ -300,8 +303,8 @@ class TestSourceFooter:
             {"id": f"docs/x{n}.md#s", "label": label,
              "url": f"https://docs.rcc.uchicago.edu/x{n}/#s", "source": "docs"}
             for n, label in enumerate((
-                "Storage System Layout — Quotas", "Storage", "Midway3 partitions",
-                "Running jobs — Service units, allocations, and accounts",
+                f"Storage System Layout {DASH} Quotas", "Storage", "Midway3 partitions",
+                f"Running jobs {DASH} Service units, allocations, and accounts",
             ))
         ]
         answer = "Quota on /project2 is 100 GB."
@@ -313,12 +316,12 @@ class TestSourceFooter:
         the duplication is provable and punctuation stops mattering."""
         sources = [{
             "id": "docs/storage/main.md#quotas",
-            "label": "Storage System Layout — Quotas",
+            "label": f"Storage System Layout {DASH} Quotas",
             "url": "https://docs.rcc.uchicago.edu/storage/main/#quotas",
             "source": "docs",
         }]
         answer = "Quota on /project2 is 100 GB."
-        text = f"{answer}\n\nSources: Storage System Layout — Quotas."
+        text = f"{answer}\n\nSources: Storage System Layout {DASH} Quotas."
         assert links.strip_source_footer(text, None, sources) == answer
 
     def test_a_heading_mid_answer_is_not_a_footer(self):
@@ -394,8 +397,8 @@ class TestUnlabelledSourceFooter:
         assert links.strip_source_footer(answer, real_corpus, []) == answer
 
     def test_shape_alone_does_not_cut_it(self, real_corpus):
-        """Called without the strip's contents — as the module's own tests above do
-        — an unlabelled list cannot be proven duplicate and stays."""
+        """Called without the strip's contents, as the module's own tests above do, an
+        unlabelled list cannot be proven duplicate and stays."""
         chunks, _ = self.two_chunks(real_corpus)
         answer = f"Answer.\n\n[a]({chunks[0].id}) [b]({chunks[1].id})"
         assert links.strip_source_footer(answer) == answer
@@ -406,7 +409,7 @@ class TestAFooterWithTheAnswerContinuingUnderneath:
 
     Measured on 98 live turns: two answers wrote a `**Citations:**` block and then one
     more sentence. One of them listed the same two sections the Sources strip printed
-    three lines below — the duplicate this module exists to prevent, in a position it
+    three lines below: the duplicate this module exists to prevent, in a position it
     could not see.
 
     Cutting inside an answer is more dangerous than cutting off its end, so the bar is
@@ -456,7 +459,7 @@ class TestAFooterWithTheAnswerContinuingUnderneath:
         assert "Citations" not in out
 
     def test_a_link_to_a_page_the_strip_does_not_show_keeps_the_block(self, real_corpus):
-        """No proof of duplication, no cut — the reader may be being sent somewhere new.
+        """No proof of duplication, no cut: the reader may be being sent somewhere new.
 
         A different *page*, not a different section of the same one: `_pages` compares at
         page granularity on purpose, because a chip linking `…/cli/#scp` already gives the
@@ -569,8 +572,8 @@ class TestInlineParentheticalCitations:
     """The shape none of the rules above can see: a parenthetical of bare section
     titles inside a sentence.
 
-    Reported from a real answer — "…used on a cluster (Allocations and Service Units
-    FAQ, Running jobs on RCC clusters)." — where the same two titles were printed in
+    Reported from a real answer, "…used on a cluster (Allocations and Service Units
+    FAQ, Running jobs on RCC clusters).", where the same two titles were printed in
     the Sources strip three lines below. It is not a trailing line, it holds no links,
     and it carries no label, so the labelled, bare-link and citation-sentence rules
     all pass over it.
@@ -578,7 +581,7 @@ class TestInlineParentheticalCitations:
 
     SOURCES = [
         {
-            "label": "Allocations and Service Units FAQ — How do I check how many "
+            "label": f"Allocations and Service Units FAQ {DASH} How do I check how many "
             "service units I have remaining on my allocation?",
             "url": "https://docs.rcc.uchicago.edu/facts/allocations-faq/#check",
         },
@@ -587,23 +590,23 @@ class TestInlineParentheticalCitations:
             "url": "https://docs.rcc.uchicago.edu/slurm/main/#running",
         },
         {
-            "label": "Batch jobs — Submitting a sbatch script",
+            "label": f"Batch jobs {DASH} Submitting a sbatch script",
             "url": "https://docs.rcc.uchicago.edu/slurm/sbatch/#submitting",
         },
         {
-            "label": "Partitions — Midway3 partitions",
+            "label": f"Partitions {DASH} Midway3 partitions",
             "url": "https://docs.rcc.uchicago.edu/slurm/partitions/#midway3",
         },
     ]
 
     def test_the_reported_answer_loses_only_its_citation(self):
         text = (
-            "For reference, service units are what your jobs consume — they measure "
+            f"For reference, service units are what your jobs consume {DASH} they measure "
             "the computing resources (CPUs/GPUs/time) used on a cluster (Allocations "
             "and Service Units FAQ, Running jobs on RCC clusters)."
         )
         assert links.strip_inline_citations(text, self.SOURCES) == (
-            "For reference, service units are what your jobs consume — they measure "
+            f"For reference, service units are what your jobs consume {DASH} they measure "
             "the computing resources (CPUs/GPUs/time) used on a cluster."
         )
 
@@ -691,7 +694,7 @@ class TestInlineMarkers:
     """
 
     SOURCES = [
-        {"id": "docs/slurm/sbatch.md#gpu-jobs", "label": "Batch jobs — GPU jobs",
+        {"id": "docs/slurm/sbatch.md#gpu-jobs", "label": f"Batch jobs {DASH} GPU jobs",
          "url": "https://docs.rcc.uchicago.edu/slurm/sbatch/#gpu-jobs",
          "source": "docs"},
         {"id": "web/faqs.txt#1", "label": "FAQs",
@@ -740,7 +743,7 @@ class TestInlineMarkers:
         assert out.count(":small[") == 1
 
     def test_the_prose_keeps_its_words(self):
-        """The label is unlinked, not deleted — the sentence still has to read."""
+        """The label is unlinked, not deleted: the sentence still has to read."""
         out = self.mark(
             "read [Batch jobs](https://docs.rcc.uchicago.edu/slurm/sbatch/#gpu-jobs) "
             "for the flags."
@@ -760,6 +763,19 @@ class TestInlineMarkers:
         assert self.mark(fenced) == fenced
         span = "Run `[x](https://docs.rcc.uchicago.edu/slurm/sbatch/#gpu-jobs)` now."
         assert self.mark(span) == span
+
+    def test_a_one_line_code_span_is_not_a_fence(self):
+        """On the reader's screen it is a span, so the sentence after it is prose.
+
+        Any line starting with three backticks used to toggle the fence, so the rest of
+        the answer was treated as code and no sentence after this one was marked.
+        """
+        out = self.mark(
+            "```squeue -u $USER```\n"
+            "Request one with [GPU jobs](https://docs.rcc.uchicago.edu/slurm/"
+            "sbatch/#gpu-jobs)."
+        )
+        assert out.count(":small[") == 1
 
     def test_a_sentence_that_never_ends_is_marked_at_the_end_of_its_line(self):
         out = self.mark(
@@ -790,7 +806,7 @@ class TestAttributingWhatTheModelDidNotLink:
     """Markers cannot depend on whether a free model felt like citing.
 
     Asked the same question twice, `nemotron-3.5-lightning` linked two sections on one
-    run and none on the next — which is how an answer came back with a Sources strip
+    run and none on the next, which is how an answer came back with a Sources strip
     and no markers at all. A paragraph the model left unlinked is attributed from what
     the turn actually read, and only where that cannot be wrong.
     """
@@ -800,7 +816,7 @@ class TestAttributingWhatTheModelDidNotLink:
 
     def one_source(self):
         return (
-            [{"id": self.SUBMITTING, "label": "Batch jobs — Submitting",
+            [{"id": self.SUBMITTING, "label": f"Batch jobs {DASH} Submitting",
               "url": "https://docs.rcc.uchicago.edu/slurm/sbatch/#submitting",
               "source": "docs"}],
             {self.SUBMITTING: "Submit the script with the sbatch command. Slurm "
@@ -889,7 +905,7 @@ class TestWhatTheAnswerLinksTo:
     """`cited_pages` is the inverse of `unresolved`: the pages a reader can reach.
 
     Needed because the Sources strip is built from `read_doc` calls alone, so "what did
-    this turn put in front of the reader" and "what did it read" are different questions —
+    this turn put in front of the reader" and "what did it read" are different questions,
     and the benchmark was answering the second while labelling it the first.
     """
 
@@ -931,7 +947,7 @@ class TestWhatTheAnswerLinksTo:
 class TestBareIndexReferences:
     """An identifier printed as prose instead of linked.
 
-    `search_docs` hands the model chunk ids — `web/faqs.txt#1` — and the prompt asks for
+    `search_docs` hands the model chunk ids (`web/faqs.txt#1`) and the prompt asks for
     them back inside `[Title](path)`. A model that writes one as text has shown the
     reader this app's internal filing system, and none of the older guards fire on it:
     the id RESOLVES, so `unresolved()` is quiet; it is not parenthesised and names no
@@ -984,6 +1000,11 @@ class TestBareIndexReferences:
         answer = "Do this:\n```bash\ncat docs/slurm/sbatch.md\n```\nThen submit."
         assert links.strip_bare_references(answer, self.corpus) == answer
 
+    def test_a_one_line_code_span_shelters_nothing_after_it(self):
+        answer = "```wc -l job.out```\nThe page web/faqs.txt#1 lists everyone."
+        out = links.strip_bare_references(answer, self.corpus)
+        assert out == "```wc -l job.out```\nThe page lists everyone."
+
     def test_a_path_the_corpus_does_not_have_survives(self):
         """Only resolvable references are ours to remove."""
         answer = "Your script is at /home/$USER/my_job.sbatch and the log at out.txt."
@@ -1006,7 +1027,7 @@ class TestThePromptsOwnPlaceholderAsALabel:
     The system prompt asks for citations "as [Section title](path)". A model that copies
     the template rather than filling it in publishes a fragment of the prompt to the
     reader, and drops the only thing a citation carries: which page it is. Seen in a live
-    answer — "The same table in the docs explains each field. Section title".
+    answer: "The same table in the docs explains each field. Section title".
     """
 
     def setup_method(self):
@@ -1039,7 +1060,7 @@ class TestThePromptsOwnPlaceholderAsALabel:
 class TestWhatTheStripperMustNotDamage:
     """Four things the first version of `strip_bare_references` broke, in real answers.
 
-    Found by replaying `report/transcripts.jsonl` — 303 stored answers — through the
+    Found by replaying `report/transcripts.jsonl` (303 stored answers) through the
     pipeline and counting `postprocess_damage`. It touched six of them and damaged four,
     which is the whole reason this class is longer than the one above it: the identifier
     coming out is the easy half, and the line still reading correctly afterwards is the
@@ -1054,7 +1075,7 @@ class TestWhatTheStripperMustNotDamage:
 
         `[docs/…](docs/…)` is a working link with a useless label. Stripping the label
         emptied the brackets and left the reader `(docs/slurm/sbatch.md#gpu-jobs)` bare
-        in the middle of a sentence — a link destroyed to hide a path that was still
+        in the middle of a sentence: a link destroyed to hide a path that was still
         there. Left alone instead; `fix_links` renders it.
         """
         answer = (
@@ -1067,7 +1088,7 @@ class TestWhatTheStripperMustNotDamage:
         """The same answer, and the reason `_tidy` is gone.
 
         Removing a citation ran `\\s+([,.;:!?])` over the whole line, which does not know
-        which comma the removal was near — so `Submitting a .sbatch script` became
+        which comma the removal was near, so `Submitting a .sbatch script` became
         `Submitting a.sbatch script`, renaming a section the reader was being sent to.
         """
         answer = (
@@ -1080,14 +1101,14 @@ class TestWhatTheStripperMustNotDamage:
     @pytest.mark.parametrize(
         ("answer", "expected"),
         [
-            # From "what are the storage quotas?" — 【】 was not in `_WRAPPED`, so the
+            # From "what are the storage quotas?": 【】 was not in `_WRAPPED`, so the
             # reader was shown `documentation 【】:`, which is worse than the identifier.
             (
                 "a quick overview based on the official documentation "
                 "【web/faqs.txt#1】:",
                 "a quick overview based on the official documentation:",
             ),
-            # From "did you actually look that up" — same, with braces.
+            # From "did you actually look that up": same, with braces.
             (
                 "by default [Why does my job fail]{web/faqs.txt#1}, and users adjust",
                 "by default [Why does my job fail], and users adjust",
@@ -1103,7 +1124,7 @@ class TestWhatTheStripperMustNotDamage:
         """From "how do I set up a Python environment".
 
         `[Python (docs/…/python.md)#Distributions]` is a citation the model got wrong.
-        Taking only the path out left `[Python #Distributions]` — the title kept, the
+        Taking only the path out left `[Python #Distributions]`: the title kept, the
         link never made, the fragment stranded. The group is the unit.
         """
         answer = (
@@ -1114,7 +1135,7 @@ class TestWhatTheStripperMustNotDamage:
         assert out == "The base module includes numpy, pandas, matplotlib."
 
     def test_leading_indentation_survives(self):
-        """From "did you actually look that up" — three spaces became one.
+        """From "did you actually look that up": three spaces became one.
 
         `[ \\t]{2,}` collapsed runs anywhere on a line it had edited, and in markdown a
         leading run is structure rather than spacing.
@@ -1125,7 +1146,7 @@ class TestWhatTheStripperMustNotDamage:
         assert "web/faqs.txt" not in out
 
     def test_a_label_with_words_of_its_own_keeps_its_link(self):
-        """From "who should I ask instead?" — the one label edit that is correct."""
+        """From "who should I ask instead?": the one label edit that is correct."""
         answer = "contact the Help Desk. [FAQs (web/faqs.txt#1)](web/faqs.txt#1)"
         out = links.strip_bare_references(answer, self.corpus)
         assert out == "contact the Help Desk. [FAQs](web/faqs.txt#1)"

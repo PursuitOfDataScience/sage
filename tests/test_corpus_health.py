@@ -184,10 +184,12 @@ class TestWhatTheCorpusCannotAnswer:
     def test_the_empty_documents_are_the_ones_on_record(self, measured):
         """Both directions, so the list cannot outlive the problem it records.
 
-        `docs/data_transfer/cloud/rclone.md` is 0 bytes upstream, so no rclone question
-        is answerable at all, and `web/takecourse.txt` is 188 bytes of boilerplate from
-        the scrape. A page that fills up comes off the record as surely as a new empty
-        one goes on it.
+        `docs/data_transfer/cloud/rclone.md` was 0 bytes upstream, so no rclone question
+        was answerable at all, and `web/takecourse.txt` was 188 bytes of boilerplate from
+        the scrape. Both are off the record now: the second filled up in the 2026-10-24
+        refresh and the 2026-11-21 one deleted the first, which left the list empty. A
+        page that fills up or goes comes off the record as surely as a new empty one goes
+        on it.
         """
         held(
             "empty_documents",

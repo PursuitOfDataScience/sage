@@ -2,6 +2,8 @@
 
 [Charliecloud](https://charliecloud.io/) is a lightweight container system developed by Los Alamos National Laboratory that provides **user-defined software stacks (UDSS)** for high-performance computing (HPC). Unlike Docker or Singularity, Charliecloud uses Linux user namespaces to run completely unprivileged containers with no setuid binaries or daemons required.
 
+Keywords: `containers`, `Docker`, `reproducibility`, `user-defined software stacks`
+
 ## Key Features
 
 - **Unprivileged execution** - No root or privileged operations needed
@@ -10,7 +12,7 @@
 - **Minimal overhead** - Fast startup with near bare-metal performance
 - **Flexible storage** - Supports directory-format and SquashFS images
 
-## Available Modules
+## Available modules
 
 Charliecloud is available on Midway3 via the Spack module system. First, load the Spack modules:
 
@@ -97,9 +99,9 @@ ch-run -b /path/to/input:/mnt/1 \
 !!! warning
     The bind mount destination must already exist inside the container image. Most images provide pre-created mount points at `/mnt/0` through `/mnt/9`. If you need a custom destination like `/data`, either use `--write-fake` (`-W`) to enable automatic directory creation, or add `RUN mkdir -p /data` to your Dockerfile when building custom images.
 
-## Example Job Script
+## Example job scripts
 
-Here is a complete SLURM job script example for running a containerized application on Midway3:
+Here is a complete Slurm job script for running a containerized application on Midway3:
 
 ```bash
 #!/bin/bash
@@ -205,7 +207,7 @@ module load openmpi
 srun ch-run --join myapp:latest -- /app/mpi_hello_world
 ```
 
-The `--join` flag is critical for MPI - it places all ranks in the same container instance to enable shared memory communication.
+The `--join` flag is critical for MPI: it places all ranks in the same container instance to enable shared memory communication.
 
 !!! warning
     MPI with containers requires careful configuration. See the [official Charliecloud best practices](https://charliecloud.io/latest/best_practices.html) for detailed guidance on MPI, PMI, and fabric selection.
@@ -253,7 +255,7 @@ To move the Charliecloud cache location to a scratch location, set the `CH_IMAGE
 export CH_IMAGE_STORAGE=$SCRATCH/$USER/charliecloud
 ```
 
-Add this to your `~/.bashrc` or SLURM job scripts for persistence. Alternatively, use the `mvln` command from the utilities module to symlink the default storage:
+Add this to your `~/.bashrc` or Slurm job scripts for persistence. Alternatively, use the `mvln` command from the utilities module to symlink the default storage:
 
 ```bash
 module load utilities
@@ -279,10 +281,10 @@ mvln /var/tmp/$USER.ch $SCRATCH/$USER
 | Slurm integration | Native | Native |
 | Complexity | Simpler | More features |
 
-## Further Resources
+## Getting help
 
-- [Official Charliecloud Documentation](https://charliecloud.io/latest/)
-- [Charliecloud Tutorial](https://charliecloud.io/latest/tutorial.html)
-- [Best Practices Guide](https://charliecloud.io/latest/best_practices.html)
-- [Charliecloud GitHub Repository](https://github.com/hpc/charliecloud)
-- [MPI Slurm Discussion](https://github.com/hpc/charliecloud/discussions/1077)
+- Official documentation: [Charliecloud documentation](https://charliecloud.io/latest/){:target='_blank'}, [tutorial](https://charliecloud.io/latest/tutorial.html){:target='_blank'}, [best practices guide](https://charliecloud.io/latest/best_practices.html){:target='_blank'}, [GitHub repository](https://github.com/hpc/charliecloud){:target='_blank'}, and [MPI with Slurm discussion](https://github.com/hpc/charliecloud/discussions/1077){:target='_blank'}
+- Built-in help: `ch-run --help` and `ch-image --help`
+- RCC support: [contact our Help Desk](https://rcc.uchicago.edu/support-and-services/consulting-and-technical-support){:target='_blank'}
+- AI assistants: an AI assistant such as Claude can help you interpret errors and adapt the job scripts on this page. See [Getting help with AI assistants](../index.md#getting-help-with-ai-assistants) for what to include in your question and what not to share.
+

@@ -58,7 +58,7 @@ class TestTheToollessPathIsToldTheSameThing:
     inserted its caveat under `if caveat and blocks`, so a query matching *nothing*
     returned an empty string, `grounded()` saw no context and passed the question to the
     model with the system prompt and nothing else. The model then answered from its own
-    memory, with no caveat and no sources — on the one path that has no second round in
+    memory, with no caveat and no sources: on the one path that has no second round in
     which to notice.
 
     `sbatchh` is the demonstration: one keystroke off a real command, zero results here.
@@ -167,7 +167,7 @@ def test_unknown_tool_name_is_reported(real_index):
 class TestArgumentsAreWhateverTheModelTyped:
     """`llm._parse` guarantees a dict and nothing about what is in it.
 
-    A weak model typing its query as a number — `{"query": 123}` — used to raise
+    A weak model typing its query as a number (`{"query": 123}`) used to raise
     AttributeError out of `.strip()`, which ended the turn with an error card blaming
     the network for a mistake the model made.
     """
@@ -200,7 +200,7 @@ def test_tool_schemas_are_well_formed(real_index):
 
 def test_the_schema_describes_this_deployments_corpus(real_index, profile):
     """The description is what tells a model when to reach for the tool, so it names
-    the corpus — and it gets the name from the profile, not from this repository."""
+    the corpus, and it gets the name from the profile, not from this repository."""
     search = next(
         schema for schema in tools.build(real_index).schemas
         if schema["function"]["name"] == tools.SEARCH_DOCS
@@ -244,32 +244,55 @@ def test_runner_works_on_an_empty_index():
 
 
 class TestAPageWithNothingInIt:
-    """`docs/data_transfer/cloud/rclone.md` is 0 bytes in the upstream snapshot.
+    """A page that is in the index and has nothing in it.
 
-    It produces no chunks, so no search result offers it — but it is exactly the path a
-    model would guess for an rclone question, and `read_doc` resolves documents by name.
-    It used to answer with a header and one blank line, which reads as a page that failed
-    to load and leaves the model's own memory as the best thing in its context.
+    `docs/data_transfer/cloud/rclone.md` was one: 0 bytes upstream, so it produced no
+    chunks and no search result offered it, but it was exactly the path a model would
+    guess for an rclone question, and `read_doc` resolves documents by name. It used to
+    answer with a header and one blank line, which reads as a page that failed to load
+    and leaves the model's own memory as the best thing in its context.
+
+    The 2026-11-21 refresh deleted that file and left no empty page in the corpus, so
+    the page is put back here, on top of the real index. Asking for the deleted path
+    instead would pass every assertion below for the wrong reason: a path that is not in
+    the index is an error too, and records no source either.
     """
 
-    def toolset(self, real_index):
-        return tools.build(real_index)
+    EMPTY = "docs/data_transfer/cloud/rclone.md"
 
-    def test_it_says_so_instead_of_returning_a_header_and_nothing(self, real_index):
-        runner = self.toolset(real_index).runner()
-        out = runner.run("read_doc", {"path": "docs/data_transfer/cloud/rclone.md"})
+    @pytest.fixture(scope="class")
+    def index(self, real_corpus):
+        from sage.corpus import Corpus, Document
+
+        empty = Document(
+            source="docs",
+            path="data_transfer/cloud/rclone.md",
+            title="Rclone",
+            url="https://docs.rcc.uchicago.edu/data_transfer/cloud/rclone/",
+            text="",
+        )
+        assert empty.id == self.EMPTY
+        corpus = Corpus(
+            chunks=real_corpus.chunks,
+            documents={**real_corpus.documents, empty.id: empty},
+            sources=real_corpus.sources,
+        )
+        return retrieval.build(corpus)
+
+    def test_it_says_so_instead_of_returning_a_header_and_nothing(self, index):
+        out = runner(index).run("read_doc", {"path": self.EMPTY})
         assert out.startswith("Error:")
         assert "no content" in out
         assert "search_docs" in out
 
-    def test_nothing_is_recorded_as_a_source(self, real_index):
+    def test_nothing_is_recorded_as_a_source(self, index):
         """Nothing was read, so the Sources strip must not offer the reader a blank page."""
-        runner = self.toolset(real_index).runner()
-        runner.run("read_doc", {"path": "docs/data_transfer/cloud/rclone.md"})
-        assert runner.sources == []
+        tool = runner(index)
+        tool.run("read_doc", {"path": self.EMPTY})
+        assert tool.sources == []
 
-    def test_a_page_with_content_still_reads(self, real_index):
-        runner = self.toolset(real_index).runner()
-        out = runner.run("read_doc", {"path": "docs/slurm/sbatch.md"})
+    def test_a_page_with_content_still_reads(self, index):
+        tool = runner(index)
+        out = tool.run("read_doc", {"path": "docs/slurm/sbatch.md"})
         assert out.startswith("=== ")
-        assert runner.sources
+        assert tool.sources

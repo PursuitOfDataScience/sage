@@ -7,12 +7,12 @@ edits later, `EVAL.md` said "77 answerable questions" over a set of 78, a ratche
 said "2 of 77", and `CLAUDE.md`'s test total had rotted three times.
 
 So the headline figures are pinned here. Deliberately only the ones that move when the
-*datasets or the gate* move — set sizes and the gate's three rates. A test count changes on
+*datasets or the gate* move: set sizes and the gate's three rates. A test count changes on
 every commit that adds a test, so gating one would fail on every legitimate addition and
 teach people to edit the number rather than read the failure; that total is no longer
 written down anywhere.
 
-A failure here means a document and the code disagree. Fix the document — or, if the code
+A failure here means a document and the code disagree. Fix the document, or if the code
 moved on purpose, fix both and say so in the commit.
 """
 
@@ -89,7 +89,7 @@ class TestTheSelfDisclosureSetSizes:
     """Both halves of `meta.toml`, because the second one is the point.
 
     The probe count and the counterpart count are stated in one sentence of `EVAL.md` and
-    nowhere else — the prose around it says "same probes" rather than repeating the
+    nowhere else: the prose around it says "same probes" rather than repeating the
     number, which is the same discipline this file exists to enforce.
     """
 
@@ -102,7 +102,7 @@ class TestTheSelfDisclosureSetSizes:
         )
 
     def test_the_answerable_counterpart_count_is_current(self, prose):
-        stated = re.search(r"honest — (\d+) ordinary questions", prose)
+        stated = re.search(r"honest, (\d+) ordinary questions", prose)
         assert stated, "EVAL.md no longer states the counterpart count"
         live = len(evals.meta(evals.ANSWERABLE))
         assert int(stated.group(1)) == live, (
@@ -147,7 +147,7 @@ class TestTheHeadlineRates:
 class TestTheRatchetsQuoteWhatTheyMeasure:
     """A ratchet's comment says what it measured. That comment is a number too.
 
-    `MAXIMUM_OVER_REFUSAL = 0.04  # measured 0.026 (2 of 78)` — the denominator drifted to
+    `MAXIMUM_OVER_REFUSAL = 0.04  # measured 0.026 (2 of 78)`: the denominator drifted to
     77 when a case was added, which is exactly how the retrieval eval's docstring came to
     claim a figure that had never been true of the code beside it.
     """
@@ -180,14 +180,14 @@ class TestTheStatusArgumentClipFitsARealLabel:
 
     The progress block's read step shows a section's own title rather than the corpus
     path it was given. This corpus's headings are frequently whole questions, so a label
-    runs long — and the clip was 96, which put an ellipsis two words from the end of a
+    runs long, and the clip was 96, which put an ellipsis two words from the end of a
     real one. That was the same complaint the CSS ellipsis had already produced once
     ("why can't it show the complete cot?"), reappearing in Python after being fixed in
     the stylesheet.
 
     Pinned here rather than in the harness because `tools/render_check.py` builds its
     worst case FROM this constant, so it cannot tell you whether the constant is big
-    enough — only that the layout survives whatever it is. This is the half that moves
+    enough: only that the layout survives whatever it is. This is the half that moves
     when the documents change.
     """
 
@@ -207,7 +207,7 @@ class TestTheRenderCountIsNotHandMaintained:
     """The size of the layout run, held against the run itself.
 
     This is the number that went stale in two documents at once: `CLAUDE.md` said 684
-    and `EVAL.md` said 660, and nothing in the repository could say which was right —
+    and `EVAL.md` said 660, and nothing in the repository could say which was right:
     the figure lived only in the shape of a loop inside `main()`. It is 684, and a
     scenario or a viewport added to the harness moves it, which is exactly the kind of
     edit that forgets a document.

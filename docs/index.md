@@ -11,7 +11,8 @@ Welcome to the Research Computing Center's (RCC) clusters user guide! Here, you'
 Explore the different types of RCC accounts and discover what comes with your RCC account to make the most of our services. 
 
 [**Access:**](connection/main.md)   
-Find out how to connect to HPC systems, to have the full control over your data and workflows
+Find out how to connect to HPC systems and take full control of your data and workflows.
+
 
 [**Storage:**](storage/main.md)      
 Learn how to store and access files on RCC ecosystems, including transferring files from your local computer to RCC systems for seamless integration.

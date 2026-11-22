@@ -1,7 +1,7 @@
 """Turn source documents into clean text a model can read.
 
 The corpus is written for mkdocs-material, so it is full of syntax that means
-nothing outside that renderer. Left in place it actively degrades answers — the
+nothing outside that renderer. Left in place it actively degrades answers: the
 worst offender being content tabs, which collapse cluster-specific command
 variants into one undifferentiated blob:
 
@@ -23,7 +23,7 @@ import re
 # kramdown attribute lists: {:target='_blank'}, {: class="responsive-img"}
 _ATTR_LIST = re.compile(r"\{:[^}]*\}")
 
-# Real HTML tags only — deliberately not `<[^>]+>`, which eats prose like "a < b".
+# Real HTML tags only: deliberately not `<[^>]+>`, which eats prose like "a < b".
 _HTML_TAG = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^<>]*?)?/?>")
 _IMG_TAG = re.compile(r"<img\b[^>]*?>", re.IGNORECASE)
 _ALT_ATTR = re.compile(r"""\balt\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.IGNORECASE)
@@ -36,14 +36,55 @@ _ADMONITION = re.compile(r"^(?P<indent>[ \t]*)(?:!!!|\?\?\?)\+?[ \t]*(?P<rest>.*
 # heading underline (`=====`) is not mistaken for a tab.
 _CONTENT_TAB = re.compile(r"^(?P<indent>[ \t]*)===\+?[ \t]+(?P<label>\S.*)$")
 
-_FENCE = re.compile(r"^[ \t]*(?P<ticks>`{3,}|~{3,})")
+_FENCE = re.compile(r"^[ \t]*(?P<ticks>`{3,}|~{3,})(?P<info>.*)$")
 
 _SCRAPE_RULE = re.compile(r"^=+$")
 
 
-def _is_fence(line: str) -> str | None:
+def opens_fence(line: str) -> str | None:
+    """The run of backticks or tildes `line` opens a code fence with, or None.
+
+    A backtick fence's info string may not contain a backtick (CommonMark 4.5, and
+    Python-Markdown's fenced_code agrees), so a whole command written between triple
+    backticks on one line is a code span, not an opener. The User Guide writes one on
+    its CryoSPARC page: ```` ```E STORAGE [initandlisten] WiredTiger error ...``` ````.
+    Read as an opener it flipped every fence after it, so the code blocks below were
+    read as prose and the prose as code, down to the end of the file: `## Getting help`
+    was never cut as a heading and its `{:target='_blank'}` markers reached the index.
+    The 2026-11-21 refresh is where that surfaced, when upstream gave every software
+    page a Getting help section, but the page had been misread since that line was
+    written.
+
+    The same rule decides fences in an answer, because the reader's markdown renderer
+    applies it too: a model's one-line ```` ```squeue -u $USER``` ```` is a code span
+    on the screen, and treating it as an opener left the rest of the answer untouched
+    by the citation markers and the leaked-id strip.
+    """
     match = _FENCE.match(line)
-    return match.group("ticks")[0] if match else None
+    if not match:
+        return None
+    ticks = match.group("ticks")
+    if ticks[0] == "`" and "`" in match.group("info"):
+        return None
+    return ticks
+
+
+def closes_fence(line: str, opener: str) -> bool:
+    """Does `line` close the fence `opener` began?
+
+    Same character, at least as many of them, and nothing after them but whitespace.
+    So ```` ```bash ```` inside a block is a line of that block, as it is on the
+    published page, rather than the end of it.
+    """
+    match = _FENCE.match(line)
+    if not match:
+        return False
+    ticks = match.group("ticks")
+    return (
+        ticks[0] == opener[0]
+        and len(ticks) >= len(opener)
+        and not match.group("info").strip()
+    )
 
 
 _TYPED_TITLE = re.compile(r"""^[A-Za-z]+\s+(["'])(?P<title>.*)\1\s*$""")
@@ -127,12 +168,12 @@ def normalize_markdown(text: str) -> str:
 
         if fence:
             out.append(line)
-            if _is_fence(line) == fence:
+            if closes_fence(line, fence):
                 fence = None
             idx += 1
             continue
 
-        opened = _is_fence(line)
+        opened = opens_fence(line)
         if opened:
             fence = opened
             out.append(line)
@@ -204,7 +245,7 @@ def parse_scraped(text: str) -> tuple[str, str, str]:
             # Only a web address, because this string becomes the `href` of every
             # citation to the page. Whatever followed `URL:` was taken verbatim, so a
             # scrape that wrote a relative path, or nothing useful, produced citations
-            # pointing somewhere that is not a page — and `javascript:` would have gone
+            # pointing somewhere that is not a page, and `javascript:` would have gone
             # into a markdown link in an answer. Anything else is treated as absent,
             # which falls back to the source's `base_url`: a link to the site root is a
             # worse citation than a deep one and a better one than a broken href.
@@ -236,8 +277,8 @@ _ESCAPE = re.compile(r"\\([!\"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~])")
 # to markers whose only job is that announcement, because the cost of a false positive is a
 # good answer replaced by an error card.
 #
-# Measured over 554 recorded answers: one match. That one was 34,645 characters — eight
-# times the next-longest answer in the set — of a model reasoning about its own
+# Measured over 554 recorded answers: one match. That one was 34,645 characters (eight
+# times the next-longest answer in the set) of a model reasoning about its own
 # instructions, quoting them line by line, running into the token ceiling mid-sentence
 # without ever answering, and shipping under a Sources strip of six real sections. No
 # recorded answer contains a `<think>` tag, so the tag form is here for the shape rather
@@ -246,7 +287,7 @@ _ESCAPE = re.compile(r"\\([!\"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~])")
 #
 # The second group was added after one arrived from the live free router: 24,326
 # characters beginning "We need to answer: …", `finish_reason: length`, no answer
-# anywhere in it — the same shape `evals.checks.reasoning_shape` was written for (one
+# anywhere in it: the same shape `evals.checks.reasoning_shape` was written for (one
 # turn in 554, 34,645 characters of a model quoting its own instructions) under a
 # phrasing the first group does not match. What these four have in common is a model
 # addressing ITSELF, or addressing the reader in the third person as "the user", and
@@ -272,14 +313,14 @@ def opens_with_deliberation(text: str) -> bool:
     """Is this text a model thinking out loud rather than answering?
 
     Used twice and defined once: `ui.turn` will not ship one to a reader, and
-    `evals.checks` counts it — two copies of this pattern would drift the day one is
+    `evals.checks` counts it: two copies of this pattern would drift the day one is
     widened.
     """
     return bool(_DELIBERATION.match(text or ""))
 
 
 # A model handed no tools that writes the call out as prose anyway. Every marker here is
-# an envelope a provider strips when it parses a real tool call — so text still carrying
+# an envelope a provider strips when it parses a real tool call, so text still carrying
 # one is text the provider did *not* read as a call, which is exactly the case where it
 # reaches a reader as the answer.
 #
@@ -287,8 +328,8 @@ def opens_with_deliberation(text: str) -> bool:
 # *mentions* a function, or fences a `bash` block, must not be mistaken for one that is
 # nothing but a call. Nothing legitimate opens with these.
 #
-# Observed, not guessed. Withdrawing the tools for the last request of a turn — see
-# `ui.turn` — took one free model from the round-limit sentence to a full cited answer and
+# Observed, not guessed. Withdrawing the tools for the last request of a turn (see
+# `ui.turn`) took one free model from the round-limit sentence to a full cited answer and
 # the other to this, verbatim and complete:
 #
 #     <tool_call>
@@ -318,7 +359,7 @@ def is_written_out_tool_call(text: str) -> bool:
     Sibling of `opens_with_deliberation`, and it goes the same two places: `ui.turn`
     raises rather than shipping one, and `evals.checks` counts it. Both outcomes are the
     model saying what it was about to do instead of doing it, so both take the route to
-    the error card, which offers Try again and another model — recoverable, in a way that
+    the error card, which offers Try again and another model: recoverable, in a way that
     a screenful of angle brackets presented as an answer is not.
     """
     return bool(_WRITTEN_OUT_CALL.match(text or ""))
@@ -329,7 +370,7 @@ def is_written_out_tool_call(text: str) -> bool:
 # Third sibling of the two above, and the only one that is not the model misbehaving: it
 # is the wrong model entirely. A free-models router picks per request from whatever the
 # provider is serving, and one of the names in that pool is a content-safety
-# CLASSIFIER — `nvidia/nemotron-3.5-content-safety:free`, whose whole output is a verdict
+# CLASSIFIER: `nvidia/nemotron-3.5-content-safety:free`, whose whole output is a verdict
 # on the text it was given. Asked "How do I submit a batch job with sbatch?" it answers,
 # in full:
 #
@@ -343,16 +384,16 @@ def is_written_out_tool_call(text: str) -> bool:
 # exposure: 18 of the 19 free models list `tools` in `supported_parameters` and the
 # classifier is the one that does not, so a request carrying a tool schema structurally
 # cannot be routed to it (asked directly it answers `404 No endpoints found that support
-# tool use`). What is left is the requests this app deliberately sends WITHOUT tools —
-# the last round of a turn, and `grounded()` — which is exactly where a verdict would be
+# tool use`). What is left is the requests this app deliberately sends WITHOUT tools
+# (the last round of a turn, and `grounded()`), which is exactly where a verdict would be
 # shipped to a reader as the answer. Neither the router's `plugins.excluded_models` nor
 # `provider.ignore` can exclude it; both were tried.
 #
 # Anchored like the others. An answer that discusses safety in prose is not this: this is
 # a labelled verdict at position zero, or the bare word and nothing else. Read over every
-# recorded answer this repository holds before being trusted — 1,324 texts across the
+# recorded answer this repository holds before being trusted (1,324 texts across the
 # five `report/transcripts*.jsonl` sets, including the ones that discuss whether storing
-# data somewhere is safe — and it matches none of them. A check with false positives is a
+# data somewhere is safe) and it matches none of them. A check with false positives is a
 # check somebody switches off.
 _MODERATION_VERDICT = re.compile(
     r"(?i)^\s*(?:[\{\[]?\s*\"?"
@@ -365,8 +406,8 @@ _MODERATION_VERDICT = re.compile(
 def is_moderation_verdict(text: str) -> bool:
     """Is this a classifier's ruling on the question rather than an answer to it?
 
-    Goes the same two places as its siblings — `ui.turn` raises `empty` rather than
-    shipping it, `evals.checks` counts it — because the reader's recovery is the same
+    Goes the same two places as its siblings (`ui.turn` raises `empty` rather than
+    shipping it, `evals.checks` counts it) because the reader's recovery is the same
     one: the error card, and a turn that can be asked again. A router that reached the
     classifier once will route somewhere else on the next request, so "again" is a real
     fix here rather than a hope.
@@ -377,7 +418,7 @@ def is_moderation_verdict(text: str) -> bool:
 # An explicit id, written by the attr_list extension: `## Using renv {#using-the-renv}`.
 #
 # mkdocs publishes that id VERBATIM and derives nothing, so a slug computed from the
-# heading text is simply a different anchor — the reader lands at the top of the page and
+# heading text is simply a different anchor: the reader lands at the top of the page and
 # the link looks like it worked. Upstream added one to `software/apps-and-envs/r.md`
 # between this snapshot and 2026-09-04, which `tools/anchor_check.py` caught as the
 # published `#using-the-renv` against our derived
@@ -393,14 +434,14 @@ def plain_heading(text: str) -> str:
     r"""Heading text as a reader sees it: links unwrapped, emphasis dropped.
 
     Backticks and asterisks are markdown. An underscore in this corpus is almost
-    never emphasis — it is inside an identifier, and deleting it turned
+    never emphasis: it is inside an identifier, and deleting it turned
     `EVP_KDF_ctrl` into `EVPKDFctrl` and `<job_id>` into `<jobid>` in the citation
     the reader sees, on precisely the FAQ headings people find by pasting an error
     message.
 
     A backslash escape is markdown too, and this used to keep it. `## 1\. Formatting
     Data` escapes the period so mkdocs does not read the line as an ordered list; the
-    page shows `1.` and the citation strip showed `1\.` — on every heading of the
+    page shows `1.` and the citation strip showed `1\.`, on every heading of the
     geocoding tutorial, which numbers all four. `slugify` is built on this function and
     is unaffected: it strips the backslash anyway as punctuation.
     """
@@ -416,11 +457,11 @@ def plain_heading(text: str) -> str:
 def slugify(text: str) -> str:
     """Heading anchor matching mkdocs-material, so citations can deep-link.
 
-    mkdocs slugifies *rendered* text, so `[GM4](https://gm4...)` becomes `gm4` —
+    mkdocs slugifies *rendered* text, so `[GM4](https://gm4...)` becomes `gm4`:
     unwrapping the link first is what keeps generated anchors valid.
 
     Underscores survive as themselves. mkdocs' slugify replaces whitespace and its
-    separator, and `_` is neither — it is a `\\w` character, so the published id for
+    separator, and `_` is neither: it is a `\\w` character, so the published id for
     `EVP_KDF_ctrl` is `evp_kdf_ctrl`. Mapping it to `-` here is the same lost anchor
     as deleting it, one character further on.
     """
