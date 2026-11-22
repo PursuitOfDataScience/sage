@@ -414,25 +414,35 @@ hint = "Vertex needs no API key: set SAGE_VERTEX=1 and grant the runtime service
 # does not reach, measured as `Your prepayment credits are depleted` from a key minted
 # in a project with billing on and $300 unspent.
 #
-# Measured on the `global` endpoint, which is not optional: `us-central1` answers for
-# gemini-2.5-flash and returns `Publisher model ... not found` for 3.5, 3.6 and 3.8.
+# Measured on the `global` endpoint. `us-central1` returned `Publisher model ... not
+# found` for 3.5, 3.6 and 3.8 when this list was first measured, and serves all three
+# now (2026-11-21), but a regional endpoint bills 10% more than `global` for the same
+# tokens, so the endpoint stays.
 #   google/gemini-3.5-flash   OK   <- first since 3.6 got a retirement date. See below
 #   google/gemini-3.8-flash   OK   <- was first here once, and is last
 #
-# 3.6 LED THIS LIST UNTIL GOOGLE DATED ITS RETIREMENT. Vertex stops serving it on
-# 2026-11-19, and every request after that is a 404; gemini-3.7-flash, never listed
-# here, follows on 2027-01-28. The notice (received 2026-10-05) names 3.8 and 3.5 as
-# the targets, and Vertex's lifecycle table is what tells them apart: 3.5-flash is in
-# the class kept for at least 12 months after release (to 2027-05-19 or later), while
-# 3.6, 3.7 and 3.8 are short-term models, retired on as little as 45 days of notice
-# once a successor ships. A short-term id at the top of this list is a default Google
-# moves on its own schedule, so read the table before putting one there:
+# 3.6 LED THIS LIST UNTIL GOOGLE DATED ITS RETIREMENT. The first notice (received
+# 2026-10-05) set 2026-11-19 and named 3.8 and 3.5 as the targets. The second
+# (2026-11-17) split that date: a project not using 3.6 by then lost it on 2026-11-19,
+# one that was keeps it to 2027-01-28, when gemini-3.7-flash goes too, and the target
+# for both is now gemini-4-hydrogen. This project kept it (a request on 2026-11-21 was
+# a 200), which changes nothing here: 3.6 has not been in this list since 2026-10-05,
+# and Cloud Run's telemetry has every model call since 2026-10-06 on 3.5.
+#
+# Vertex's lifecycle table decides the order, and it has moved under this list once
+# already. Read 2026-10-05, 3.5-flash was the only one of these in the class kept for
+# at least 12 months after release, and 3.6, 3.7 and 3.8 were short-term models,
+# retired on as little as 45 days of notice once a successor ships. By 2026-11-12 the
+# table had moved 3.8-flash into the 12-month class as well (to 2027-09-02 or later;
+# 3.5 is to 2027-05-19 or later), so both ids here are now the long-lived kind. A
+# short-term id at the top of this list is a default Google moves on its own schedule,
+# so read the table before putting one there:
 # https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
 #
 # GOOGLE'S 2026-10-10 NOTICE IS NOT ABOUT THIS LIST. It deprecates gemini-3.5-flash on
 # the Gemini API and AI Studio, routes every request for it to gemini-3.6-flash, and
 # says to "update your code to call gemini-3.6-flash directly". Done here, that puts
-# first the id this endpoint stops serving on 2026-11-19. Checked the day it arrived:
+# first an id this endpoint is retiring. Checked the day it arrived:
 # Vertex answered a request for 3.5-flash with `modelVersion: gemini-3.5-flash`, and the
 # table above still keeps it to 2027-05-19 or later. The `google` entry below is the
 # surface the notice covers, and it does not list 3.5-flash.
@@ -471,11 +481,29 @@ hint = "Vertex needs no API key: set SAGE_VERTEX=1 and grant the runtime service
 # and made to wait (31.6s and 17.6s on 3.5-flash for the identical 18-token reply it
 # served in 0.9s twenty minutes later). A median served request is ~1.0s.
 #
-# So this order is by lifecycle and measured latency, not by version. Revisit it when
-# Google dates 3.8's retirement or a newer flash id joins the 12-month class, and
-# measure the way the 2026-10-05 table was: paired, interleaved, dozens of pairs, never
-# one request. deploy/cloudrun.sh starts sessions on the first id here, and
-# tests/test_profile.py fails if the two disagree.
+# GEMINI 4 HYDROGEN IS NOT HERE, although the 2026-11-17 notice names it as the target.
+# Nothing here calls 3.6, so there is nothing to move off it, and Hydrogen would be the
+# only short-term id in this list: released 2026-11-12, no retirement date. It does
+# work. Through the app's own loop it answered all four answerable questions of a six
+# question smoke set citing the right page and declined both it should, as 3.5 did on
+# the same six. And measured 2026-11-21 the way the 2026-10-05 table was (first model
+# call of a turn, 40 pairs after 2 discarded, interleaved):
+#                              served   median     p90   over 10s
+#   google/gemini-3.5-flash    40/40     1.14s    1.40s     0
+#   google/gemini-4-hydrogen   40/40     1.27s    1.77s     1
+# Hydrogen took longer in 27 of the 40 pairs: median ratio 1.12, 95% CI [1.01, 1.22],
+# Wilcoxon signed-rank p = 0.0023. Its worst pair was 16.7x (16.4s against 1.0s) and
+# its best 0.68x. Price is not the reason: on `global` it bills $1.50 in and $7.50 out
+# per million tokens, against 3.5's $1.50 and $9.00.
+#
+# So this order is by lifecycle and measured latency, not by version, and with both ids
+# now in the 12-month class it is the latency that puts 3.5 first. Revisit it when
+# Google dates the retirement of either, or when a newer flash-tier id joins the
+# 12-month class (Hydrogen, which Google names as the replacement for 3.6 and 3.7, is
+# the one to watch), and measure the way the 2026-10-05 table was: paired,
+# interleaved, dozens of pairs, never one request.
+# deploy/cloudrun.sh starts sessions on the first id here, and tests/test_profile.py
+# fails if the two disagree.
 #
 # WHAT TO KNOW BEFORE LEAVING THIS FIRST. Vertex has no free tier; every token bills,
 # and on a pay-as-you-go account a spent credit produces NO error: it produces an
@@ -578,9 +606,10 @@ base_url_env = "GEMINI_BASE_URL"
 # finding and the paid form of the same cause: there the wait is a queue rather than a
 # refusal, which is worse, because nothing in the app can see it.
 #
-# 3.6 STAYS HERE although the Vertex entry dropped it. Google's notice retiring it on
-# 2026-11-19 covers Vertex only, and this API's deprecations page lists
-# gemini-3.6-flash with no shutdown date (checked 2026-10-05, and again 2026-10-10, at
+# 3.6 STAYS HERE although the Vertex entry dropped it. Google's notices retiring it
+# (2026-11-19, then 2027-01-28 for a project still using it) cover Vertex only, and
+# this API's deprecations page lists gemini-3.6-flash with no shutdown date (checked
+# 2026-10-05, 2026-10-10 and 2026-11-21, at
 # https://ai.google.dev/gemini-api/docs/deprecations). The two surfaces retire models
 # on separate schedules, so check that page rather than inferring from the other one.
 #

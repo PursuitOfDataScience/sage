@@ -288,7 +288,8 @@ class TestAProviderThatNeedsNoLineupMaintenance:
         id the profile dropped does not fail; it quietly moves every fresh session off
         Vertex and onto `openrouter/free`. Dropping an id is routine, too: Google
         retires a short-term Vertex model on as little as 45 days' notice, which is how
-        gemini-3.6-flash left the lineup (retired 2026-11-19, announced 2026-10-05).
+        gemini-3.6-flash left the lineup (dated 2026-11-19 on 2026-10-05; Google later
+        extended that to 2027-01-28 for projects still using it).
 
         First, because the profile's order is where failover goes and the default is
         where a session starts. A default sitting behind another id in its own list is

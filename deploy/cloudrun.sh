@@ -162,13 +162,15 @@ gcloud run deploy "$SERVICE" \
   `# and the default are two separate decisions; this is the second one.` \
   `#` \
   `# 3.5 AND NOT 3.8. This was 3.6 until Google scheduled it for retirement on Vertex` \
-  `# (2026-11-19, every request a 404 after that). 3.8 is the replacement Google names,` \
-  `# and it is also the newest flash id and so the most contended: a paid Vertex request` \
-  `# is queued rather than shed, and the wait arrives as latency with nothing in the log` \
-  `# or on the page to name it. 3.5 is the flash id Google keeps for at least 12 months;` \
-  `# 3.6, 3.7 and 3.8 are short-term models that can go on 45 days of notice. The` \
-  `# measurements are in profiles/rcc.toml, whose Vertex lineup leads with this same id,` \
-  `# and tests/test_profile.py fails if this variable and that list stop agreeing.` \
+  `# (notice of 2026-10-05; a project still using it keeps it to 2027-01-28). 3.8 was the` \
+  `# replacement Google named then, and it is also the newer flash id and so the more` \
+  `# contended: a paid Vertex request is queued rather than shed, and the wait arrives as` \
+  `# latency with nothing in the log or on the page to name it. Both are now in the class` \
+  `# Google keeps for at least 12 months, so between them the order is measured latency.` \
+  `# gemini-4-hydrogen, the replacement the 2026-11-17 notice names, is a short-term` \
+  `# model, measured slower than 3.5, and not in the lineup. The measurements are in` \
+  `# profiles/rcc.toml, whose Vertex lineup leads with this same id, and` \
+  `# tests/test_profile.py fails if this variable and that list stop agreeing.` \
   `#` \
   `# SAGE_TELEMETRY=stdout writes one JSON line per turn, model call, miss and rating,` \
   `# which Cloud Run ships to Cloud Logging as structured entries. deploy/observability.sh` \

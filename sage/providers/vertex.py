@@ -43,9 +43,10 @@ _HEADERS = {"Metadata-Flavor": "Google"}
 # and the cost of refreshing early is one HTTP call to a link-local address.
 _SKEW_SECONDS = 300
 
-# `global` rather than a region, and it is not a default worth changing lightly:
-# `us-central1` publishes gemini-2.5-flash and returns `Publisher model ... not
-# found` for 3.5, 3.6 and 3.8. The newest models are only on the global endpoint.
+# `global` rather than a region, and it is not a default worth changing lightly.
+# `us-central1` returned `Publisher model ... not found` for 3.5, 3.6 and 3.8 when
+# they were new. It serves them now (measured 2026-11-21), but a regional endpoint
+# bills 10% more than `global` for the same tokens.
 _LOCATION = "global"
 
 
