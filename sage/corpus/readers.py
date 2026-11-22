@@ -1,8 +1,8 @@
 """Turning one file into one document and its indexable chunks.
 
 A reader is `(source, rel_path, raw) -> (Document, [Chunk])`, registered under the
-name a source declares. Two ship here — `markdown`, which cuts on headings, and
-`scraped`, which windows a page that has none — and a corpus in a third format is a
+name a source declares. Two ship here (`markdown`, which cuts on headings, and
+`scraped`, which windows a page that has none) and a corpus in a third format is a
 third function plus a line of TOML.
 
 Chunks are heading-sized rather than file-sized. That is what removes the old
@@ -17,8 +17,10 @@ from dataclasses import dataclass, field
 
 from .. import config
 from ..normalize import (
+    closes_fence,
     collapse_blank_lines,
     normalize_markdown,
+    opens_fence,
     parse_scraped,
     plain_heading,
     pretty_title,
@@ -30,7 +32,6 @@ from . import urls
 from .model import Chunk, Document
 
 _HEADING = re.compile(r"^(?P<hashes>#{1,6})[ \t]+(?P<text>\S.*?)[ \t]*#*$")
-_FENCE = re.compile(r"^[ \t]*(?P<ticks>`{3,}|~{3,})")
 
 # (source, rel_path, raw) -> (Document, [Chunk])
 readers: Registry = Registry("reader")
@@ -49,7 +50,7 @@ class _Section:
     #: Kept because one thing in a heading is not decoration: an attr_list id,
     #: `## Using renv {#using-the-renv}`, which mkdocs publishes verbatim. `slugify`
     #: reads it and `plain_heading` strips it, so handing the cleaned title to `slugify`
-    #: — which is what happened — meant the marker was gone before anything could act on
+    #: (which is what happened) meant the marker was gone before anything could act on
     #: it and the citation pointed at a derived anchor the page does not have.
     raw_heading: str = ""
     lines: list[str] = field(default_factory=list)
@@ -66,14 +67,13 @@ def _split_sections(text: str) -> list[_Section]:
     fence: str | None = None
 
     for line in text.splitlines():
-        match = _FENCE.match(line)
         if fence:
-            if match and match.group("ticks")[0] == fence:
+            if closes_fence(line, fence):
                 fence = None
             sections[-1].lines.append(line)
             continue
-        if match:
-            fence = match.group("ticks")[0]
+        fence = opens_fence(line)
+        if fence:
             sections[-1].lines.append(line)
             continue
 
@@ -102,7 +102,7 @@ def _document_title(sections: list[_Section]) -> str:
     H1, so each was named after whichever subsection came first: the R page was cited as
     "Table of Contents", `software/index.md` as "Private Software", and
     `tutorials/sde3/data-transfer.md` as "Step 1. From Data Provider to SDE Virtual
-    Desktop" — a name that page also carries as a real section, so its citation and its
+    Desktop": a name that page also carries as a real section, so its citation and its
     own Related entry read identically while linking to two different places.
 
     The window was what kept a code comment out of the title, not a rule: the R page has
@@ -125,14 +125,13 @@ def _split_oversized(body: str, limit: int) -> list[str]:
     fence: str | None = None
 
     for line in body.splitlines():
-        match = _FENCE.match(line)
         if fence:
             current.append(line)
-            if match and match.group("ticks")[0] == fence:
+            if closes_fence(line, fence):
                 fence = None
             continue
-        if match:
-            fence = match.group("ticks")[0]
+        fence = opens_fence(line)
+        if fence:
             current.append(line)
             continue
         if not line.strip() and not fence:
@@ -161,14 +160,14 @@ def _hard_split(part: str, limit: int) -> list[str]:
     """The last resort: a block with no blank line anywhere in it.
 
     Splitting on paragraphs cannot bound a block that contains no paragraph break, and
-    such a block was returned whole however long it was — one unbroken 100 KB line became
+    such a block was returned whole however long it was: one unbroken 100 KB line became
     one 100 KB chunk against a 6 000 limit. No page in the bundled corpus does that, so
     this never fires here; a scrape is one HTML-to-text pass away from doing it, and
     `gather_context` puts whole chunk texts in a system message that `history.build` has
     already finished trimming, so nothing downstream would have caught it.
 
     A line break is preferred, then a space, then the limit itself. The docstring above
-    promises never to cut inside a fence and this may have to — an unbalanced fence in a
+    promises never to cut inside a fence and this may have to: an unbalanced fence in a
     retrieval chunk is text the model reads, where an unbounded one is a request that
     cannot be sent at all.
     """
@@ -209,7 +208,7 @@ def read_markdown(
     # into. This counts headings, because it is reproducing what the site does to them.
     #
     # mkdocs runs Python-Markdown's `toc.unique`, so a heading repeated on one page
-    # publishes at `slug`, `slug_1`, `slug_2` — and every chunk here used to cite the
+    # publishes at `slug`, `slug_1`, `slug_2`, and every chunk here used to cite the
     # bare slug. Measured on `software/apps-and-envs/alphafold.md`, which carries
     # `AlphaFold 2` and `AlphaFold 3` three times each: six chunks pointing at two
     # anchors, so FOUR sections of that page were unreachable from any citation and two
@@ -231,7 +230,7 @@ def read_markdown(
         anchor = slugify(section.raw_heading or section.heading) if section.heading else ""
         # The anchor as the SITE publishes it. Counted per heading rather than per
         # chunk, so every part of one oversized section cites the one heading it is
-        # under — which is what the reader wants from a citation and what the page
+        # under, which is what the reader wants from a citation and what the page
         # actually offers.
         if anchor:
             nth = heading_anchors.get(anchor, 0)
@@ -306,7 +305,7 @@ def read_scraped(
     #
     # It matters more here than there. This source is machine-generated: `refresh-docs.sh`
     # re-scrapes the site, and one HTML-to-text pass that emits a page without paragraph
-    # breaks — a flattened table, a minified block — produces exactly that page. Nothing
+    # breaks (a flattened table, a minified block) produces exactly that page. Nothing
     # downstream would bound it either, since `gather_context` puts whole chunk texts into
     # a system message that `history.build` has already finished trimming.
     #
@@ -326,11 +325,11 @@ def read_scraped(
             # The page title, for every window. `(part 3)` used to go here, and it was
             # the index's private arithmetic wearing a section heading's clothes: a
             # scraped page has no headings to cut on, so window 3 is not a section
-            # called "part 3", it is the same page cut at 2400 characters — and it
+            # called "part 3", it is the same page cut at 2400 characters, and it
             # carries the same URL, because there is no anchor to deep-link to either.
-            # The reader saw the cut and could not act on it, since `Our Team — Our
-            # Team (part 3)` in the Sources strip and `Our Team (part 3)` under Related
-            # both land exactly where plain `Our Team` lands. The window number is kept
+            # The reader saw the cut and could not act on it, since the Sources strip's
+            # `Our Team (part 3)` label and the same words under Related both land
+            # exactly where plain `Our Team` lands. The window number is kept
             # where it is needed and nowhere else: in the id, which is what `read_doc`
             # takes to fetch one window in full.
             heading=doc_title,

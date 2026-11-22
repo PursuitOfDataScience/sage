@@ -97,6 +97,54 @@ def test_indented_fence_inside_a_tab_survives_dedent():
     assert "```bash\nmodule load python\n```" in out
 
 
+class TestAFenceIsWhatTheRendererCallsOne:
+    """CommonMark's rule, which Python-Markdown follows and so does the published page.
+
+    The CryoSPARC page writes a whole error message between triple backticks on one line.
+    Read as an opener, that line flipped every fence below it, so `## Getting help` was
+    never cut as a heading and its `{:target='_blank'}` markers reached the index. This is
+    the shape of that page, cut down.
+    """
+
+    PAGE = (
+        "# CryoSPARC\n\n"
+        "## Database Error\n\n"
+        "```E STORAGE  [initandlisten] WiredTiger error (-31802)```\n\n"
+        "```\nStarting cryoSPARC System master process..\n```\n\n"
+        "1. **Repair database:**\n    ```\n    mongod --dbpath ./ --repair\n    ```\n\n"
+        "## Getting help\n\n"
+        "- Official documentation: "
+        "[CryoSPARC Guide](https://guide.cryosparc.com/){:target='_blank'}\n"
+    )
+
+    def test_a_one_line_code_span_opens_nothing(self):
+        assert normalize.opens_fence("```E STORAGE  WiredTiger error```") is None
+        assert normalize.opens_fence("```bash") == "```"
+        assert normalize.opens_fence("    ````") == "````"
+        # The backtick rule is about backtick fences only.
+        assert normalize.opens_fence("~~~ `odd` but legal") == "~~~"
+
+    def test_only_a_bare_run_at_least_as_long_closes_it(self):
+        assert normalize.closes_fence("```", "```")
+        assert normalize.closes_fence("    ````   ", "```")
+        assert not normalize.closes_fence("```bash", "```")
+        assert not normalize.closes_fence("```", "````")
+        assert not normalize.closes_fence("~~~", "```")
+
+    def test_the_prose_after_the_span_is_still_cleaned(self):
+        out = normalize.normalize_markdown(self.PAGE)
+        assert "{:target" not in out
+        assert "[CryoSPARC Guide](https://guide.cryosparc.com/)" in out
+
+    def test_the_heading_after_the_span_is_still_a_section(self, docs_source):
+        from sage import corpus
+
+        _doc, chunks = corpus.read(docs_source, "cryosparc.md", self.PAGE)
+        by_id = {chunk.id: chunk for chunk in chunks}
+        assert "docs/cryosparc.md#getting-help" in by_id
+        assert "Getting help" not in by_id["docs/cryosparc.md#database-error"].text
+
+
 def test_parse_scraped_extracts_the_real_url():
     raw = (
         "URL: https://cloud-skyway.rcc.uchicago.edu/faqs\n"
@@ -153,7 +201,7 @@ def test_plain_heading_unescapes_what_markdown_would_have_rendered():
     r"""`## 1\. Formatting Data` escapes the period so mkdocs does not read the line as
     an ordered list. mkdocs renders `1.`; the citation strip showed `1\.`, backslash and
     all, on all four headings of the geocoding tutorial. The published anchor is
-    slugified from the rendered text, and this leaves it alone — the backslash was
+    slugified from the rendered text, and this leaves it alone: the backslash was
     already being dropped there as punctuation."""
     assert normalize.plain_heading(r"1\. Formatting Data for Processing") == (
         "1. Formatting Data for Processing"
@@ -162,7 +210,7 @@ def test_plain_heading_unescapes_what_markdown_would_have_rendered():
         "1-formatting-data-for-processing"
     )
     # Only punctuation is escapable in markdown, so a backslash in front of a letter
-    # is a literal one and stays — `\n` in a heading about escape sequences.
+    # is a literal one and stays: `\n` in a heading about escape sequences.
     assert normalize.plain_heading(r"What \n means") == r"What \n means"
 
 
@@ -182,7 +230,7 @@ def test_pretty_title_of_an_index_page_names_its_directory():
 class TestAnExplicitHeadingId:
     """attr_list writes the anchor outright, and mkdocs publishes it verbatim.
 
-    `## Using renv {#using-the-renv}` is not a heading with decoration on the end — the
+    `## Using renv {#using-the-renv}` is not a heading with decoration on the end: the
     braces ARE the anchor, and a slug derived from the text beside them is a different
     one. `tools/anchor_check.py` caught it as the site's `#using-the-renv` against our
     `#using-the-renv-r-package-for-project-environments`: a link that resolves, looks
@@ -222,7 +270,7 @@ class TestTheUrlAScrapeClaims:
     Whatever followed `URL:` was taken verbatim, so a scrape that wrote a relative path
     produced citations pointing at something that is not a page, and `javascript:` would
     have gone into a markdown link inside an answer. All 55 bundled scrapes carry an
-    `https://` URL, so this changes nothing today — it is about the day the scraper's
+    `https://` URL, so this changes nothing today: it is about the day the scraper's
     output shifts.
     """
 
@@ -249,7 +297,7 @@ class TestTheUrlAScrapeClaims:
          "file:///etc/passwd", "/relative/path", "rcc.uchicago.edu/no-scheme", ""],
     )
     def test_anything_else_is_treated_as_absent(self, claimed):
-        """Absent falls back to the source's base_url — a link to the site root is a
+        """Absent falls back to the source's base_url: a link to the site root is a
         worse citation than a deep one and a better one than a broken href."""
         url, _title, body = normalize.parse_scraped(self.page(f"URL: {claimed}"))
         assert url == ""

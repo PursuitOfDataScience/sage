@@ -4,14 +4,14 @@ Every hallucination this app can commit passes through `Assessment.confident`: a
 caveat tells the model to decline, and its absence hands over six confident-looking
 sections. `tests/test_retrieval.py::TestAssessment` pins the two thresholds on ten
 labelled probes, all six of whose negatives are lexically alien ("sourdough",
-"PI-RADS", "weather") and score at most 23.9 against a `STRONG_SCORE` of 26 — caught by
+"PI-RADS", "weather") and score at most 23.9 against a `STRONG_SCORE` of 26: caught by
 the score floor alone. This file adds the class none of them cover: a question in
 fluent RCC dialect about something the RCC does not have, which scores 26–64.
 
 Fourteen of thirty-eight were caveated when this file was written; forty of
 forty-six are now, over a set that has since gained the quadrant nothing covered. What
 moved it was `names_a_thing` and `reads_like_a_report` in `sage/retrieval/text.py`, not
-either threshold — `tools/gate_check.py --sweep` had shown the two sides occupying one
+either threshold: `tools/gate_check.py --sweep` had shown the two sides occupying one
 score range. The ratchets below sit one case under what the tree measures, so a single
 regression fails and the slack is stated rather than hidden.
 """
@@ -28,11 +28,11 @@ from evals import gate
 #
 # Raise them when the gate improves; never lower one to make CI pass. The first version
 # of this file recorded 36.8% caveat recall over 38 negatives, with a comment saying that
-# was where it started and not an acceptable level. What moved it was not a threshold —
-# `tools/gate_check.py --sweep` showed no pair could — but telling an unfamiliar word
+# was where it started and not an acceptable level. What moved it was not a threshold
+# (`tools/gate_check.py --sweep` showed no pair could) but telling an unfamiliar word
 # that *names* something from one that carries a value. See EVAL.md.
 MINIMUM_CAVEAT_RECALL = 0.84    # measured 0.870 (40 of 46)
-MAXIMUM_OVER_REFUSAL = 0.04     # measured 0.025 (2 of 79)
+MAXIMUM_OVER_REFUSAL = 0.04     # measured 0.026 (2 of 78)
 MINIMUM_RECALL_AT_5 = 0.96      # measured 0.985
 
 
@@ -59,7 +59,7 @@ class TestTheLabels:
     A negative says "these words appear nowhere in the documentation". That claim rots:
     the User Guide gains a page and a fair negative becomes a question the app is being
     punished for answering correctly. Written from memory, eight of the first
-    forty-one were wrong — `gpu2` is a real Midway2 partition with K80s, EC2 is
+    forty-one were wrong: `gpu2` is a real Midway2 partition with K80s, EC2 is
     documented because Skyway bursts to AWS, and the compilers page names Julia. All
     eight were caught here rather than by a number that quietly moved.
     """
@@ -138,7 +138,7 @@ class TestWhatLeaksToday:
     """The leaks, one test each, as xfails.
 
     Named rather than aggregated, because a count says the gate is weak and a list says
-    which questions it is weak on — and because an xpass is how this file reports that
+    which questions it is weak on, and because an xpass is how this file reports that
     one of them has been fixed. `strict=False`: a fix is good news, not a failure.
     """
 
@@ -155,7 +155,7 @@ class TestWhatLeaksToday:
         "how much does the university spend on computing each year",
         "how many users does the cluster have",
         # Arrived with title-field length normalisation, and it is a trade taken with
-        # its eyes open rather than a surprise — the same change caveated the two above
+        # its eyes open rather than a surprise: the same change caveated the two above
         # this line, so the list is one shorter than it was and `caveat_recall` went
         # 87.0% → 89.1%. What this one costs: `docs/software/apps-and-envs/alphafold.md`
         # is titled "AlphaFold Documentation", two tokens, and a two-token title
@@ -166,7 +166,7 @@ class TestWhatLeaksToday:
         # Kept rather than tuned away: it is the one leak in the set with a *real* title
         # match, the alternative measured (b = 0.5 rather than BM25_B) buys this back and
         # 1.1pp of caveat recall at the price of three of the seven pages that could not
-        # be found by their own title, and no threshold pair separates it — the two it
+        # be found by their own title, and no threshold pair separates it: the two it
         # replaced scored 18.8 and 18.2 against a floor of 20, so the gap either way is
         # smaller than the spread inside this list.
         "is the documentation written by staff or by users",
@@ -181,7 +181,7 @@ class TestWhatLeaksToday:
         """No leak may appear that is not written down above.
 
         The ratchet catches the aggregate moving. This catches the aggregate holding
-        still while the *membership* changes — a new leak arriving as an old one is
+        still while the *membership* changes: a new leak arriving as an old one is
         fixed, which is the shape a refactor produces and the shape a percentage hides.
         """
         leaking = {
@@ -196,12 +196,12 @@ def test_no_threshold_pair_beats_the_shipped_one_for_free(real_index, audited, m
 
     A pair that buys caveat recall by refusing answerable questions is a *trade*, and
     which side to take is a judgement about which error is worse on an app somebody reads
-    every day — not something a test should decide. A pair that improves one axis and
+    every day, not something a test should decide. A pair that improves one axis and
     costs nothing on the other is not a judgement, it is an oversight, and this fails on
     it.
 
     History worth keeping: before the classification fix, no pair reached 90% caveat
-    recall while keeping 95% of answerable questions — the two sides occupied the same
+    recall while keeping 95% of answerable questions: the two sides occupied the same
     score range, which is why the fix could not be a number. Afterwards one does (24/24
     buys 4.4pp of caveat recall for 1.3pp of over-refusal). That is a trade on n=46, and
     taking it would mean tuning two constants to catch two cases in the very set they are
@@ -223,7 +223,7 @@ class TestTheSweepMeasuresTheOperatingPoint:
 
     It did not: `strong` steps by 4 from `minimum`, so the grid ran 20, 24, 28 and never
     landed on the shipped 20/26. Every number the sweep printed was still true, and the one
-    comparison a reader wants — where are we, and what would moving cost? — could not be
+    comparison a reader wants (where are we, and what would moving cost?) could not be
     made from it.
 
     The invariant is the useful part: at the shipped pair, `sweep` and `measure` are two
@@ -245,7 +245,7 @@ class TestTheSweepMeasuresTheOperatingPoint:
         assert (assessment.min_confident_score, assessment.strong_score) == (
             config.MIN_CONFIDENT_SCORE, config.STRONG_SCORE
         ), "the assessment no longer carries the shipped thresholds"
-        # On the front or not is a finding, not a failure — but it must have been *swept*.
+        # On the front or not is a finding, not a failure, but it must have been *swept*.
         assert swept["grid"] > 0
         assert shipped[0] is None or shipped[0]["min"] == config.MIN_CONFIDENT_SCORE
 
@@ -274,7 +274,7 @@ class TestTheDominationTolerance:
 
     `76/78 + 1/78 > 77/78` is False in exact arithmetic and True in binary. A pair better
     by *exactly* one case therefore fell on whichever side the rounding landed, and it
-    changed sides the day one question was added to the set — failing a test for a reason
+    changed sides the day one question was added to the set: failing a test for a reason
     that had nothing to do with the gate.
     """
 

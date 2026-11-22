@@ -1,7 +1,7 @@
 """The tools the model can call, and the thing that runs them.
 
 A tool is an object with a `name`, a `schema` the provider is sent, and a `run` that
-returns text. Two ship — search the index, read one section — and they are built by
+returns text. Two ship (search the index, read one section) and they are built by
 factories in a registry, so a deployment that wants a third (look up a term, check a
 status page, query an API the documentation describes) registers one and names it:
 
@@ -10,7 +10,7 @@ status page, query an API the documentation describes) registers one and names i
 
 Reads resolve against the in-memory corpus rather than the filesystem, so the old
 `realpath` traversal guard is no longer the thing standing between a crafted `path`
-argument and an arbitrary file — only ids that were indexed can resolve at all.
+argument and an arbitrary file: only ids that were indexed can resolve at all.
 Unknown ids get an error string the model can recover from.
 """
 
@@ -49,7 +49,7 @@ class Tool(Protocol):
     #: tool at all should have used instead, and `sage.redact` swaps one for the other.
     #: Optional: a tool that leaves it empty is simply never substituted.
     label: str
-    #: Which of this tool's arguments is worth showing a reader while it runs — the
+    #: Which of this tool's arguments is worth showing a reader while it runs: the
     #: query for a search, the path for a read. The status row names the tool and
     #: prints this one value beside it, so a reader watching a turn can see what was
     #: searched for and which section was opened.
@@ -62,10 +62,10 @@ class Tool(Protocol):
     #: Whether that argument is a SECTION ID rather than something a reader could have
     #: written. A search's argument is the model's own words and belongs on screen as
     #: it is; a read's is `docs/allocations.md#how-do-i-check-…`, which is this
-    #: repository's name for a file — the corpus layout, not the documentation.
+    #: repository's name for a file: the corpus layout, not the documentation.
     #:
     #: It reached the page and was reported at once: "docs/allocations.md shouldn't be
-    #: disclosed in this way". Nothing else in the app shows one — the Sources strip
+    #: disclosed in this way". Nothing else in the app shows one: the Sources strip
     #: resolves every id to `Chunk.label` and `Chunk.url` first, and `links.fix_links`
     #: does the same to the paths a model writes into an answer.
     #:
@@ -109,13 +109,13 @@ def _outline(document) -> str:
 
 
 def nothing_found(identity: Identity, *, retry: bool = True) -> str:
-    """"No matching documentation was found" — the sentence, built once.
+    """"No matching documentation was found": the sentence, built once.
 
     Two paths reach zero results and only one of them used to say so. `search_docs`
     returned this; the tool-less path returned an empty context and `grounded()` handed
     the model the system prompt and the question with nothing between them, so a reader
-    who typed `sbatchh` — one keystroke off a real command, and zero results on this
-    corpus — got an answer from the model's own memory, with no caveat and no sources.
+    who typed `sbatchh` (one keystroke off a real command, and zero results on this
+    corpus) got an answer from the model's own memory, with no caveat and no sources.
     That is the refusal gate missing exactly where it matters most: the tool loop can
     search again, and this path has no second round. `gather_context`'s own docstring
     already said so, and handled only the *weak* case, not the empty one.
@@ -287,9 +287,10 @@ class ReadDoc:
             )
 
         if not document.text.strip():
-            # A page that exists and says nothing. `docs/data_transfer/cloud/rclone.md` is
-            # 0 bytes in the upstream snapshot, and it is a name a model would guess for an
-            # rclone question — so this is reachable without any search result offering it.
+            # A page that exists and says nothing. `docs/data_transfer/cloud/rclone.md` was
+            # one, 0 bytes upstream until the 2026-11-21 refresh deleted it, and a name a
+            # model would guess for an rclone question, so this is reachable without any
+            # search result offering it.
             # Returned as an error rather than as a header with nothing under it: an empty
             # read looks like a page that failed to load, and the model's own best guess
             # about a blank section is the one thing this app must not encourage. No
@@ -345,7 +346,7 @@ class Toolset:
 
         Built from the tools themselves rather than written down anywhere, so a
         deployment that registers a third tool has it covered by giving that tool a
-        `label` — and a tool with none is left out, which is the same as saying "this
+        `label`, and a tool with none is left out, which is the same as saying "this
         name may appear in an answer".
         """
         return {
@@ -371,7 +372,7 @@ class Toolset:
 
     @property
     def section_arguments(self) -> frozenset[str]:
-        """Which tools' shown argument is a section id — see `Tool.argument_is_section`.
+        """Which tools' shown argument is a section id: see `Tool.argument_is_section`.
 
         Read off the tools for the same reason the two properties above are: a third
         tool whose argument is an id says so by declaring it, and the row learns to
@@ -423,7 +424,7 @@ class ToolRunner:
             return f"Unknown tool: {name}"
         # `_text(...)` inside each tool because a tool argument is whatever the model
         # typed. `llm._parse` guarantees a dict and nothing about what is in it, and a
-        # model that types its query as a number — `{"query": 123}` — used to end the
+        # model that types its query as a number (`{"query": 123}`) used to end the
         # turn with an AttributeError dressed up as "something went wrong reaching the
         # assistant".
         if name == SEARCH_DOCS:
@@ -450,8 +451,8 @@ def gather_context(
     so is the only thing between it and an invented answer.
 
     Which is why the empty case is a sentence and not an empty string. `if caveat and
-    blocks` meant a query matching *nothing* — the one case where the model has least to
-    go on — was the one case that travelled with no warning at all: `grounded()` saw an
+    blocks` meant a query matching *nothing* (the one case where the model has least to
+    go on) was the one case that travelled with no warning at all: `grounded()` saw an
     empty context and passed the question through untouched. Both paths now say the same
     thing when there is nothing to say.
     """

@@ -1,12 +1,12 @@
 # Answerable questions, with the page(s) a correct answer rests on.
 #
-# `pages` — any one of them counts as a hit, because several questions have more than
+# `pages`: any one of them counts as a hit, because several questions have more than
 #   one defensible answer page and picking a favourite would fail a good retrieval.
-# `must_mention` — a token a correct ANSWER has to contain, where there is an obvious
+# `must_mention`: a token a correct ANSWER has to contain, where there is an obvious
 #   one. This is the cheapest real answer-correctness signal available: "how do I
 #   cancel a job" without the word `scancel` anywhere in it did not answer the
 #   question, whatever else it said, and no judge is needed to see that.
-# `kind` — `faq` marks a question lifted from a question-shaped heading already in the
+# `kind`: `faq` marks a question lifted from a question-shaped heading already in the
 #   corpus. Those are free gold labels and they are also LEXICALLY EASY, because the
 #   question's own words are on the page it points at: they score near 100% and are a
 #   ceiling check, not a discriminating benchmark. `asked` marks a question written the
@@ -107,7 +107,7 @@ kind = "asked"
 # Re-measured 2026-09-12, after the title field was length-normalised: `sbatch.md` has
 # climbed to RANK 5, so `tools/gate_check.py` now reports this as "NOW PASSES" and its
 # note says a gap that passes is one to promote. Not promoted, and the rank is the
-# reason — passing recall@5 from fifth place is one scoring change away from failing
+# reason: passing recall@5 from fifth place is one scoring change away from failing
 # again, and a ratchet set on that would break on the next honest improvement. The
 # diagnosis above is still exactly right: `slurm/faq.md` leads at 36.6 against 25.2 for
 # the page that documents the flag. Promote it when `sbatch.md` reaches the top three.
@@ -279,10 +279,12 @@ text = "how do I mount my project directory as a network drive"
 pages = ["data_transfer/persistent_mapping/samba.md"]
 kind = "asked"
 
-[[question]]
-text = "how do I sync data to cloud storage"
-pages = ["data_transfer/cloud/cloud-sync.md"]
-kind = "asked"
+# "how do I sync data to cloud storage" was here, labelled with
+# data_transfer/cloud/cloud-sync.md. Upstream deleted that page, and its empty rclone
+# sibling, in the 2026-11-21 refresh (user-guide 774cd7b; the page opened with "The
+# following content is outdated"), and nothing left in the corpus answers it. Nor is it
+# a negative: `sync`, `cloud` and `storage` are all in the corpus, so there is no word
+# whose absence makes it one. Bring it back with its page when the User Guide does.
 
 [[question]]
 text = "how do I share files with a collaborator outside the university"
@@ -374,7 +376,7 @@ kind = "asked"
 # keeping visible: real questions are phrased the long way.
 #
 # Re-measured 2026-09-12: it no longer loses BOTH. `charliecloud.md` is at rank 2 (23.6)
-# so the gate counts this as a pass — either listed page satisfies it — while
+# so the gate counts this as a pass (either listed page satisfies it) while
 # `singularity.md`, which is the page a reader asking about containers is most often
 # after, is still outside the top six entirely. Kept as a gap for that reason: the
 # entry passing while half of what it asks for is unreachable is precisely the state
