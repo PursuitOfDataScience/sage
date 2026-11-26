@@ -8,11 +8,12 @@ passed is one that must not.
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 
 import streamlit as st
 
-from .. import config, providers
+from .. import config, providers, quota
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ def get_provider(name: str):
 # An hour, and the `ttl` is the whole point of this decorator call. `cache_resource`
 # without one holds for the life of the process, and the lineup is discovered rather
 # than configured precisely so that a model the provider starts serving appears with no
-# commit — which a list fetched once at boot and never again cannot do. It used to work
+# commit, which a list fetched once at boot and never again cannot do. It used to work
 # by accident: Streamlit Community Cloud hibernates an idle app, so the process died
 # roughly daily and the next reader got a fresh catalogue. `keepalive.yml` then started
 # pinging every four hours to stop the app sleeping, and took that restart away with it,
@@ -76,13 +77,49 @@ def get_provider(name: str):
 @st.cache_resource(show_spinner=False, ttl=3600)
 def available_models(name: str) -> list[providers.Model]:
     try:
-        return get_provider(name).models()
+        provider = get_provider(name)
+        found = provider.models()
+        # The same hour's check of the key's own counters, for an entry that names an
+        # endpoint for them. Off the page's thread: a slow status endpoint must not hold
+        # up the render that happens to refresh this cache.
+        watch_limits(name, provider)
+        return found
     except Exception as exc:
         # Cached like any other result, so a provider that is briefly unreachable does
-        # not empty the picker for the rest of the process's life — only until the ttl
+        # not empty the picker for the rest of the process's life, only until the ttl
         # lapses. Another reason not to leave this unbounded.
         logger.warning("Could not list models for %s: %s", name, exc)
         return []
+
+
+def watch_limits(name: str, provider) -> threading.Thread | None:
+    """Log a WARNING when this provider's key or free-model counter is nearly spent.
+
+    In a daemon thread, started at most once per `available_models` refresh, so once an
+    hour per provider per process. Nothing on the page waits for it and nothing it does
+    can raise into a render: a provider without a `status` method, or an entry without
+    a `status_path`, is not asked at all. The lines are `sage.quota`'s, and they are the
+    warning an operator gets before a limit refuses a reader, rather than after.
+
+    Returns the thread, for a test to join; the app ignores it.
+    """
+    entry = providers.entry(name)
+    status_of = getattr(provider, "status", None)
+    if not callable(status_of) or not (entry and entry.status_path):
+        return None
+    if config.LIMIT_WARNING_FRACTION <= 0:
+        return None
+
+    def check() -> None:
+        try:
+            for line in quota.warnings(name, status_of(), config.LIMIT_WARNING_FRACTION):
+                logger.warning(line)
+        except Exception:  # noqa: BLE001 (a warning light must never break the page)
+            logger.debug("Could not check %s limits", name, exc_info=True)
+
+    thread = threading.Thread(target=check, name=f"sage-limits-{name}", daemon=True)
+    thread.start()
+    return thread
 
 
 def login_configured() -> bool:
@@ -90,7 +127,7 @@ def login_configured() -> bool:
 
     Checked separately from `SAGE_REQUIRE_LOGIN`, because the two failure modes are
     not the same. A missing `[auth]` block with the flag on would lock every reader
-    out of a working app — including whoever set the flag — so the flag alone is
+    out of a working app (including whoever set the flag), so the flag alone is
     never enough to gate on.
     """
     try:
@@ -125,8 +162,8 @@ def whoami() -> str:
 
     The signed-in subject when there is one, because that is the only identity a
     reader cannot shed by opening a new tab. Falling back to a per-session id keeps
-    the limiter useful when the app is open — it still stops a loop and a leaning
-    Enter key — while being honest that it is a courtesy, not enforcement: a new
+    the limiter useful when the app is open (it still stops a loop and a leaning
+    Enter key) while being honest that it is a courtesy, not enforcement: a new
     private window is a new session.
 
     Not the IP address, which `st.context` will happily hand over. Campus NAT and the

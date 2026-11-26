@@ -336,6 +336,12 @@ DAILY_WINDOW_SECONDS = _env_float("SAGE_DAILY_WINDOW_SECONDS", 86_400.0, minimum
 # nothing bounds what the shared key can be charged in a day.
 CALL_BUDGET = _env_int("SAGE_CALL_BUDGET", 0, minimum=0)
 BUDGET_WINDOW_SECONDS = _env_float("SAGE_BUDGET_WINDOW_SECONDS", 86_400.0, minimum=1.0)
+# The share of a provider-side limit at which the hourly check logs a WARNING: the
+# account's free-model request counter, and the key's own spending limit, for a provider
+# entry that declares `status_path`. 0.1 warns once a tenth or less is left; 0 = off.
+# Unlike CALL_BUDGET, these counters are the provider's, so they are shared by every
+# instance and survive a restart. See `sage/quota.py`.
+LIMIT_WARNING_FRACTION = _env_float("SAGE_LIMIT_WARNING_FRACTION", 0.1, minimum=0.0)
 
 # --- access ----------------------------------------------------------------
 #

@@ -47,7 +47,11 @@ logger = logging.getLogger(__name__)
 # for the *request*, so every model in the lineup gets the same oversized message and
 # refuses it the same way. Walking them is a certain failure per model, and the remedy
 # is the reader's (clear the chat), which is what the card says.
-FAILOVER_KINDS = llm.KINDS - {"context"}
+#
+# `blocked` is the other exception, for a different reason: the deployment's own content
+# policy refused the request, and walking on would hand the same content to a provider
+# the policy does not cover. Stopping is what the operator who set the block asked for.
+FAILOVER_KINDS = llm.KINDS - {"context", "blocked"}
 
 #: Failures whose remedy is asking the SAME id again, where that id is a router.
 #:
@@ -581,6 +585,12 @@ def run(view: View) -> None:
     calls = feedback.Calls(
         trace, session=session, provider=model.provider, model=model.id
     )
+    # What every request of this run says it was built from, for a trace downstream to
+    # join this app's own records on. Computed once, not per request.
+    built_from = {
+        "prompt": feedback.fingerprint(runtime.system_prompt),
+        "corpus": feedback.corpus_commit(),
+    }
 
     def record(outcome: str, kind: str = "", *, sources: int = 0, redacted: int = 0,
                reply: llm.Turn | None = None) -> None:
@@ -612,6 +622,7 @@ def run(view: View) -> None:
                 tokens_in=trace["tokens_in"], tokens_out=trace["tokens_out"],
                 ttft_s=None if first is None else first - trace["started"],
                 attachments=trace["attachments"],
+                cost_usd=trace.get("cost_usd"),
             )
         except Exception:  # noqa: BLE001 (a record is never worth a turn)
             logger.debug("Could not record the turn", exc_info=True)
@@ -683,7 +694,7 @@ def run(view: View) -> None:
                 thinking=bool(st.session_state.thinking),
                 tool_choice=tool_choice,
                 tag=CallTag(session=session, turn_id=trace["turn_id"],
-                            round=round_number),
+                            round=round_number, **built_from),
             )
         except llm.AssistantError as exc:
             # Closed here rather than by the handler that catches it, because one

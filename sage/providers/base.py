@@ -113,6 +113,19 @@ class Chunk:
     finish_reason: str = ""
     tokens_in: int | None = None
     tokens_out: int | None = None
+    #: What the endpoint says the call was charged, in US dollars, where it says so at
+    #: all (OpenRouter puts `cost` in every usage report). The rest of `usage_details`:
+    #: how much of the output was reasoning, and how much of the input came from the
+    #: provider's prompt cache. Like the token counts, None means not reported.
+    cost: float | None = None
+    tokens_reasoning: int | None = None
+    tokens_cached: int | None = None
+    #: What a routing gateway says it did to serve the call, condensed by
+    #: `route_summary`: how many attempts it took, and which guardrails flagged it.
+    route: dict | None = None
+    #: A content audit's verdict on this message, condensed by `audit_summary`. None
+    #: wherever no audit ran.
+    audit: dict | None = None
 
 
 def usage_counts(raw) -> tuple[int | None, int | None]:
@@ -156,6 +169,131 @@ def usage_counts(raw) -> tuple[int | None, int | None]:
     return prompt, completion
 
 
+def _number(raw, name: str) -> float | None:
+    """A finite, non-negative number at `raw[name]`, or None. Never raises."""
+    try:
+        value = raw.get(name) if isinstance(raw, dict) else getattr(raw, name, None)
+    except Exception:  # noqa: BLE001 (an SDK object whose attribute raises)
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if not math.isfinite(value) or value < 0:
+        return None
+    return value
+
+
+def usage_details(raw) -> tuple[float | None, int | None, int | None]:
+    """`(cost, reasoning tokens, cached tokens)` from a usage report, each or None.
+
+    `cost` is what OpenRouter says it charged for the call, in dollars, and it is in
+    every usage report it sends: `0` for a free model, which is a measurement and not a
+    missing value. The other two are the OpenAI-shaped details blocks,
+    `completion_tokens_details.reasoning_tokens` and `prompt_tokens_details.cached_tokens`.
+    An endpoint that reports none of them gets `(None, None, None)`, and the same rule as
+    `usage_counts`: never an exception, because this runs inside the stream parser.
+    """
+    if raw is None:
+        return None, None, None
+    cost = _number(raw, "cost")
+
+    def detail(block: str, name: str) -> int | None:
+        try:
+            nested = raw.get(block) if isinstance(raw, dict) else getattr(raw, block, None)
+        except Exception:  # noqa: BLE001
+            return None
+        value = _number(nested, name) if nested is not None else None
+        return None if value is None else int(value)
+
+    return (
+        None if cost is None else float(cost),
+        detail("completion_tokens_details", "reasoning_tokens"),
+        detail("prompt_tokens_details", "cached_tokens"),
+    )
+
+
+def route_summary(raw) -> dict | None:
+    """What a routing gateway's metadata says about the call, condensed.
+
+    OpenRouter returns `openrouter_metadata` on the last event of a stream when asked to
+    (`ProviderEntry.route_metadata`). Three things in it are worth a call record:
+
+    * `attempt`: how many upstream attempts it took. More than one is a failover the
+      gateway absorbed, which the client otherwise never sees: measured on the free
+      router, one request in ten.
+    * `strategy` and the number of candidates it chose among (`endpoints.total`).
+    * every guardrail stage in `pipeline` that detected something, as `name:action`
+      (`regex_pi_detection:flagged`, `sensitive_info:redacted`), which is how a
+      prompt-injection detector in flag mode reaches this app's own records. The
+      documented stage says so with `data.detected` and `data.action`; a content filter
+      with `data.flagged`. Both are read.
+
+    None for anything that is not that object. Never an exception.
+    """
+    if not isinstance(raw, dict):
+        return None
+    try:
+        attempt = raw.get("attempt")
+        endpoints = raw.get("endpoints")
+        total = endpoints.get("total") if isinstance(endpoints, dict) else None
+        flagged = []
+        for stage in raw.get("pipeline") or ():
+            if not isinstance(stage, dict) or stage.get("type") != "guardrail":
+                continue
+            data = stage.get("data")
+            if not isinstance(data, dict):
+                continue
+            action = data.get("action")
+            if data.get("detected") is True or data.get("flagged") is True:
+                name = str(stage.get("name") or "guardrail")
+                flagged.append(f"{name}:{action}" if isinstance(action, str) else name)
+        strategy = raw.get("strategy")
+        return {
+            "attempts": attempt if isinstance(attempt, int) and not isinstance(attempt, bool)
+            else None,
+            "strategy": strategy if isinstance(strategy, str) else "",
+            "candidates": total if isinstance(total, int) and not isinstance(total, bool)
+            else None,
+            "flagged": flagged,
+        }
+    except Exception:  # noqa: BLE001 (a malformed object is no route at all)
+        return None
+
+
+def audit_summary(raw) -> dict | None:
+    """An `alignment` object (OpenRouter's Alignment plugin, audit mode), condensed.
+
+    The object holds one record per checked message, each with an `outcome`
+    (`allowed`, `blocked` or `unavailable`) and one entry per rule giving the
+    evaluator's `probability` that the message broke it. What a call record keeps is the
+    LAST record, because that is the message this call delivered: its outcome, the
+    indexes of the rules it broke, and the highest probability any rule got. None for
+    anything that is not that object, and never an exception.
+    """
+    if not isinstance(raw, dict):
+        return None
+    try:
+        calls = [item for item in raw.get("calls") or () if isinstance(item, dict)]
+        if not calls:
+            return None
+        last = calls[-1]
+        rules = [item for item in last.get("rules") or () if isinstance(item, dict)]
+        broken = [index for index, rule in enumerate(rules) if rule.get("broken") is True]
+        chances = [
+            float(rule["probability"]) for rule in rules
+            if isinstance(rule.get("probability"), (int, float))
+            and not isinstance(rule.get("probability"), bool)
+            and math.isfinite(rule["probability"])
+        ]
+        outcome = last.get("outcome")
+        return {
+            "outcome": outcome if isinstance(outcome, str) else "",
+            "broken": broken,
+            "top": round(max(chances), 4) if chances else None,
+        }
+    except Exception:  # noqa: BLE001 (a malformed object is no verdict at all)
+        return None
+
+
 @dataclass(frozen=True)
 class CallTag:
     """What a request may say about where it came from: a session and a turn.
@@ -171,6 +309,11 @@ class CallTag:
     session: str = ""
     turn_id: str = ""
     round: int = 0
+    #: Which system prompt and which documentation the request was built from: the
+    #: same 12-character fingerprint and upstream commit the turn record carries, so a
+    #: trace in an observability backend joins the records this app writes itself.
+    prompt: str = ""
+    corpus: str = ""
 
 
 # Set by `llm.start` for exactly as long as it takes to open a stream, which is the only

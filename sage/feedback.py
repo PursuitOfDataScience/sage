@@ -153,6 +153,7 @@ def record_turn(
     tokens_out: int | None = None,
     ttft_s: float | None = None,
     attachments: dict | None = None,
+    cost_usd: float | None = None,
 ) -> bool:
     """One line of mechanics per turn: what it cost and how it ended.
 
@@ -212,9 +213,20 @@ def record_turn(
             "tokens_out": tokens_out,
             "ttft_s": None if ttft_s is None else round(ttft_s, 3),
             "attachments": attachments or attachment_kinds(()),
+            # What the endpoints said every call of this turn was charged, in dollars,
+            # summed; None when no call reported a charge (Vertex and the Gemini API do
+            # not). The number `config.CALL_BUDGET` is meant to be set from.
+            "cost_usd": _dollars(cost_usd),
         },
         session=session, turn_id=turn_id,
     )
+
+
+def _dollars(value) -> float | None:
+    """A charge, rounded to a hundredth of a microdollar so float noise stays out."""
+    if value is None or isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return round(float(value), 8)
 
 
 def record_call(
@@ -236,6 +248,11 @@ def record_call(
     tool_calls: Iterable[str] = (),
     toolless: bool = False,
     session: str = "",
+    cost_usd: float | None = None,
+    tokens_reasoning: int | None = None,
+    tokens_cached: int | None = None,
+    route: dict | None = None,
+    audit: dict | None = None,
 ) -> bool:
     """One line per model request: who was asked, who answered, how long, how much.
 
@@ -264,6 +281,24 @@ def record_call(
             "tokens_out": tokens_out,
             "tool_calls": [str(name) for name in tool_calls],
             "toolless": bool(toolless),
+            # What the endpoint reported beyond the token counts, each None (or empty)
+            # where it reported nothing: the charge, the reasoning and cached shares of
+            # the tokens, and from a routing gateway's metadata how many upstream
+            # attempts it took (more than one is a failover nobody downstream saw), how
+            # it chose and among how many, and which guardrails detected something.
+            "cost_usd": _dollars(cost_usd),
+            "tokens_reasoning": tokens_reasoning,
+            "tokens_cached": tokens_cached,
+            "upstream_attempts": (route or {}).get("attempts"),
+            "route_strategy": (route or {}).get("strategy", ""),
+            "route_candidates": (route or {}).get("candidates"),
+            "guardrail_flags": list((route or {}).get("flagged") or ()),
+            # A content audit's verdict on the message this call delivered (see
+            # `sage.alignment`): its outcome, the indexes of the rules it broke, and
+            # the highest probability any rule was given. Empty where no audit ran.
+            "audit_outcome": (audit or {}).get("outcome", ""),
+            "audit_broken": list((audit or {}).get("broken") or ()),
+            "audit_top": (audit or {}).get("top"),
         },
         session=session, turn_id=turn_id,
     )
@@ -296,6 +331,7 @@ def new_ledger(
         "calls": 0,
         "tokens_in": None,
         "tokens_out": None,
+        "cost_usd": None,
         "served_model": "",
         "think": bool(thinking),
         "steer": steer or "",
@@ -361,6 +397,10 @@ class Calls:
                 self.trace["tokens_in"] = (self.trace["tokens_in"] or 0) + tokens_in
             if tokens_out is not None:
                 self.trace["tokens_out"] = (self.trace["tokens_out"] or 0) + tokens_out
+            cost = getattr(reply, "cost", None)
+            if cost is not None:
+                # `.get`, so a ledger made before this field existed still sums.
+                self.trace["cost_usd"] = (self.trace.get("cost_usd") or 0.0) + cost
             self.trace["served_model"] = served
             record_call(
                 session=self.session,
@@ -380,6 +420,11 @@ class Calls:
                 tokens_out=tokens_out,
                 tool_calls=names,
                 toolless=call["toolless"],
+                cost_usd=cost,
+                tokens_reasoning=getattr(reply, "tokens_reasoning", None),
+                tokens_cached=getattr(reply, "tokens_cached", None),
+                route=getattr(reply, "route", None),
+                audit=getattr(reply, "audit", None),
             )
         except Exception:  # noqa: BLE001 (bookkeeping must not take a turn down)
             logger.debug("Could not record a call", exc_info=True)

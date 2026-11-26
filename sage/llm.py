@@ -62,6 +62,14 @@ _MESSAGES = {
     "network": "Could not reach the assistant. Check the connection and retry.",
     "unavailable": "The assistant is temporarily unavailable. Please retry shortly.",
     "unknown": "Something went wrong reaching the assistant. Please try again.",
+    # A gateway refusing the request's CONTENT on the deployment's own instructions: a
+    # guardrail that blocks prompt injection or sensitive information, or a provider's
+    # moderation flag. Not a key problem and not a model problem, so the reader is
+    # told what they can change, and `turn.FAILOVER_KINDS` leaves it out: asking the
+    # next provider would hand the same content to an endpoint the policy does not
+    # cover, which is the opposite of what an operator who set a block asked for.
+    "blocked": "This request was stopped by the deployment's content policy. Remove "
+               "any passwords, keys or other sensitive details and ask again.",
 }
 
 #: Every failure this module can name. Public because the UI decides what to do about
@@ -90,6 +98,41 @@ class AssistantError(Exception):
         return self.kind in _RETRYABLE
 
 
+def _spend_limit(text: str) -> bool:
+    """Whether a refusal names a spending cap the operator set, rather than the key.
+
+    OpenRouter answers a spent key limit, workspace budget or guardrail budget with a
+    403 before the request reaches a provider, and the body says which in
+    `error.metadata.limit_source` (`openrouter_key_limit`, `openrouter_workspace_budget`,
+    `openrouter_guardrail_budget`). The status alone read as `auth`, which told the
+    reader the key had been rejected and to tell the operator: wrong on both counts,
+    because the key is fine and the cap resets on its own schedule. Matched on the
+    metadata name and on the three messages the documentation gives, because the body
+    reaching here is clipped to 400 characters and a long message can push the
+    metadata out of it.
+    """
+    return (
+        ("limit_source" in text and "openrouter_" in text)
+        or "key limit exceeded" in text
+        or "budget limit exceeded" in text
+        or ("budget of $" in text and "exceeded" in text)
+    )
+
+
+def _blocked_by_policy(text: str) -> bool:
+    """Whether a 403 is a guardrail or a moderation flag refusing the request's content.
+
+    The shapes OpenRouter documents: `Request blocked: prompt injection patterns
+    detected`, `Request blocked by content filter: …`, and a moderation flag whose
+    metadata carries `flagged_input`.
+    """
+    return (
+        "request blocked" in text
+        or "flagged_input" in text
+        or "input was flagged" in text
+    )
+
+
 def classify(exc: BaseException) -> AssistantError:
     if isinstance(exc, AssistantError):
         return exc
@@ -100,7 +143,14 @@ def classify(exc: BaseException) -> AssistantError:
         status = getattr(getattr(exc, "response", None), "status_code", None)
     text = f"{type(exc).__name__} {exc}".lower()
 
-    if (
+    if status in (402, 403) and _spend_limit(text):
+        # A cap the operator set, spent. `quota` is the kind whose remedy is another
+        # provider, which is where `View.alternative` sends a key-level failure, and
+        # its words are about credit rather than about a rejected key.
+        kind = "quota"
+    elif status == 403 and _blocked_by_policy(text):
+        kind = "blocked"
+    elif (
         status in (401, 403)
         or "unauthorized" in text
         or "invalid api key" in text
@@ -253,6 +303,13 @@ class Turn:
     finish_reason: str = ""
     tokens_in: int | None = None
     tokens_out: int | None = None
+    #: The rest of what the endpoint reported: the charge in dollars, the reasoning and
+    #: cached token counts, and a gateway's route and content audit. See `Chunk`.
+    cost: float | None = None
+    tokens_reasoning: int | None = None
+    tokens_cached: int | None = None
+    route: dict | None = None
+    audit: dict | None = None
     #: `time.monotonic()` when the first text arrived, which is the moment the progress
     #: block folds and the reader starts reading. None for a call that streamed none: a
     #: tool round, or an empty answer.
@@ -327,6 +384,12 @@ class Turn:
             self.tokens_in = chunk.tokens_in
         if chunk.tokens_out is not None:
             self.tokens_out = chunk.tokens_out
+        # The newest reported value of each wins, like the token counts: usage and the
+        # gateway's metadata arrive once, on the last event.
+        for name in ("cost", "tokens_reasoning", "tokens_cached", "route", "audit"):
+            value = getattr(chunk, name, None)
+            if value is not None:
+                setattr(self, name, value)
 
     def consume(self) -> Turn:
         for _ in self.deltas():
