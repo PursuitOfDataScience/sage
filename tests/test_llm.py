@@ -446,6 +446,78 @@ class TestATransportFailureIsNeverUnknown:
         assert llm.classify(exc).kind == "network"
 
 
+def _status(message: str, status: int) -> RuntimeError:
+    exc = RuntimeError(message)
+    exc.status_code = status
+    return exc
+
+
+URL = "HTTP 403 from https://openrouter.ai/api/v1/chat/completions: "
+
+
+class TestASpentCapIsNeverARejectedKey:
+    """An operator's spending cap answers 403, and a 403 used to read as `auth`.
+
+    The reader was told the key had been rejected and to tell the operator, when the key
+    was fine and the cap resets by itself. The three bodies are the ones OpenRouter
+    documents for a key limit, a workspace budget and a guardrail budget.
+    """
+
+    @pytest.mark.parametrize("body", [
+        '{"error":{"code":403,"message":"Key limit exceeded ($5.00 of $5.00 used; '
+        'resets 2026-11-30T00:00:00.000Z.)","metadata":{"limit_source":'
+        '"openrouter_key_limit"}}}',
+        '{"error":{"code":403,"message":"Workspace monthly budget of $500.00 exceeded. '
+        'Contact your org admin."}}',
+        '{"error":{"code":403,"message":"Budget limit exceeded (weekly limit). Contact '
+        'your org admin. $52.00 of $50.00 used; resets 2026-10-12T00:00:00.000Z.",'
+        '"metadata":{"limit_source":"openrouter_guardrail_budget"}}}',
+    ])
+    def test_a_spent_cap_is_quota(self, body):
+        classified = llm.classify(_status(URL + body, 403))
+        assert classified.kind == "quota"
+        assert not classified.retryable
+
+    def test_the_metadata_alone_is_enough(self):
+        body = '{"error":{"code":403,"metadata":{"limit_source":"openrouter_workspace_budget"}}}'
+        assert llm.classify(_status(URL + body, 403)).kind == "quota"
+
+    def test_an_ordinary_403_is_still_auth(self):
+        assert llm.classify(_status(URL + "error code: 1010", 403)).kind == "auth"
+        assert llm.classify(_status("HTTP 403 Forbidden", 403)).kind == "auth"
+
+
+class TestAContentBlockIsItsOwnKind:
+    """A guardrail or a moderation flag refusing the content: `blocked`, never `auth`."""
+
+    @pytest.mark.parametrize("body", [
+        '{"error":{"code":403,"message":"Request blocked: prompt injection patterns '
+        'detected","metadata":{"patterns":["ignore all previous instructions"]}}}',
+        '{"error":{"code":403,"message":"Request blocked by content filter: [EMAIL]"}}',
+        '{"error":{"code":403,"message":"openai/gpt-x requires moderation on OpenAI. '
+        'Your input was flagged for \\"harassment\\".","metadata":{"reasons":'
+        '["harassment"],"flagged_input":"..."}}}',
+    ])
+    def test_a_block_is_blocked(self, body):
+        classified = llm.classify(_status(URL + body, 403))
+        assert classified.kind == "blocked"
+        assert not classified.retryable
+        assert "sensitive" in classified.user_message
+
+    def test_the_words_alone_without_a_403_do_not_block(self):
+        """A 400 that happens to say "blocked" is not a policy refusal."""
+        assert llm.classify(_status("HTTP 400: request blocked upstream", 400)).kind == (
+            "unknown"
+        )
+
+    def test_a_cdns_own_block_page_still_fails_over(self):
+        """CloudFront's 403 page says "Request blocked." and is an outage, not a policy."""
+        page = ("HTTP 403 from https://api.example.test/v1/chat/completions: <html><h1>"
+                "403 ERROR</h1><h2>The request could not be satisfied.</h2>Request "
+                "blocked. We can't connect to the server for this app or website")
+        assert llm.classify(_status(page, 403)).kind == "auth"
+
+
 def test_tool_result_message_shape():
     message = llm.tool_result_message({"id": "x", "name": "read_doc"}, "content here")
     assert message == {

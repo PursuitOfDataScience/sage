@@ -11,8 +11,9 @@ else is a line of TOML and a module that registers itself:
     engines.register("embeddings", lambda corpus, retrieval, doc="": MyIndex(...))
 
 Importing `sage.retrieval.bm25` here is what puts the built-in engine in the
-registry. A third-party engine registers itself the same way, on import — which its
-own module has to arrange, because this package cannot import what it has not heard of.
+registry, and `sage.retrieval.rerank` adds `bm25+rerank` the same way. A third-party
+engine registers itself on import too, which its own module has to arrange, because
+this package cannot import what it has not heard of.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from .. import config
 from ..corpus import Corpus
 from ..profile import Profile, Retrieval
 from ..profile import active as _active
+from . import rerank  # noqa: F401 (registers `bm25+rerank`)
 from .base import Assessment, Result, Retriever, engines
 from .bm25 import Index
 from .text import Vocabulary, snippet, stem

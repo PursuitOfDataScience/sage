@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from collections.abc import Iterator
 from typing import Any
 
@@ -19,14 +20,28 @@ from ..profile import ProviderEntry
 from .base import (
     Chunk,
     Model,
+    audit_summary,
     current_tag,
     family_of,
     flatten,
+    route_summary,
     tool_fragments,
     usage_counts,
+    usage_details,
 )
 
+#: Where OpenRouter puts its router metadata on the last event of a stream, when the
+#: request opted in (`ProviderEntry.route_metadata`), and where its Alignment plugin
+#: puts the audit of the message. Read wherever they appear; only ASKING for either is
+#: gated on the profile, the same rule as `usage`.
+ROUTE_FIELD = "openrouter_metadata"
+AUDIT_FIELD = "alignment"
+
 logger = logging.getLogger(__name__)
+
+# `(provider, model, date)` already warned about in this process, so the hourly
+# rediscovery does not repeat one notice twenty-four times a day.
+_RETIREMENTS_SEEN: set[tuple[str, str, str]] = set()
 
 
 class OpenAICompatProvider:
@@ -39,6 +54,10 @@ class OpenAICompatProvider:
         # the order we would choose, and it decides both the picker's default and what
         # an automatic failover lands on, so it must not be alphabetical.
         self._preferred = tuple(entry.models)
+        # What the catalogue says about each model's reasoning, kept from the last
+        # `models()` call: whether it is mandatory and which effort values it takes.
+        # Empty until discovery has run, and empty means "send what was always sent".
+        self._reasoning: dict[str, dict] = {}
 
     def _headers(self) -> dict:
         # No key means no header, not an empty one. `Authorization: Bearer ` is an
@@ -77,6 +96,13 @@ class OpenAICompatProvider:
                 for entry in payload.get("data", [])
                 if isinstance(entry, dict) and entry.get("id")
             ]
+            self._reasoning = {
+                str(entry["id"]): entry["reasoning"]
+                for entry in payload.get("data", [])
+                if isinstance(entry, dict) and entry.get("id")
+                and isinstance(entry.get("reasoning"), dict)
+            }
+            self._warn_about_retirements(payload.get("data", []))
             # An endpoint may serve this deployment's paid lineup alongside the free
             # one, and offering a model there is no balance for is offering a button
             # that returns a 402. Filtered here rather than in the picker so nothing
@@ -143,6 +169,121 @@ class OpenAICompatProvider:
             families.setdefault(family_of(model_id), []).append(model_id)
         return [model_id for members in families.values() for model_id in members]
 
+    def _switch_off(self, model: str) -> str:
+        """What `reasoning.effort` the Think pill OFF sends for `model`, or "".
+
+        Off has always meant "send nothing", and on most models nothing is not off:
+        `~deepseek/deepseek-v4-flash-latest` reasons at its default `high` effort either
+        way (801-3750 reasoning tokens a call with the pill off, measured 2026-11-25,
+        against 0 with `effort: "none"`). So where the profile names an off value
+        (`ProviderEntry.think_off`), it is sent, but only where the catalogue says the
+        model will take it:
+
+        * never for a router, whose next request is a different model the catalogue
+          entry does not describe;
+        * only where `mandatory` is explicitly false: a mandatory model rejects `none`;
+        * only where `supported_efforts` lists the value, or is present and null, which
+          the catalogue uses for "every gateway value". Absent means the model has no
+          effort control at all.
+
+        Anything the catalogue has not described (discovery failed, a model it does not
+        list) is left alone, which is the old behaviour exactly.
+        """
+        wanted = self.entry.think_off
+        if not wanted or model in self.entry.routers:
+            return ""
+        caps = self._reasoning.get(model)
+        if not isinstance(caps, dict) or caps.get("mandatory") is not False:
+            return ""
+        if "supported_efforts" not in caps:
+            return ""
+        efforts = caps.get("supported_efforts")
+        if efforts is None or (isinstance(efforts, list) and wanted in efforts):
+            return wanted
+        return ""
+
+    def _warn_about_retirements(self, catalogue) -> None:
+        """Log, once per process, a model in the profile's list that has a retirement date.
+
+        The catalogue carries `expiration_date` ("the date after which the model may be
+        removed"), and the profile's list is what a fresh session starts on and what a
+        failover lands on, so a date on one of those ids is the notice an operator
+        needs before the day rather than after it. An alias (`~vendor/family-latest`)
+        is checked through the model it currently resolves to as well.
+        """
+        try:
+            wanted = set(self._preferred)
+            if not wanted or not isinstance(catalogue, list):
+                return
+            dated = {}
+            for item in catalogue:
+                if not isinstance(item, dict) or not item.get("expiration_date"):
+                    continue
+                for name in (item.get("id"), item.get("canonical_slug")):
+                    if isinstance(name, str) and name:
+                        dated[name] = str(item["expiration_date"])
+            for item in catalogue:
+                if not isinstance(item, dict) or item.get("id") not in wanted:
+                    continue
+                target = item.get("alias_target")
+                names = [item["id"]]
+                if isinstance(target, dict) and isinstance(target.get("slug"), str):
+                    names.append(target["slug"])
+                for name in names:
+                    when = dated.get(name)
+                    if when and (self.name, name, when) not in _RETIREMENTS_SEEN:
+                        _RETIREMENTS_SEEN.add((self.name, name, when))
+                        logger.warning(
+                            "%s: %s, in the profile's lineup as %s, may be removed "
+                            "after %s", self.name, name, item["id"], when,
+                        )
+        except Exception:  # noqa: BLE001 (a warning is never worth the model list)
+            logger.debug("Could not read retirement dates", exc_info=True)
+
+    def status(self) -> dict | None:
+        """This key's spending limit and the account's free-model counter, or None.
+
+        Read from the endpoint the profile names (`ProviderEntry.status_path`;
+        OpenRouter's `GET /key`), which costs no request against the free-model cap.
+        Normalised to plain numbers so a caller can compare them without knowing the
+        provider's field names; anything the endpoint did not report is None. Never
+        raises: this is a warning light, and a broken bulb must not stop the car.
+        """
+        path = self.entry.status_path
+        if not path:
+            return None
+        try:
+            import httpx  # noqa: PLC0415
+
+            response = httpx.get(
+                f"{self._base}/{path.lstrip('/')}", headers=self._headers(), timeout=10
+            )
+            response.raise_for_status()
+            data = response.json().get("data")
+            if not isinstance(data, dict):
+                return None
+
+            def number(raw):
+                if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+                    return None
+                return raw if math.isfinite(raw) else None
+
+            free = data.get("free_model_daily_requests")
+            free = free if isinstance(free, dict) else {}
+            reset = data.get("limit_reset")
+            return {
+                "free_used": number(free.get("used")),
+                "free_limit": number(free.get("limit")),
+                "free_remaining": number(free.get("remaining")),
+                "limit_usd": number(data.get("limit")),
+                "limit_remaining_usd": number(data.get("limit_remaining")),
+                "limit_reset": reset if isinstance(reset, str) else "",
+                "spent_today_usd": number(data.get("usage_daily")),
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Could not read %s status: %s", self.name, exc)
+            return None
+
     def stream(self, model, messages, tools, thinking=False,
                tool_choice="auto") -> Iterator[Chunk]:
         import httpx  # noqa: PLC0415
@@ -198,7 +339,22 @@ class OpenAICompatProvider:
         # can say how long a call took but not what it was charged.
         if self.entry.stream_usage:
             payload["stream_options"] = {"include_usage": True}
+        # Think OFF, made to mean off where the model allows it. See `_switch_off`.
+        if not thinking and self.entry.think_off:
+            effort = self._switch_off(model)
+            if effort:
+                payload["reasoning"] = {"effort": effort}
+        # Provider preferences for this model, as the profile wrote them.
+        preferences = self.entry.routing_for(model)
+        if preferences:
+            payload["provider"] = preferences
+        if self.entry.alignment:
+            from .. import alignment  # noqa: PLC0415 (only an audited entry needs it)
+
+            payload["plugins"] = [alignment.plugin()]
         headers = self._headers()
+        if self.entry.route_metadata:
+            headers["X-OpenRouter-Metadata"] = "enabled"
         # Where this request came from, for an endpoint that groups requests, and in
         # the header and field the profile names. Nothing here knows which endpoint
         # that is: an entry that names neither sends neither. See `CallTag`.
@@ -207,9 +363,19 @@ class OpenAICompatProvider:
             if self.entry.session_header and tag.session:
                 headers[self.entry.session_header] = tag.session
             if self.entry.trace_field and tag.turn_id:
-                payload[self.entry.trace_field] = {
+                trace = {
                     "trace_id": tag.turn_id,
                     "generation_name": f"round {tag.round}",
+                    # The deployment, the commit, the prompt and the corpus, so a
+                    # trace joins this app's own records. Only what is known: an
+                    # empty value is left out rather than sent as "".
+                    "environment": config.DEPLOYMENT,
+                    "version": config.GIT_SHA,
+                    "prompt": tag.prompt,
+                    "corpus": tag.corpus,
+                }
+                payload[self.entry.trace_field] = {
+                    key: value for key, value in trace.items() if value
                 }
 
         with (
@@ -333,7 +499,18 @@ def parse_sse(lines: Iterator[str]) -> Iterator[Chunk]:
         served = event.get("model")
         served = served if isinstance(served, str) else ""
         tokens_in, tokens_out = usage_counts(event.get("usage"))
-        reported = tokens_in is not None or tokens_out is not None
+        cost, reasoning, cached = usage_details(event.get("usage"))
+        route = route_summary(event.get(ROUTE_FIELD))
+        audit = audit_summary(event.get(AUDIT_FIELD))
+        # What the call said about itself, carried on whichever chunk it arrived with.
+        extra = {
+            "cost": cost, "tokens_reasoning": reasoning, "tokens_cached": cached,
+            "route": route, "audit": audit,
+        }
+        reported = (
+            tokens_in is not None or tokens_out is not None
+            or any(value is not None for value in extra.values())
+        )
         # `isinstance` before the subscript, not after it. `{"choices": {"delta": {}}}`
         # is a dict, which is truthy, so `choices[0]` raised `KeyError: 0` before the
         # shape check below could run, and a raise here escapes the generator, so
@@ -347,7 +524,8 @@ def parse_sse(lines: Iterator[str]) -> Iterator[Chunk]:
             or not isinstance(choices[0], dict)
         ):
             if reported:
-                yield Chunk(model=served, tokens_in=tokens_in, tokens_out=tokens_out)
+                yield Chunk(model=served, tokens_in=tokens_in, tokens_out=tokens_out,
+                            **extra)
             continue
         delta = choices[0].get("delta")
         if not isinstance(delta, dict):
@@ -360,4 +538,5 @@ def parse_sse(lines: Iterator[str]) -> Iterator[Chunk]:
             finish_reason=finish if isinstance(finish, str) else "",
             tokens_in=tokens_in,
             tokens_out=tokens_out,
+            **extra,
         )

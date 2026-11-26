@@ -297,10 +297,12 @@ base_url_env = "OPENROUTER_BASE_URL"
 # Mistral answered `429` as well. Every provider refusing at once is not a state the
 # failover machinery can rescue.
 #
-# What it costs: $0.03 per million input tokens and $0.07 per million output, the
-# cheapest thing OpenRouter serves that is not free: a question of this app's shape
-# costs a small fraction of a cent. It takes tools, which this app requires, and its
-# context is 1.31M tokens.
+# What it costs: $0.03 per million input tokens and $0.07 per million output when it
+# was added, and $0.045 and $0.136 on its cheapest endpoint when re-read on 2026-11-25
+# (the alias resolves to `deepseek/deepseek-v4-flash-0731`): a question of this app's
+# shape still costs a small fraction of a cent, and every call record now carries the
+# charge (`cost_usd`). It takes tools, which this app requires, and its context is
+# 1.05M tokens.
 #
 # What it costs the READER: it is TEXT-ONLY (`input_modalities: ["text"]`), so an
 # attached screenshot will not be looked at and `composer.render_attachments` says so
@@ -339,8 +341,27 @@ free_marks_env = "SAGE_OPENROUTER_FREE_MARKS"
 # it routes to. `reasoning_effort` (the low/medium/high dial) is on only 6 of those
 # 19, which is why the control is a switch: the router serves a different model every
 # turn, so an effort setting would be honoured on about a third of them with nothing
-# on screen able to say which.
+# on screen able to say which. (Re-read 2026-11-25: the pool is 11 models, all listing
+# `reasoning`, 3 accepting an effort level, and 3 whose reasoning is mandatory.)
 reasoning = true
+# What the pill OFF sends to a pinned model whose catalogue entry says reasoning can be
+# switched off: `effort = "none"`. Empty here, so OFF still sends nothing, which is what
+# it has always done. Why it exists: the stand-in reasons at its default `high` effort
+# whether the pill is on or off (801-3750 reasoning tokens a call off, 807-1733 on, four
+# interleaved pairs on 2026-11-25), and `none` took that to 0. Not switched on because
+# what it does to ANSWERS is unmeasured: the paired latency test and the bench comparison
+# both need the stand-in to answer, and on 2026-11-26 it could not (`402`, the account's
+# balance cannot cover `max_tokens` 8000). `SAGE_OPENROUTER_THINK_OFF=none` switches it on
+# without a commit once that has been measured. Never applies to the router.
+think_off = ""
+think_off_env = "SAGE_OPENROUTER_THINK_OFF"
+# The paid stand-in goes only to providers that do not keep or train on prompts:
+# readers paste job scripts and logs. Measured before declaring it (2026-11-25, with
+# router metadata on): the stand-in still had 37 candidate endpoints and came back 200.
+# NOT applied to `openrouter/free`, whose pool the same filter halved (10 to 5 models),
+# and `zdr` would empty it (404 "No endpoints found matching your data policy"). The
+# free models' own training opt-out is an account setting, not a request field.
+routing = { "~deepseek/deepseek-v4-flash-latest" = { data_collection = "deny" } }
 # `openrouter/free` is a ROUTER, not a model, and this is where the app is told so.
 #
 # It matters because it changes what "try again" means. Everywhere else in the lineup a
@@ -387,9 +408,34 @@ free_only_env = "SAGE_OPENROUTER_FREE_ONLY"
 # with a 400: on 2026-10-06 one request to `openrouter/free` carried all three of these
 # lines at once and came back 200, served by `nvidia/nemotron-3.5-lightning:free`, with
 # `usage` on its last event (23 prompt, 93 completion, 116 total tokens).
+#
+# The trace also names the deployment, the commit, the prompt's fingerprint and the
+# corpus commit (`environment`, `version`, `prompt`, `corpus`), the same values the turn
+# record carries, so a Broadcast row joins this app's own records. Measured 2026-11-26:
+# a request carrying all four came back 200.
 stream_usage = true
 session_header = "x-session-id"
 trace_field = "trace"
+# How OpenRouter routed each request, on the last event of the stream: the call record
+# keeps the number of upstream attempts (`upstream_attempts`), the strategy, the number
+# of candidates, and any guardrail that detected something. Measured 2026-11-25 and
+# 2026-11-26 on `openrouter/free` (200, `strategy=free`, 7-10 candidates) and on the
+# paid stand-in (200): one free-router request in ten took a second attempt the app
+# never saw.
+route_metadata = true
+# The key's own limits and the account's free-model counter, read hourly from
+# `GET /key` (which spends nothing against the free cap). `sage/quota.py` logs a
+# WARNING once a tenth or less of either is left (`SAGE_LIMIT_WARNING_FRACTION`). Read on
+# 2026-11-25: 778 of the account's 1000 free requests already used by 21:30 UTC, which
+# is the cap behind the 2026-09-12 outage.
+status_path = "/key"
+# The content audit (`sage/alignment.py`): OFF, and it must stay off until the
+# workspace is admitted to OpenRouter's Alignment beta. Asked on 2026-11-26, the answer
+# was `400 ... not_admitted`, and a 400 on every request would take this provider out of
+# the lineup. `python tools/provider_status.py --audit` asks again; when it says
+# admitted, `SAGE_OPENROUTER_ALIGNMENT=1` switches it on without a commit.
+alignment = false
+alignment_env = "SAGE_OPENROUTER_ALIGNMENT"
 
 [[providers]]
 name = "vertex"

@@ -31,7 +31,15 @@ from evals import harness
 from sage import config, feedback, llm, providers, telemetry
 from sage.files import Attachment
 from sage.profile import ProviderEntry, from_mapping
-from sage.providers.base import CallTag, current_tag, tagged, usage_counts
+from sage.providers.base import (
+    CallTag,
+    audit_summary,
+    current_tag,
+    route_summary,
+    tagged,
+    usage_counts,
+    usage_details,
+)
 from sage.providers.mistral import MistralProvider
 from sage.providers.openai_compat import OpenAICompatProvider
 
@@ -350,9 +358,23 @@ class TestWhatARequestSaysAboutItself:
         assert not any(name.lower().startswith("x-") for name in wire.headers)
 
     def test_an_entry_that_declares_all_three_sends_all_three(self, monkeypatch):
-        wire = sent(monkeypatch, DECLARED)
+        monkeypatch.setattr(config, "DEPLOYMENT", "cloudrun")
+        monkeypatch.setattr(config, "GIT_SHA", "abc1234")
+        tag = CallTag(session="0" * 32, turn_id="1" * 32, round=2,
+                      prompt="0123456789ab", corpus="9152b2f")
+        wire = sent(monkeypatch, DECLARED, tag=tag)
         assert wire.json["stream_options"] == {"include_usage": True}
-        assert wire.headers["x-session-id"] == TAG.session
+        assert wire.headers["x-session-id"] == tag.session
+        assert wire.json["trace"] == {
+            "trace_id": tag.turn_id, "generation_name": "round 2",
+            "environment": "cloudrun", "version": "abc1234",
+            "prompt": "0123456789ab", "corpus": "9152b2f",
+        }
+
+    def test_what_the_trace_does_not_know_it_leaves_out(self, monkeypatch):
+        monkeypatch.setattr(config, "DEPLOYMENT", "")
+        monkeypatch.setattr(config, "GIT_SHA", "")
+        wire = sent(monkeypatch, DECLARED)
         assert wire.json["trace"] == {"trace_id": TAG.turn_id, "generation_name": "round 2"}
 
     def test_the_names_are_the_profiles_and_not_the_packages(self, monkeypatch):
@@ -492,6 +514,101 @@ class TestWhatAStreamSaysAboutItself:
         assert (turn.tokens_in, turn.tokens_out) == (4, 1)
 
 
+class TestWhatAGatewaySaysAboutTheCall:
+    """The charge, the reasoning and cached shares, and the router's own account.
+
+    The last event below is the shape OpenRouter streamed on 2026-11-26 for a request
+    to `openrouter/free` carrying `X-OpenRouter-Metadata: enabled`, trimmed: usage and
+    metadata on the same event as the final, empty delta.
+    """
+
+    LAST = json.dumps({
+        "model": "nvidia/nemotron-3.5-lightning:free",
+        "choices": [{"index": 0, "delta": {"content": ""}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 23, "completion_tokens": 112, "total_tokens": 135,
+                  "cost": 0.0000175, "prompt_tokens_details": {"cached_tokens": 16},
+                  "completion_tokens_details": {"reasoning_tokens": 109}},
+        "openrouter_metadata": {
+            "requested": "openrouter/free", "strategy": "free", "attempt": 3,
+            "summary": "strategy=free, available=10, attempts=3, selected=Nvidia",
+            "endpoints": {"total": 10, "available": []},
+            "pipeline": [{"type": "plugin", "name": "free-router", "data": {}}],
+        },
+    })
+    LINES = [
+        'data: {"model":"nvidia/nemotron-3.5-lightning:free",'
+        '"choices":[{"delta":{"content":"ready"}}]}',
+        f"data: {LAST}",
+        "data: [DONE]",
+    ]
+
+    def test_the_turn_keeps_all_of_it(self):
+        turn = llm.Turn(stream=providers.parse_sse(iter(self.LINES))).consume()
+        assert turn.text == "ready"
+        assert (turn.tokens_in, turn.tokens_out) == (23, 112)
+        assert turn.cost == pytest.approx(0.0000175)
+        assert (turn.tokens_reasoning, turn.tokens_cached) == (109, 16)
+        assert turn.route == {"attempts": 3, "strategy": "free", "candidates": 10,
+                              "flagged": []}
+        assert turn.audit is None
+
+    def test_a_free_call_costs_zero_which_is_not_missing(self):
+        assert usage_details({"cost": 0}) == (0.0, None, None)
+
+    @pytest.mark.parametrize("raw", [None, {}, {"cost": "a lot"}, {"cost": True},
+                                     {"cost": float("nan")}, {"cost": -1},
+                                     {"completion_tokens_details": "x"}, "usage"])
+    def test_anything_that_is_not_a_charge_is_none(self, raw):
+        cost, _reasoning, _cached = usage_details(raw)
+        assert cost is None
+
+    def test_a_guardrail_that_detected_something_is_named(self):
+        """The stage shape the router-metadata documentation gives for a block."""
+        summary = route_summary({
+            "attempt": 1, "strategy": "direct",
+            "pipeline": [
+                {"type": "guardrail", "name": "regex_pi_detection",
+                 "data": {"action": "flagged", "detected": True}},
+                {"type": "guardrail", "name": "content-filter",
+                 "data": {"flagged": False}},
+                {"type": "plugin", "name": "web-search", "data": {"detected": True}},
+            ],
+        })
+        assert summary["flagged"] == ["regex_pi_detection:flagged"]
+
+    @pytest.mark.parametrize("raw", [None, "metadata", [], {"pipeline": "nope"}])
+    def test_metadata_that_is_not_metadata_is_no_route(self, raw):
+        summary = route_summary(raw)
+        assert summary is None or summary["flagged"] == []
+
+    def test_an_audit_keeps_the_delivered_message(self):
+        verdict = audit_summary({"calls": [
+            {"call": 1, "outcome": "blocked",
+             "rules": [{"applicable": True, "probability": 0.9, "broken": True}]},
+            {"call": 2, "outcome": "allowed",
+             "rules": [{"applicable": True, "probability": 0.12, "broken": False},
+                       {"applicable": False, "probability": None, "broken": False}]},
+        ]})
+        assert verdict == {"outcome": "allowed", "broken": [], "top": 0.12}
+
+    @pytest.mark.parametrize("raw", [None, {}, {"calls": []}, {"calls": "x"},
+                                     {"calls": [{"rules": [{"probability": float("nan")}]}]}])
+    def test_an_audit_that_says_nothing_is_nothing(self, raw):
+        verdict = audit_summary(raw)
+        assert verdict is None or verdict["top"] is None
+
+    def test_a_malformed_metadata_object_never_ends_the_answer(self):
+        lines = [
+            'data: {"choices":[{"delta":{"content":"kept"}}],'
+            '"openrouter_metadata":{"attempt":"three","pipeline":[1,2]},'
+            '"alignment":{"calls":[{"rules":"nope"}]},"usage":{"cost":Infinity}}',
+        ]
+        turn = llm.Turn(stream=providers.parse_sse(iter(lines))).consume()
+        assert turn.text == "kept"
+        assert turn.cost is None
+        assert turn.route["attempts"] is None
+
+
 class TestTheProfileDeclaresIt:
     def test_the_defaults_send_nothing(self):
         entry = from_mapping({"providers": [{"name": "x", "kind": "openai"}]}).provider("x")
@@ -625,6 +742,45 @@ class TestWhatATurnRecords:
         # The answer it produced carries the same id, for a rating to join on.
         assert stub.session_state["messages"][-1]["turn_id"] == turn["turn_id"]
         assert stub.session_state["ledger"] is None, "the ledger goes with the record"
+
+    def test_the_charge_is_recorded_per_call_and_summed_per_turn(
+        self, monkeypatch, capsys
+    ):
+        monkeypatch.setattr(config, "TELEMETRY", "stdout")
+        priced_search = [event(tool_calls=SEARCH[0].tool_calls, cost=0.00002,
+                               tokens_reasoning=40)]
+        priced_answer = [
+            event("Your /home quota is ", model="vendor/served-model:free"),
+            event("30 GB.", finish_reason="stop", tokens_in=120, tokens_out=9,
+                  cost=0.00003, tokens_cached=64,
+                  route={"attempts": 2, "strategy": "free", "candidates": 10,
+                         "flagged": ["regex_pi_detection:flagged"]}),
+        ]
+        client = Scripted([priced_search, priced_answer])
+        run_app(monkeypatch, client=client, session=asking())
+        found = records(capsys.readouterr().out)
+        calls = [row for row in found if row["kind"] == "call"]
+        (turn,) = [row for row in found if row["kind"] == "turn"]
+        assert [row["cost_usd"] for row in calls] == [0.00002, 0.00003]
+        assert turn["cost_usd"] == pytest.approx(0.00005)
+        assert [row["tokens_reasoning"] for row in calls] == [40, None]
+        assert [row["tokens_cached"] for row in calls] == [None, 64]
+        assert calls[1]["upstream_attempts"] == 2
+        assert calls[1]["route_strategy"] == "free"
+        assert calls[1]["route_candidates"] == 10
+        assert calls[1]["guardrail_flags"] == ["regex_pi_detection:flagged"]
+        assert calls[0]["upstream_attempts"] is None and calls[0]["guardrail_flags"] == []
+        assert calls[1]["audit_outcome"] == "" and calls[1]["audit_broken"] == []
+
+    def test_a_turn_nobody_priced_has_no_charge(self, monkeypatch, capsys):
+        """Missing stays missing: a zero would claim the turn was measured as free."""
+        monkeypatch.setattr(config, "TELEMETRY", "stdout")
+        client = Scripted([SEARCH, ANSWER])
+        run_app(monkeypatch, client=client, session=asking())
+        found = records(capsys.readouterr().out)
+        (turn,) = [row for row in found if row["kind"] == "turn"]
+        assert turn["cost_usd"] is None
+        assert all(row["cost_usd"] is None for row in found if row["kind"] == "call")
 
     def test_the_request_carried_the_same_session_turn_and_round(
         self, monkeypatch, capsys

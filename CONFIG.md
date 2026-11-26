@@ -19,6 +19,7 @@ has to change and none of them are settings.
 | `SAGE_MAX_TOOL_ROUNDS` | `4` | Search/read rounds before the turn must answer |
 | `SAGE_MAX_MODEL_ATTEMPTS` | `0` *(the whole lineup)* | Models one turn may ask before it gives up. A model that fails in a way another model might not (an empty reply, a spent allowance, a 5xx) hands the question to the next one automatically. `1` switches that off; a lineup of eight can cost forty provider calls in the worst case, which is what `SAGE_CALL_BUDGET` is for |
 | `SAGE_ROUTER_RETRIES` | `2` | Times a turn may ask a ROUTER again after it produced no answer. Only for the ids a profile lists under `routers`, where the same name resolves to a different model per request: a re-ask there is a different model, which the lineup walk above cannot reach. `0` switches it off, and so does `SAGE_MAX_MODEL_ATTEMPTS=1` |
+| `SAGE_PIN_ROUTED_MODEL` | `0` | Keep a turn's later rounds on the model a ROUTER served its first tool round, instead of a new roll per request. Off until `tools/agent_bench.py` shows it helps; a pinned request that fails asks the router again, once, with no backoff |
 | `SAGE_OPENROUTER_ROUTERS` | `openrouter/free` | Which of that provider's ids are routers rather than models |
 | `SAGE_SEARCH_RESULTS` | `6` | Results per search |
 | `SAGE_MAX_PER_PAGE` | `2` | Sections of one page allowed in a result set |
@@ -33,6 +34,8 @@ has to change and none of them are settings.
 | `SAGE_STATUS_ARGUMENT_CHARS` | `160` | How much of a tool's argument the progress block shows: the query searched for, and the *title* of the section read, since a corpus path is this repo's name for a file and not the documentation's. A ceiling on what a model can put in the page, not a layout number: the row ellipses whatever is too wide for the window it is in. Raised from 96, which ellipsed the longest title the shipped docs produce |
 | `SAGE_STATUS_TAIL_CHARS` | `30` | How short an argument's last word has to be for the animated ellipsis to be glued to it. The dots ride in the message's own text flow, so a wrapped row would otherwise break between the last word and them and leave the dots alone on a line at the left margin, 740px from the words they belong to, which is the drift this number exists to stop. `white-space: nowrap` does the gluing and cannot be applied blindly: a single unbreakable token the length of `SAGE_STATUS_ARGUMENT_CHARS` has to stay breakable or it overflows the column by up to 127px. 30 is longer than any word a real section title contains and still fits beside the dots at 500px |
 | `SAGE_MAX_UPLOAD_BYTES` | `10485760` | Upload size limit, per file |
+| `SAGE_PDF_OCR` | *(empty = off)* | A `provider:model` to send a scanned PDF (no text layer) through, using that provider's PDF parser. Every failure keeps the reader's "Scanned PDFs need OCR" message. The file leaves for the provider and its parsing engine, and OpenRouter wants a $0.50 balance for any file. See [`sage/ocr.py`](sage/ocr.py) |
+| `SAGE_PDF_OCR_ENGINE` | `cloudflare-ai` | Who parses it: `cloudflare-ai` (free) or `mistral-ocr` ($2 per 1000 pages, better on real scans) |
 | `SAGE_MAX_ATTACHED_BYTES` | `20971520` | Upload size limit, across one turn |
 | `SAGE_IMAGE_MAX_EDGE` | `1568` | Longest edge an image is downscaled to before it is sent |
 | `SAGE_MAX_IMAGE_REQUEST_BYTES` | `4194304` *(4 MiB)* | Ceiling on the assembled base64 image bytes in one request. Base64 inflates by a third, so a legal `SAGE_MAX_ATTACHED_BYTES` of uploads can become a 26 MB request no model accepts, and a data URL is deliberately uncounted against the character budget, so nothing else bounded it. What fits is sent; the rest are named in the text, and the first image always goes |
@@ -68,8 +71,8 @@ Every record starts with the same fields:
 
 | Kind | Its own fields |
 | --- | --- |
-| `turn` | `question` (first 1000 characters), `outcome` (`answered` or `failed`), `model`, `error_kind`, `rounds`, `searches`, `sections`, `caveats`, `sources`, `redacted`, `seconds`, `corpus` (the docs' upstream commit), `prompt` (12 hex characters of the system prompt's SHA-256), `served_model`, `tried`, `think`, `steer` (`""`, `shorter` or `longer`), `calls`, `tokens_in`, `tokens_out`, `ttft_s`, `attachments` (`{count, kinds}`) |
-| `call` | `n` (counts across the whole turn), `round`, `provider`, `model` (the id asked for), `served_model` (the one that answered), `ok`, `error_kind`, `status`, `finish_reason`, `ttft_s`, `seconds`, `tokens_in`, `tokens_out`, `tool_calls` (names only), `toolless` |
+| `turn` | `question` (first 1000 characters), `outcome` (`answered` or `failed`), `model`, `error_kind`, `rounds`, `searches`, `sections`, `caveats`, `sources`, `redacted`, `seconds`, `corpus` (the docs' upstream commit), `prompt` (12 hex characters of the system prompt's SHA-256), `served_model`, `tried`, `think`, `steer` (`""`, `shorter` or `longer`), `calls`, `tokens_in`, `tokens_out`, `ttft_s`, `attachments` (`{count, kinds}`), `cost_usd` |
+| `call` | `n` (counts across the whole turn), `round`, `provider`, `model` (the id asked for), `served_model` (the one that answered), `ok`, `error_kind`, `status`, `finish_reason`, `ttft_s`, `seconds`, `tokens_in`, `tokens_out`, `tool_calls` (names only), `toolless`, `cost_usd`, `tokens_reasoning`, `tokens_cached`, `upstream_attempts`, `route_strategy`, `route_candidates`, `guardrail_flags`, `audit_outcome`, `audit_broken`, `audit_top` |
 | `miss` | `queries`, `question` |
 | `rating` | `verdict`, `question`, `answer` (first 4000 characters), `sources` |
 
@@ -84,6 +87,17 @@ What the less obvious ones mean:
   reported usage. Output counts thinking, which Gemini reports outside `completion_tokens`.
 - **`ok`** is `false` for a call the turn could not use, including a stream the app refused
   to ship (`empty`), and `null` with `error_kind: interrupted` for one the reader cut off.
+- **`cost_usd`** is what the endpoint said it charged, in dollars: `0` for a free model,
+  `null` where nothing was reported (Vertex and the Gemini API do not report a charge). The
+  turn's is the sum of its calls. It is the measured cost per call that `SAGE_CALL_BUDGET`
+  is meant to be set from.
+- **`upstream_attempts`**, **`route_strategy`**, **`route_candidates`** and
+  **`guardrail_flags`** come from OpenRouter's router metadata, for an entry that declares
+  `route_metadata`. More than one attempt is a failover inside the router that the app never
+  saw; `guardrail_flags` names each guardrail stage that detected something, as
+  `name:action`.
+- **`audit_*`** is the content audit's verdict (`sage/alignment.py`), empty unless an
+  entry declares `alignment`.
 
 Never in a record: answer text (only `rating` quotes what was rated), attachment names or
 contents, tool arguments, the signed-in identity. A stopped or abandoned turn leaves its
@@ -171,6 +185,13 @@ this app can display a transcript anyway. There is no environment override and n
 dial, because `reasoning_effort` is supported by only a minority of the models the router
 picks from: a low/medium/high setting would be honoured on some turns and ignored on
 others, with nothing on screen able to say which.
+
+OFF sends nothing, and on most models nothing is not off: the paid stand-in reasons at
+its default `high` effort either way. A provider entry may name what OFF sends instead
+(`think_off = "none"`, or `SAGE_OPENROUTER_THINK_OFF=none` for the shipped one), and it is
+sent only to a model whose catalogue entry says reasoning is optional and takes that
+value, never to a router. The shipped profile leaves it empty until its effect on answers
+is measured.
 
 ### Naming a model
 
@@ -326,6 +347,19 @@ Counters live in memory, shared across sessions in the one process Streamlit run
 They reset when the app restarts, which on a platform that hibernates idle apps is
 roughly daily. A deployment that needs the budget to survive a restart needs external
 storage.
+
+**Or a cap the provider keeps.** OpenRouter's own limits are shared by every instance and
+survive a restart: a credit limit on the deployment's key with a daily reset (every plan),
+and a workspace budget. A request past either is refused with a `403` before it reaches a
+model, which the app reads as `quota` and fails over from. An entry that declares
+`status_path` has those counters read hourly, off the page's thread, and a WARNING logged
+once a tenth or less is left of the key's limit or of the account's free-model requests
+(`SAGE_LIMIT_WARNING_FRACTION`, default `0.1`, `0` = off). `python tools/provider_status.py`
+prints the same numbers on demand.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SAGE_LIMIT_WARNING_FRACTION` | `0.1` | Share of a provider-side limit left at which a WARNING is logged |
 
 ### Requiring a login
 

@@ -50,6 +50,7 @@ already worked this way and it is the right instinct.
 | `tools/agent_bench.py --toolless` | B | a key | the same phases down the grounded path |
 | `tools/agent_bench.py --meta` | B | a key | asked about itself: does it name its own machinery? |
 | `tools/scorecard.py` | all | nothing | the card, and the diff against the last one |
+| `tools/grounding_check.py` | B | a key | is each saved answer supported by what its turn read? |
 | `tools/render_check.py` | UI | Chrome | 720 renders = 19 scenarios x 2 schemes x 6 widths, minus the states a scenario skips (predates this) |
 | `tools/palette_check.py` | UI | nothing | declared colours against the baseline (predates this) |
 
@@ -606,6 +607,21 @@ When a judge is eventually worth adding, the order is: judge ~150 answers once w
 strong model, per claim, to find out which cheap proxies correlate; then keep gating on
 the proxies.
 
+`tools/grounding_check.py` is that instrument, not yet that calibration. It sends each
+answered turn in a bench `transcripts.jsonl` to OpenRouter's Decisions API with one typed
+question (supported, unsupported or declined against the excerpts the turn read) and
+prints the label with its calibrated probability. It is Axis B, exits 0 whatever it
+finds, and costs input tokens only: six saved answers judged for $0.0006 on 2026-11-26.
+Its confidences on that run (0.24 to 0.86) are the reason it is a measurement to
+calibrate against `evals/checks.py`, not a verdict to gate on.
+
+A second instrument rides on live traffic instead of saved answers, for a deployment
+admitted to OpenRouter's Alignment beta: `sage/alignment.py` attaches an audit, in a
+mode that delivers every message and does not put the rules in front of the model, and
+each call record carries the evaluator's verdict on whether the answer named its own
+machinery. Off in the shipped profile until `tools/provider_status.py --audit` says the
+account is admitted.
+
 ### A check has to be calibrated against real output before its number means anything
 
 The first run of these checks over 75 real answers reported 31 invented tokens and 8
@@ -916,9 +932,10 @@ the published HTML is the only thing that can tell the two apart.
   Failed turns are logged too, because a rating can never reach them: there is no answer
   under the question to rate. Still off unless `SAGE_FEEDBACK_LOG` names a file, and on a
   platform that hibernates, still needs a durable sink to survive a restart.
-- **Cost.** `provider_calls` is recorded per turn but nothing prices it, because the free
-  tier has no price. A paid deployment would want spend per answered question, and the
-  field is already there.
+- **Cost, on the providers that do not report it.** Every call record carries `cost_usd`,
+  what the endpoint said it charged: `0` on the free router, dollars on a paid model,
+  summed per turn. Vertex and the Gemini API report no charge, so their calls carry
+  `null` and only token counts.
 - **Anchors.** `tools/anchor_check.py` validates citation targets against the live site,
   and it is network-bound so it stays out of the suite. What *is* gated is the offline
   half: every chunk has a URL, and every URL is a usable web address (scheme, no

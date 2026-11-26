@@ -25,6 +25,7 @@ today should not have to learn a new file to keep working.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from dataclasses import dataclass, field, replace
@@ -288,6 +289,12 @@ class Retrieval:
     engine: str = "bm25"
     synonyms: tuple[tuple[str, ...], ...] = ()
     protected: tuple[str, ...] = ()
+    #: For `engine = "bm25+rerank"` only (`sage/retrieval/rerank.py`): the rerank model,
+    #: the provider entry whose base URL and key serve it, and how many BM25 candidates
+    #: it reorders. Ignored by every other engine.
+    rerank_model: str = ""
+    rerank_provider: str = ""
+    rerank_depth: int = 20
 
 
 @dataclass(frozen=True)
@@ -394,6 +401,34 @@ class ProviderEntry:
     #: One sentence shown when no key is set anywhere: where to get one, what it
     #: looks like. The only screen a reader sees before the app stops.
     hint: str = ""
+    #: Whether to ask this endpoint how it routed each request: OpenRouter's
+    #: `X-OpenRouter-Metadata: enabled`, answered with `openrouter_metadata` on the
+    #: last event of the stream. The call record keeps how many upstream attempts a
+    #: request took, which is the one failover this app cannot otherwise see: measured
+    #: on `openrouter/free` on 2026-11-25, one request in ten needed a second attempt
+    #: inside the router. Declared, like `stream_usage`, because it is a header an
+    #: endpoint that has not heard of it is entitled to refuse.
+    route_metadata: bool = False
+    #: Provider preferences for particular models, sent as OpenRouter's `provider`
+    #: object: `(model id, JSON of the object)` pairs, read by `routing_for`. Pairs of
+    #: strings, like `labels`, because every field on this frozen dataclass is
+    #: immutable and a dict is not. `*` as the id applies to every model of the entry;
+    #: a model's own entry replaces it rather than merging with it.
+    routing: tuple[tuple[str, str], ...] = ()
+    #: What the Think pill OFF sends, as a `reasoning.effort` value, for a model whose
+    #: catalogue entry says reasoning can be switched off; "" sends nothing, which is
+    #: what the pill off has always done. See `openai_compat.OpenAICompatProvider`:
+    #: the decision is per model, read off `GET /models`, and a router or a model the
+    #: catalogue did not describe is left alone.
+    think_off: str = ""
+    #: Whether to send the content audit `sage.alignment` describes (OpenRouter's
+    #: Alignment plugin, audit mode). Off unless the account is admitted to the beta:
+    #: a workspace that is not answers every request carrying it with a 400.
+    alignment: bool = False
+    #: Path, under `base_url`, of an endpoint that reports this key's limits and the
+    #: account's free-model counter (OpenRouter's `GET /key`), or "" for none. Read
+    #: hourly by `ui.access`, which logs a warning before a limit runs out.
+    status_path: str = ""
     #: The `User-Agent` to send. Empty means the HTTP client's own, which is honest
     #: and is the default.
     #:
@@ -415,6 +450,19 @@ class ProviderEntry:
         return next(
             (shown for served, shown in self.labels if served == model_id), ""
         )
+
+    def routing_for(self, model_id: str) -> dict | None:
+        """The provider preferences to send with a request for `model_id`, or None."""
+        chosen = next((raw for served, raw in self.routing if served == model_id), None)
+        if chosen is None:
+            chosen = next((raw for served, raw in self.routing if served == "*"), None)
+        if chosen is None:
+            return None
+        try:
+            value = json.loads(chosen)
+        except (ValueError, RecursionError):
+            return None
+        return value if isinstance(value, dict) and value else None
 
 
 @dataclass(frozen=True)
@@ -486,6 +534,13 @@ def _strings(raw, default: tuple[str, ...] = ()) -> tuple[str, ...]:
 def _name(raw) -> str:
     """A header or field name from the profile: a string, stripped, or nothing."""
     return raw.strip() if isinstance(raw, str) else ""
+
+
+def _depth(raw, default: int = 20) -> int:
+    """A positive candidate count, or the default for anything else."""
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        return default
+    return raw
 
 
 def _example(raw: dict) -> Example:
@@ -565,6 +620,23 @@ def _provider(raw: dict) -> ProviderEntry:
         for served, text in (shown.items() if isinstance(shown, dict) else ())
         if str(served).strip() and str(text).strip()
     )
+    # A table of tables, kept as JSON text per model so the entry stays immutable. Only
+    # a non-empty table survives: `routing = { "m" = "deny" }` is a mistake to drop
+    # rather than a `provider` field to send as a string.
+    preferred = raw.get("routing")
+    routing = tuple(
+        (str(served).strip(), json.dumps(prefs, sort_keys=True))
+        for served, prefs in (preferred.items() if isinstance(preferred, dict) else ())
+        if str(served).strip() and isinstance(prefs, dict) and prefs
+    )
+    think_off = _name(raw.get("think_off"))
+    think_off_env = str(raw.get("think_off_env", "")).strip()
+    if think_off_env:
+        think_off = env.text(think_off_env, think_off).strip()
+    alignment = bool(raw.get("alignment", False))
+    alignment_env = str(raw.get("alignment_env", "")).strip()
+    if alignment_env:
+        alignment = env.flag(alignment_env, alignment)
     return ProviderEntry(
         name=name,
         kind=str(raw.get("kind", "openai")),
@@ -583,6 +655,11 @@ def _provider(raw: dict) -> ProviderEntry:
         # true` is a mistake to turn into nothing rather than into a field called "True".
         session_header=_name(raw.get("session_header")),
         trace_field=_name(raw.get("trace_field")),
+        route_metadata=raw.get("route_metadata") is True,
+        routing=routing,
+        think_off=think_off,
+        alignment=alignment,
+        status_path=_name(raw.get("status_path")),
         labels=labels,
         hint=str(raw.get("hint", "")),
         user_agent=str(raw.get("user_agent", "")),
@@ -672,6 +749,9 @@ def from_mapping(raw: dict, origin: str = "") -> Profile:
             for group in retrieval_raw.get("synonyms", ())
         ),
         protected=_strings(retrieval_raw.get("protected")),
+        rerank_model=_name(retrieval_raw.get("rerank_model")),
+        rerank_provider=_name(retrieval_raw.get("rerank_provider")),
+        rerank_depth=_depth(retrieval_raw.get("rerank_depth")),
     )
     return Profile(
         identity=identity,

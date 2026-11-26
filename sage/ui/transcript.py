@@ -494,8 +494,13 @@ def render_error_card(view: View) -> None:
     # chat and ask again" anyway, which is a button guaranteed to fail offered next to
     # the sentence explaining why. Measured: one provider call, two buttons, one of
     # them useless.
+    #
+    # `blocked` likewise: the deployment's content policy refused the request, and a
+    # button that resends it to a provider the policy does not cover is a way around
+    # the policy rather than a remedy.
     alternative = (
-        None if st.session_state.get("error_kind") == "context" else view.fallback
+        None if st.session_state.get("error_kind") in ("context", "blocked")
+        else view.fallback
     )
     with st.container(key="error-actions"):
         # Half-width each, flush with the error card above: narrower columns wrapped

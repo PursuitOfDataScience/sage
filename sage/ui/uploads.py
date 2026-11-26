@@ -2,8 +2,8 @@
 
 The widget is the awkward part: it re-reports every file it holds on every rerun,
 nothing here can reach in and remove one, and a refusal has to outlive the run that
-produced it. What is *in* a file — whether it is text, whether it is an image, how it
-is decoded — is `sage/files.py`, which knows nothing about Streamlit.
+produced it. What is *in* a file (whether it is text, whether it is an image, how it
+is decoded) is `sage/files.py`, which knows nothing about Streamlit.
 """
 
 from __future__ import annotations
@@ -12,13 +12,13 @@ import hashlib
 
 import streamlit as st
 
-from .. import config, files
+from .. import config, ocr
 
 
 def upload_key(item) -> tuple:
     """Identity of an uploaded file across reruns.
 
-    Name, size and a digest of the first 4 KB — not Streamlit's `file_id`, which
+    Name, size and a digest of the first 4 KB, not Streamlit's `file_id`, which
     changes on every rerun for the same file in some versions and would re-process and
     re-append one attachment per interaction with the page.
 
@@ -55,7 +55,7 @@ def render() -> None:
     # a file to skip on this run.
     #
     # A plain set of keys blacklisted the file outright, so after dismissing a chip the
-    # user could pick the *same file* again and nothing whatsoever happened — no chip,
+    # user could pick the *same file* again and nothing whatsoever happened: no chip,
     # no warning. Worse on the landing screen, where the Clear button that resets this
     # does not render, so there was no route back at all short of reloading the page.
     #
@@ -68,8 +68,8 @@ def render() -> None:
     dismissed = {key: count for key, count in dismissed.items() if key in offered}
 
     # Reasons files were refused, so the explanation outlives the run that produced it.
-    # A bare `st.warning` is discarded whenever the run ends in a rerun — which it does
-    # whenever a file is dropped while an answer is generating — and the refusal was
+    # A bare `st.warning` is discarded whenever the run ends in a rerun (which it does
+    # whenever a file is dropped while an answer is generating), and the refusal was
     # permanent, so the user was left with a file in the uploader, no chip, and no
     # reason.
     refusals = {
@@ -85,7 +85,9 @@ def render() -> None:
         if dismissed.get(key, 0) > 0:
             dismissed[key] -= 1
             continue
-        attachment, error = files.process(item.name, item.getvalue())
+        # `ocr.process` is `files.process` plus one more try for a scanned PDF, when
+        # `config.PDF_OCR` asks for it; off, the two are the same call.
+        attachment, error = ocr.process(item.name, item.getvalue())
         if not error:
             # The per-file limit does not bound the total, and a handful of legal
             # screenshots made one illegal request. Refused here rather than by the
@@ -116,7 +118,7 @@ def render() -> None:
         # the page, below the last message, and app.js measures the end of the page to
         # decide how much room the composer needs and where to scroll. It had no idea
         # these existed, so on a conversation the reason a file was refused rendered
-        # 65 of its 80 pixels *behind* the input bar — a file that did not attach, and
+        # 65 of its 80 pixels *behind* the input bar: a file that did not attach, and
         # an explanation the reader could not see. `.st-key-upload-notes` is what makes
         # it part of the tail. Created only when there is something to say, so an empty
         # container is never in the way of that measurement.
