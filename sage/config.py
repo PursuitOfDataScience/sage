@@ -120,6 +120,13 @@ MAX_MODEL_ATTEMPTS = _env_int("SAGE_MAX_MODEL_ATTEMPTS", 0, minimum=0)
 # does MAX_MODEL_ATTEMPTS = 1: `evals/harness.py` sets that to measure the model it
 # asked, and a silent re-roll would measure a different one.
 ROUTER_RETRIES = _env_int("SAGE_ROUTER_RETRIES", 2, minimum=0)
+# Keep a turn's later rounds on the model a ROUTER served its first tool round, instead
+# of letting the router pick again for each request. Off: a router answers each request
+# with whatever model it rolls, so one question's search, read and answer can come from
+# three models, and pinning is a hypothesis about answer quality that
+# `tools/agent_bench.py` has to support before it is a default. A pinned request that
+# fails asks the router again, once. See `ui.turn.run`.
+PIN_ROUTED_MODEL = _env_flag("SAGE_PIN_ROUTED_MODEL", False)
 
 # --- chunking --------------------------------------------------------------
 #
@@ -292,6 +299,14 @@ IMAGE_MAX_BYTES = _env_int("SAGE_IMAGE_MAX_BYTES", 256 * 1024, minimum=1)
 # conversation got too long. Clear the chat", about a conversation of one question.
 MAX_ATTACHED_BYTES = _env_int("SAGE_MAX_ATTACHED_BYTES", 20 * 1024 * 1024, minimum=1)
 MAX_FILE_TEXT_CHARS = _env_int("SAGE_MAX_FILE_TEXT_CHARS", 30000, minimum=1)
+# A scanned PDF has no text layer, and local extraction finds nothing in it. Naming a
+# `provider:model` here sends such a PDF through that provider's PDF parser instead
+# (OpenRouter's `file-parser` plugin) and attaches the text it reads; empty = off, and
+# every failure keeps the reader's "Scanned PDFs need OCR" message. The engine decides
+# who parses it: `cloudflare-ai` (free) or `mistral-ocr` ($2 per 1000 pages, better on
+# real scans). See `sage/ocr.py` for where the file goes and the balance it needs.
+PDF_OCR = _env_text("SAGE_PDF_OCR", "").strip()
+PDF_OCR_ENGINE = _env_text("SAGE_PDF_OCR_ENGINE", "cloudflare-ai").strip()
 # And the same arithmetic on the REQUEST side, which the upload cap above does not
 # reach. Base64 inflates by a third, so the 20 MiB of uploads that cap permits
 # assembles a 26.6 MB request (measured, with 87 legal 240 KB images), and

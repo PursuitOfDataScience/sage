@@ -90,7 +90,12 @@ deny = ["qwen3-30b-preview"]     # served, free, and known not to answer
 routers = []                     # ids that are a router, not a model
 stream_usage = false             # does it answer stream_options.include_usage?
 session_header = ""              # header for the per-session id, e.g. "x-session-id"
-trace_field = ""                 # body field for {trace_id, generation_name}
+trace_field = ""                 # body field for {trace_id, generation_name, ...}
+route_metadata = false           # ask OpenRouter how it routed each request?
+status_path = ""                 # key limits endpoint under base_url, e.g. "/key"
+routing = {}                     # per-model `provider` preferences, "*" for every model
+think_off = ""                   # what the Think pill OFF sends as reasoning.effort
+alignment = false                # OpenRouter's Alignment audit (needs beta admission)
 ```
 
 `kind = "openai"` covers Together, Groq, Fireworks, vLLM, llama.cpp and Ollama:
@@ -141,11 +146,34 @@ one question as one trace. OpenRouter forwards `x-session-id` and `trace` to its
 Broadcast destinations, which is why the shipped profile declares them there and
 nowhere else. All three are off unless declared, for the reason `reasoning` is: a strict
 endpoint answers an unknown field with a 400, so measure before declaring. The model
-that served a request, and any usage an endpoint volunteers, are read either way.
+that served a request, and any usage an endpoint volunteers, are read either way. The
+trace also names the deployment, the commit, the prompt's fingerprint and the corpus
+commit, leaving out whatever is not known.
+
+Five more OpenRouter features, each off unless declared and each measured on the
+shipped entry before it was:
+
+* `route_metadata = true` asks how the gateway routed each request; the call record keeps
+  the number of upstream attempts, the strategy, the candidates and any guardrail flags.
+* `status_path` names the endpoint that reports the key's spending limit and the
+  account's free-model counter; the app reads it hourly and logs a WARNING before either
+  runs out.
+* `routing` sends OpenRouter's `provider` object per model, e.g.
+  `routing = { "vendor/model" = { data_collection = "deny" } }`. A model's own entry
+  replaces `"*"`. Measure the pool first: the same filter halved the free router's.
+* `think_off` is what the Think pill OFF sends as `reasoning.effort`, only to a model the
+  catalogue says can switch reasoning off, never to a router. `think_off_env` overrides it.
+* `alignment = true` attaches the content audit in `sage/alignment.py`. A workspace not
+  admitted to the beta answers every such request with a 400, so check with
+  `python tools/provider_status.py --audit` first. `alignment_env` overrides it.
 
 ## Retrieval
 
-`engine = "bm25"` is what ships. `synonyms` is the piece that is genuinely about your
+`engine = "bm25"` is what ships. `engine = "bm25+rerank"` lets a rerank model reorder
+BM25's candidates (`rerank_model`, `rerank_provider` naming the entry that serves it,
+`rerank_depth`), keeping the refusal gate on the lexical scores; measured on this corpus
+it moved one golden-set case and added a network round trip to every search, so it is
+not the default. `synonyms` is the piece that is genuinely about your
 subject: users describe symptoms and documentation describes mechanisms, and which
 words bridge that gap is not something a scorer can know. `protected` are terms the
 stemmer must leave whole.

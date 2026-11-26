@@ -289,6 +289,12 @@ class Retrieval:
     engine: str = "bm25"
     synonyms: tuple[tuple[str, ...], ...] = ()
     protected: tuple[str, ...] = ()
+    #: For `engine = "bm25+rerank"` only (`sage/retrieval/rerank.py`): the rerank model,
+    #: the provider entry whose base URL and key serve it, and how many BM25 candidates
+    #: it reorders. Ignored by every other engine.
+    rerank_model: str = ""
+    rerank_provider: str = ""
+    rerank_depth: int = 20
 
 
 @dataclass(frozen=True)
@@ -530,6 +536,13 @@ def _name(raw) -> str:
     return raw.strip() if isinstance(raw, str) else ""
 
 
+def _depth(raw, default: int = 20) -> int:
+    """A positive candidate count, or the default for anything else."""
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        return default
+    return raw
+
+
 def _example(raw: dict) -> Example:
     return Example(
         icon=str(raw.get("icon", "")),
@@ -736,6 +749,9 @@ def from_mapping(raw: dict, origin: str = "") -> Profile:
             for group in retrieval_raw.get("synonyms", ())
         ),
         protected=_strings(retrieval_raw.get("protected")),
+        rerank_model=_name(retrieval_raw.get("rerank_model")),
+        rerank_provider=_name(retrieval_raw.get("rerank_provider")),
+        rerank_depth=_depth(retrieval_raw.get("rerank_depth")),
     )
     return Profile(
         identity=identity,

@@ -341,8 +341,27 @@ free_marks_env = "SAGE_OPENROUTER_FREE_MARKS"
 # it routes to. `reasoning_effort` (the low/medium/high dial) is on only 6 of those
 # 19, which is why the control is a switch: the router serves a different model every
 # turn, so an effort setting would be honoured on about a third of them with nothing
-# on screen able to say which.
+# on screen able to say which. (Re-read 2026-11-25: the pool is 11 models, all listing
+# `reasoning`, 3 accepting an effort level, and 3 whose reasoning is mandatory.)
 reasoning = true
+# What the pill OFF sends to a pinned model whose catalogue entry says reasoning can be
+# switched off: `effort = "none"`. Empty here, so OFF still sends nothing, which is what
+# it has always done. Why it exists: the stand-in reasons at its default `high` effort
+# whether the pill is on or off (801-3750 reasoning tokens a call off, 807-1733 on, four
+# interleaved pairs on 2026-11-25), and `none` took that to 0. Not switched on because
+# what it does to ANSWERS is unmeasured: the paired latency test and the bench comparison
+# both need the stand-in to answer, and on 2026-11-26 it could not (`402`, the account's
+# balance cannot cover `max_tokens` 8000). `SAGE_OPENROUTER_THINK_OFF=none` switches it on
+# without a commit once that has been measured. Never applies to the router.
+think_off = ""
+think_off_env = "SAGE_OPENROUTER_THINK_OFF"
+# The paid stand-in goes only to providers that do not keep or train on prompts:
+# readers paste job scripts and logs. Measured before declaring it (2026-11-25, with
+# router metadata on): the stand-in still had 37 candidate endpoints and came back 200.
+# NOT applied to `openrouter/free`, whose pool the same filter halved (10 to 5 models),
+# and `zdr` would empty it (404 "No endpoints found matching your data policy"). The
+# free models' own training opt-out is an account setting, not a request field.
+routing = { "~deepseek/deepseek-v4-flash-latest" = { data_collection = "deny" } }
 # `openrouter/free` is a ROUTER, not a model, and this is where the app is told so.
 #
 # It matters because it changes what "try again" means. Everywhere else in the lineup a

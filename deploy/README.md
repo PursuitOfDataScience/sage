@@ -196,6 +196,34 @@ session is a session and one question is one trace. After `--openrouter-sa`, by 
 4. Turn on **Privacy Mode**, so prompts and completions are stripped before they arrive.
 5. Give each deployment its own OpenRouter key, and limit the destination to Cloud Run's.
 
+The `trace` also names the deployment, the commit, the prompt's fingerprint and the corpus
+commit, so a Broadcast row joins `sage_obs` on the same values. Broadcast adds router
+timing on its own (`provider_ms`, `provider_failed_ms`, `client_wait_ms`, `attempt_count`),
+which splits a slow call into time inside OpenRouter and time at the provider.
+
+### OpenRouter limits, alerts and guardrails
+
+The app's `SAGE_CALL_BUDGET` lives in one instance's memory. OpenRouter's limits are kept
+by OpenRouter, so every instance shares them and a restart does not reset them. Set them
+in the OpenRouter dashboard:
+
+1. **A credit limit on the deployment's key**, with a daily reset (every plan). Past it, a
+   request is refused with a `403` the app reads as `quota` and fails over from.
+2. **Alerts** (Settings > Notifications): the low-balance alert and the model-deprecation
+   alert are on every plan, by email.
+3. **Guardrails** on the deployment's key: the Sensitive Info guardrail with the Secrets
+   preset in **redact** mode, so a key pasted into a job script never reaches a model, and
+   Prompt Injection Detection in **flag** mode, which blocks nothing and shows up in the
+   call records as `guardrail_flags`. A guardrail in block mode is a `403` the app reads as
+   `blocked`: the turn stops and the reader is asked to take out what was flagged, rather
+   than the content being handed to another provider.
+
+`python tools/provider_status.py` prints the key's limit, the account's free-model counter
+and the lineup's retirement dates. The app reads the same counters hourly and logs a
+WARNING when a tenth or less is left (`SAGE_LIMIT_WARNING_FRACTION`), which a log-based
+alert on `severity>=WARNING` and the message `free-model requests used today` or
+`spending limit is left` can watch.
+
 ### Two queries
 
 Both run as written in the BigQuery console or `bq query --use_legacy_sql=false`, which

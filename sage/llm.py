@@ -440,14 +440,19 @@ def _parse(arguments: str) -> dict:
 
 def start(provider, model: str, messages: list[dict],
           tools: list[dict] | None = None, thinking: bool = False,
-          tool_choice: str = "auto", tag: CallTag | None = None) -> Turn:
+          tool_choice: str = "auto", tag: CallTag | None = None,
+          retries: int | None = None) -> Turn:
     """Open a streaming turn, retrying transient failures before any output.
 
     `tag` is where the request came from, for an adapter whose profile entry names a
     header or a field to say it in (see `CallTag`). It is in force only while the stream
     is opened, because that is when an adapter builds its request, retries included.
+
+    `retries` overrides `config.REQUEST_RETRIES` for a caller with a better recovery
+    than waiting: a turn pinned to one of a router's models asks the router instead.
     """
-    attempts = max(config.REQUEST_RETRIES, 0) + 1
+    allowed = config.REQUEST_RETRIES if retries is None else retries
+    attempts = max(allowed, 0) + 1
     last: AssistantError | None = None
 
     for attempt in range(attempts):

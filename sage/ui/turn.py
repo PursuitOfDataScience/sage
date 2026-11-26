@@ -671,13 +671,30 @@ def run(view: View) -> None:
     # Cumulative across every round of this turn: see TOOL_RESULT_CHAR_BUDGET.
     tool_chars = 0
 
+    # The concrete model a ROUTER served this turn's first tool round, when
+    # `config.PIN_ROUTED_MODEL` keeps the turn's later rounds on it. Empty otherwise,
+    # and empty means every request asks for `model.id`, which is what it always did.
+    #
+    # Why it exists: a router picks a model per REQUEST, not per turn, so on
+    # `openrouter/free` the search, the read and the answer of one question can each be
+    # written by a different model, and the one writing the answer did not choose the
+    # searches it is answering from. Off by default because what it buys is a
+    # hypothesis until `tools/agent_bench.py` says otherwise, and what it costs is real:
+    # a pinned free model can be rate-limited upstream where the router would have
+    # moved on. So a pinned request that fails is asked again of the router, once.
+    pinned = ""
+
     def start(msgs, schemas, tool_choice="auto", round_number=1):
+        nonlocal pinned
         # Charged as each request is made, not tallied and committed at the end. A
         # turn that fails halfway, or that the reader abandons by touching the page,
         # still cost the provider the calls it made, and a counter that only commits
         # on success drifts loose exactly when things are going wrong and requests
         # are being retried.
         get_limiter().record_calls(1, time.monotonic())
+        asked = pinned or model.id
+        # The id the call record names is the one this request asked for.
+        calls.model = asked
         # The call record opens here for the same reason, and closes wherever the call
         # ends: after its stream, at the answer, or in whichever handler below caught
         # what went wrong. `schemas is None` is the single-pass path, `grounded()`.
@@ -690,18 +707,25 @@ def run(view: View) -> None:
         # is the second guard: it sends the field only where the profile declared it.
         try:
             opened = llm.start(
-                provider, model.id, msgs, schemas,
+                provider, asked, msgs, schemas,
                 thinking=bool(st.session_state.thinking),
                 tool_choice=tool_choice,
                 tag=CallTag(session=session, turn_id=trace["turn_id"],
                             round=round_number, **built_from),
+                # A pinned model that refuses is not worth a backoff: the router is.
+                retries=0 if pinned else None,
             )
         except llm.AssistantError as exc:
             # Closed here rather than by the handler that catches it, because one
             # caller catches it and carries on: a provider that rejects tools is asked
             # again without them, and that is a second call of the same round.
             calls.close(exc.kind, status_of(exc.original or exc))
-            raise
+            if not pinned:
+                raise
+            # A pinned model refusing is not the router refusing: ask the router, once.
+            logger.info("%s refused (%s); asking %s again", pinned, exc.kind, model.id)
+            pinned = ""
+            return start(msgs, schemas, tool_choice, round_number)
         calls.attach(opened)
         return opened
 
@@ -823,6 +847,12 @@ def run(view: View) -> None:
             # A round that asked for tools is a call that did its job, whatever the
             # tools then find. Recorded before they run, so its time is the model's.
             calls.close()
+            # Keep the rest of the turn on the model the router served, if asked to.
+            if (
+                config.PIN_ROUTED_MODEL and view.reroutes and not pinned
+                and turn.served_model and turn.served_model != model.id
+            ):
+                pinned = turn.served_model
             answer.empty()
             messages.append(turn.as_message())
             for call in turn.tool_calls:
