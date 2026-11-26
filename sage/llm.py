@@ -124,10 +124,13 @@ def _blocked_by_policy(text: str) -> bool:
 
     The shapes OpenRouter documents: `Request blocked: prompt injection patterns
     detected`, `Request blocked by content filter: …`, and a moderation flag whose
-    metadata carries `flagged_input`.
+    metadata carries `flagged_input`. Not the bare words "request blocked": a CDN's own
+    403 page (CloudFront's reads "Request blocked.") is an outage another provider can
+    route around, and reading it as a policy refusal would stop the turn for nothing.
     """
     return (
-        "request blocked" in text
+        "request blocked:" in text
+        or "request blocked by" in text
         or "flagged_input" in text
         or "input was flagged" in text
     )

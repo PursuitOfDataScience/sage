@@ -510,6 +510,13 @@ class TestAContentBlockIsItsOwnKind:
             "unknown"
         )
 
+    def test_a_cdns_own_block_page_still_fails_over(self):
+        """CloudFront's 403 page says "Request blocked." and is an outage, not a policy."""
+        page = ("HTTP 403 from https://api.example.test/v1/chat/completions: <html><h1>"
+                "403 ERROR</h1><h2>The request could not be satisfied.</h2>Request "
+                "blocked. We can't connect to the server for this app or website")
+        assert llm.classify(_status(page, 403)).kind == "auth"
+
 
 def test_tool_result_message_shape():
     message = llm.tool_result_message({"id": "x", "name": "read_doc"}, "content here")
