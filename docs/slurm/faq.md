@@ -83,6 +83,39 @@ module unload python
 ```
 then run `sinteractive` again, and load the `python/anaconda` module within the interactive session.
 
+### Why are my jobs stuck with reason `DependencyNeverSatisfied`?
+When you submit a job with a dependency (e.g., `--dependency=afterok:<jobid>`), Slurm monitors the parent job's exit status. If the parent job fails or is cancelled, Slurm marks all dependent jobs as `DependencyNeverSatisfied` — a permanent state from which those jobs will never run.
+
+**Option 1: Cancel the stuck jobs**
+
+```
+scancel <jobid>
+```
+
+To cancel all your jobs in this state at once:
+
+```
+squeue --user=<userid> --state=pending -o "%.18i %R" | awk '/DependencyNeverSatisfied/{print $1}' | xargs scancel
+```
+
+**Option 2: Clear the dependency so the job runs immediately**
+
+If you want to rescue a downstream job without resubmitting, you can remove its dependency entirely:
+
+```
+scontrol update JobId=<jobid> Dependency=
+```
+
+This makes the job immediately eligible to run.
+
+!!! note
+    If the parent job is requeued, this does **not** automatically clear `DependencyNeverSatisfied` on its children — they remain stuck and must still be cancelled or have their dependency cleared manually.
+
+**Preventing this in future job pipelines:**
+
+- Use `--dependency=afterany:<jobid>` instead of `afterok:<jobid>` for cleanup or post-processing steps that should run regardless of whether the parent succeeded or failed.
+- Add `--kill-on-invalid-dep=yes` to your `sbatch` options. This tells Slurm to automatically cancel dependent jobs if their dependency can never be satisfied, rather than leaving them stuck in the queue indefinitely.
+
 ## Technical questions
 
 ### What compilers does the RCC support?
